@@ -55,6 +55,7 @@ export interface Scene {
   id: string;
   project_id: string;
   order_index: number;
+  name: string | null;
   lines: string | null;
   framing: Framing;
   pose: Pose;

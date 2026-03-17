@@ -55,7 +55,7 @@ export async function createScene(projectId: string, orderIndex: number) {
       order_index: orderIndex,
       framing: 'above_waist',
       pose: 'standing',
-      arm_state: 'normal',
+      arm_state: 'arms_at_sides',
       facing: 'toward_camera',
     })
     .select()

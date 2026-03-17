@@ -39,6 +39,19 @@ export default function SceneCard({
     opacity: isDragging ? 0.5 : 1,
   };
 
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [nameValue, setNameValue] = useState(scene.name || '');
+
+  const defaultName = `Сцена ${scene.order_index + 1}`;
+
+  const handleNameSave = () => {
+    setIsEditingName(false);
+    const trimmed = nameValue.trim();
+    onUpdate({ name: trimmed || null });
+    updateScene(scene.id, { name: trimmed || null });
+  };
+
   const firstLine = scene.lines?.split('\n')[0] || 'Немає діалогу';
   const truncatedLine =
     firstLine.length > 60 ? firstLine.substring(0, 60) + '...' : firstLine;
@@ -80,9 +93,35 @@ export default function SceneCard({
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-zinc-600">
-                Сцена {scene.order_index + 1}
-              </span>
+              {isEditingName ? (
+                <input
+                  autoFocus
+                  value={nameValue}
+                  onChange={(e) => setNameValue(e.target.value)}
+                  onBlur={handleNameSave}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleNameSave();
+                    if (e.key === 'Escape') {
+                      setNameValue(scene.name || '');
+                      setIsEditingName(false);
+                    }
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  placeholder={defaultName}
+                  className="text-sm font-medium text-zinc-600 bg-transparent border-b border-zinc-400 outline-none w-32 placeholder-zinc-400"
+                />
+              ) : (
+                <span
+                  className="text-sm font-medium text-zinc-600 cursor-text hover:text-zinc-900 hover:underline decoration-dashed underline-offset-2"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsEditingName(true);
+                  }}
+                  title="Натисніть, щоб перейменувати"
+                >
+                  {scene.name || defaultName}
+                </span>
+              )}
               <span className="text-zinc-400">•</span>
               <span className="text-sm text-zinc-500">
                 {formatLabel(scene.framing)}
@@ -93,23 +132,61 @@ export default function SceneCard({
             )}
           </div>
         </div>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleExpand();
-          }}
-          className="text-zinc-500 hover:text-zinc-700 transition-transform duration-300"
-        >
-          <svg
-            className="h-5 w-5"
-            style={{ transform: isExpanded ? 'rotate(180deg)' : 'none' }}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+        <div className="flex items-center gap-1">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleExpand();
+            }}
+            className="text-zinc-500 hover:text-zinc-700 transition-transform duration-300"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
+            <svg
+              className="h-5 w-5"
+              style={{ transform: isExpanded ? 'rotate(180deg)' : 'none' }}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {confirmDelete ? (
+            <>
+              <span className="text-xs text-red-600 mr-1">Видалити?</span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+                className="rounded px-2 py-0.5 text-xs font-medium text-white bg-red-500 hover:bg-red-600 transition-colors"
+              >
+                Так
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setConfirmDelete(false);
+                }}
+                className="rounded px-2 py-0.5 text-xs font-medium text-zinc-600 bg-zinc-100 hover:bg-zinc-200 transition-colors"
+              >
+                Ні
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setConfirmDelete(true);
+              }}
+              className="text-zinc-400 hover:text-red-500 transition-colors"
+              title="Видалити сцену"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
 
       <div
@@ -243,15 +320,6 @@ export default function SceneCard({
           />
         </div>
 
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-          className="w-full rounded bg-red-50 px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 border border-red-200"
-        >
-          Видалити сцену
-        </button>
         </div>
       </div>
     </div>
