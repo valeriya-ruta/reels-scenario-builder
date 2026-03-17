@@ -5,6 +5,7 @@ import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import { nanoid } from 'nanoid';
 import { Project, Scene, Transition, SnapshotData } from '@/lib/domain';
 import { redirect } from 'next/navigation';
+import { headers } from 'next/headers';
 
 export async function updateProjectName(projectId: string, name: string) {
   const user = await requireAuth();
@@ -14,6 +15,18 @@ export async function updateProjectName(projectId: string, name: string) {
   await supabase
     .from('projects')
     .update({ name })
+    .eq('id', projectId)
+    .eq('user_id', user.id);
+}
+
+export async function deleteProject(projectId: string) {
+  const user = await requireAuth();
+  if (!user) return;
+
+  const supabase = await createServerSupabaseClient();
+  await supabase
+    .from('projects')
+    .delete()
     .eq('id', projectId)
     .eq('user_id', user.id);
 }
@@ -184,8 +197,15 @@ export async function createSnapshot(projectId: string): Promise<{ actor: string
     return null;
   }
 
-  // Construct URLs (assuming we're running locally or have a base URL)
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  // Construct URLs based on an explicit base URL or the current request origin
+  // - In production (e.g. Vercel), set NEXT_PUBLIC_APP_URL to your deployed URL
+  // - Otherwise we fall back to the origin header, and finally to relative paths
+  const envBaseUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  const origin = headers().get('origin')?.trim();
+  const baseUrl =
+    (envBaseUrl && envBaseUrl.replace(/\/$/, '')) ||
+    (origin && origin.replace(/\/$/, '')) ||
+    '';
   return {
     actor: `${baseUrl}/share/${actorToken}/actor`,
     editor: `${baseUrl}/share/${editorToken}/editor`,
