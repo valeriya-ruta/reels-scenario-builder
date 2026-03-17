@@ -1,4 +1,5 @@
-import { createServerClient, type SupabaseClient } from '@supabase/ssr';
+import { createServerClient } from '@supabase/ssr';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -19,7 +20,13 @@ export async function createServerSupabaseClient(): Promise<SupabaseClient> {
       getAll() {
         return cookieStore.getAll();
       },
-      setAll(cookiesToSet) {
+      setAll(
+        cookiesToSet: {
+          name: string;
+          value: string;
+          options: Parameters<typeof cookieStore.set>[2];
+        }[],
+      ) {
         try {
           cookiesToSet.forEach(({ name, value, options }) => {
             cookieStore.set(name, value, options);
