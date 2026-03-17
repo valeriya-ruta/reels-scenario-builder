@@ -201,7 +201,7 @@ export async function createSnapshot(projectId: string): Promise<{ actor: string
   // - In production (e.g. Vercel), set NEXT_PUBLIC_APP_URL to your deployed URL
   // - Otherwise we fall back to the origin header, and finally to relative paths
   const envBaseUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
-  const origin = headers().get('origin')?.trim();
+  const origin = (await headers()).get('origin')?.trim();
   const baseUrl =
     (envBaseUrl && envBaseUrl.replace(/\/$/, '')) ||
     (origin && origin.replace(/\/$/, '')) ||
