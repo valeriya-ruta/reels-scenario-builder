@@ -16,6 +16,7 @@ export default async function ProjectsPage() {
     .from('projects')
     .select('*')
     .eq('user_id', user.id)
+    .eq('project_type', 'reels')
     .order('updated_at', { ascending: false });
 
   if (error) {
@@ -40,9 +41,9 @@ function CreateProjectButton() {
     <form action={createProject}>
       <button
         type="submit"
-        className="rounded bg-zinc-900 px-4 py-2 font-medium text-white transition-colors hover:bg-zinc-800"
+        className="cursor-pointer rounded bg-zinc-900 px-4 py-2 font-medium text-white transition-colors hover:bg-zinc-800"
       >
-        Новий проєкт
+        Новий сценарій
       </button>
     </form>
   );

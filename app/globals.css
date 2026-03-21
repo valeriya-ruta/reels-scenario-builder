@@ -21,3 +21,16 @@ input,
 textarea {
   outline: none;
 }
+
+@keyframes reels-planner-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.reels-planner-shimmer {
+  animation: reels-planner-shimmer 1.2s linear infinite;
+}

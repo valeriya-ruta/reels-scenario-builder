@@ -37,11 +37,11 @@ export default function EditorView({ snapshotData }: EditorViewProps) {
                     </span>
                   </>
                 )}
-                {scene.shot_size && (
+                {scene.location_name && (
                   <>
                     <span className="text-zinc-400">•</span>
                     <span className="text-xs text-zinc-500">
-                      {formatLabel(scene.shot_size)}
+                      {scene.location_name}
                     </span>
                   </>
                 )}

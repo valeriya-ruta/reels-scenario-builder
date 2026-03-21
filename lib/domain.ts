@@ -42,13 +42,23 @@ export type TransitionAction =
   | 'turn_matchcut'
   | 'through_object';
 
+export type ProjectType = 'reels' | 'storytelling';
+
 export interface Project {
   id: string;
   name: string;
   crew_mode: CrewMode;
+  project_type: ProjectType;
   created_at: string;
   updated_at: string;
   user_id: string;
+}
+
+export interface Location {
+  id: string;
+  user_id: string;
+  name: string;
+  created_at: string;
 }
 
 export interface Scene {
@@ -63,6 +73,10 @@ export interface Scene {
   facing: Facing;
   camera_motion: CameraMotion | null;
   shot_size: ShotSize | null;
+  /** Omitted in older snapshot JSON until migration backfill. */
+  location_id?: string | null;
+  /** Set when serializing snapshots so share links stay self-contained. */
+  location_name?: string | null;
   scene_transition_action?: TransitionAction | null;
   actor_note: string | null;
   editor_note: string | null;
@@ -165,5 +179,59 @@ export function summarizeFramingFacing(scene: Scene): string {
 
 export function summarizeFramingPose(scene: Scene): string {
   return `${formatLabel(scene.framing)} · ${formatLabel(scene.pose)}`;
+}
+
+// ── Storytelling types ──
+
+export type VisualType =
+  | 'Кольоровий фон'
+  | 'Говоряща голова'
+  | 'Відео в тему'
+  | 'Гарне фото';
+
+export type EngagementType =
+  | 'Стікер'
+  | 'Тягнулка'
+  | 'Опитування'
+  | 'Заклик в дірект';
+
+export const VISUAL_OPTIONS: VisualType[] = [
+  'Кольоровий фон',
+  'Говоряща голова',
+  'Відео в тему',
+  'Гарне фото',
+];
+
+export const ENGAGEMENT_OPTIONS: EngagementType[] = [
+  'Стікер',
+  'Тягнулка',
+  'Опитування',
+  'Заклик в дірект',
+];
+
+export interface StorytellingProject {
+  id: string;
+  user_id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StorytellingColumn {
+  id: string;
+  project_id: string;
+  name: string;
+  order_index: number;
+  created_at: string;
+}
+
+export interface StorytellingStory {
+  id: string;
+  column_id: string;
+  order_index: number;
+  text: string;
+  visual: VisualType | null;
+  engagement: EngagementType | null;
+  created_at: string;
 }
 

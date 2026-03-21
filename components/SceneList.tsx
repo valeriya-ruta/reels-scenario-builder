@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type Dispatch, type SetStateAction } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -16,27 +16,31 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import { Project, Scene, Transition } from '@/lib/domain';
+import { Location, Project, Scene } from '@/lib/domain';
 import SceneCard from './SceneCard';
-import TransitionSeam from './TransitionSeam';
-import { reorderScenes, createScene, createTransition, deleteScene, updateTransition } from '@/app/actions';
+import { reorderScenes, createScene, deleteScene } from '@/app/actions';
+import {
+  buildOptimisticScene,
+  isOptimisticSceneId,
+} from '@/lib/sceneOptimistic';
 
 interface SceneListProps {
   project: Project;
   scenes: Scene[];
-  transitions: Transition[];
-  onScenesUpdate: (scenes: Scene[]) => void;
-  onTransitionsUpdate: (transitions: Transition[]) => void;
+  onScenesUpdate: Dispatch<SetStateAction<Scene[]>>;
+  locations: Location[];
+  onLocationsChange: Dispatch<SetStateAction<Location[]>>;
 }
 
 export default function SceneList({
   project,
   scenes,
-  transitions,
   onScenesUpdate,
-  onTransitionsUpdate,
+  locations,
+  onLocationsChange,
 }: SceneListProps) {
   const [expandedSceneId, setExpandedSceneId] = useState<string | null>(null);
+  const [animateInSceneId, setAnimateInSceneId] = useState<string | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -52,6 +56,13 @@ export default function SceneList({
       return;
     }
 
+    if (
+      isOptimisticSceneId(String(active.id)) ||
+      isOptimisticSceneId(String(over.id))
+    ) {
+      return;
+    }
+
     const oldIndex = scenes.findIndex((s) => s.id === active.id);
     const newIndex = scenes.findIndex((s) => s.id === over.id);
 
@@ -62,20 +73,40 @@ export default function SceneList({
     }
   };
 
-  const handleAddScene = async () => {
-    const newOrderIndex = scenes.length;
-    const newScene = await createScene(project.id, newOrderIndex);
-    if (newScene) {
-      onScenesUpdate([...scenes, newScene]);
-      setExpandedSceneId(newScene.id);
-    }
-  };
+  const hasOptimisticScene = scenes.some((s) => isOptimisticSceneId(s.id));
 
-  // Build transition map for quick lookup
-  const transitionMap = new Map<string, Transition>();
-  transitions.forEach((t) => {
-    transitionMap.set(`${t.scene_before_id}-${t.scene_after_id}`, t);
-  });
+  const handleAddScene = () => {
+    const newOrderIndex = scenes.length;
+    const optimistic = buildOptimisticScene(project.id, newOrderIndex);
+
+    onScenesUpdate((prev) => [...prev, optimistic]);
+    setExpandedSceneId(optimistic.id);
+    setAnimateInSceneId(optimistic.id);
+    window.setTimeout(
+      () =>
+        setAnimateInSceneId((current) =>
+          current === optimistic.id ? null : current
+        ),
+      950
+    );
+
+    void (async () => {
+      const newScene = await createScene(project.id, newOrderIndex);
+      if (newScene) {
+        onScenesUpdate((prev) =>
+          prev.map((s) => (s.id === optimistic.id ? newScene : s))
+        );
+        setExpandedSceneId((e) => (e === optimistic.id ? newScene.id : e));
+        setAnimateInSceneId((a) =>
+          a === optimistic.id ? null : a
+        );
+      } else {
+        onScenesUpdate((prev) => prev.filter((s) => s.id !== optimistic.id));
+        setExpandedSceneId((e) => (e === optimistic.id ? null : e));
+        setAnimateInSceneId((a) => (a === optimistic.id ? null : a));
+      }
+    })();
+  };
 
   return (
     <div className="space-y-4">
@@ -88,72 +119,57 @@ export default function SceneList({
           items={scenes.map((s) => s.id)}
           strategy={verticalListSortingStrategy}
         >
-          {scenes.map((scene, index) => {
-            const transition = transitionMap.get(
-              `${scene.id}-${scenes[index + 1]?.id}`
-            );
-            const nextScene = scenes[index + 1];
-
-            return (
-              <div key={scene.id} className="space-y-2">
-                <SceneCard
-                  scene={scene}
-                  project={project}
-                  isExpanded={expandedSceneId === scene.id}
-                  onToggleExpand={() =>
-                    setExpandedSceneId(
-                      expandedSceneId === scene.id ? null : scene.id
-                    )
-                  }
-                  onUpdate={(updates) => {
-                    onScenesUpdate(
-                      scenes.map((s) => (s.id === scene.id ? { ...s, ...updates } : s))
+          {scenes.map((scene) => (
+            <div key={scene.id} className="mb-4 last:mb-0">
+              <SceneCard
+                scene={scene}
+                project={project}
+                locations={locations}
+                onLocationsChange={onLocationsChange}
+                onLocationDeleted={(locationId) => {
+                  onScenesUpdate((prev) =>
+                    prev.map((s) =>
+                      s.location_id === locationId
+                        ? { ...s, location_id: null }
+                        : s,
+                    ),
+                  );
+                }}
+                dragDisabled={hasOptimisticScene}
+                isExpanded={expandedSceneId === scene.id}
+                onToggleExpand={() =>
+                  setExpandedSceneId(
+                    expandedSceneId === scene.id ? null : scene.id
+                  )
+                }
+                onUpdate={(updates) => {
+                  onScenesUpdate(
+                    scenes.map((s) => (s.id === scene.id ? { ...s, ...updates } : s))
+                  );
+                }}
+                onDelete={async () => {
+                  if (isOptimisticSceneId(scene.id)) {
+                    onScenesUpdate((prev) =>
+                      prev.filter((s) => s.id !== scene.id)
                     );
-                  }}
-                  onDelete={async () => {
-                    const { deleteScene: deleteSceneAction } = await import('@/app/actions');
-                    await deleteSceneAction(scene.id);
-                    onScenesUpdate(scenes.filter((s) => s.id !== scene.id));
-                  }}
-                />
-                {nextScene && (
-                  <TransitionSeam
-                    transition={transition}
-                    sceneBeforeId={scene.id}
-                    sceneAfterId={nextScene.id}
-                    projectId={project.id}
-                    onCreateTransition={async (sbId, saId) => {
-                      const newTransition = await createTransition(
-                        project.id,
-                        sbId,
-                        saId
-                      );
-                      if (newTransition) {
-                        onTransitionsUpdate([...transitions, newTransition]);
-                      }
-                    }}
-                    onUpdateTransition={async (updates) => {
-                      if (transition) {
-                        const { updateTransition: updateTransitionAction } = await import('@/app/actions');
-                        await updateTransitionAction(transition.id, updates);
-                        onTransitionsUpdate(
-                          transitions.map((t) =>
-                            t.id === transition.id ? { ...t, ...updates } : t
-                          )
-                        );
-                      }
-                    }}
-                  />
-                )}
-              </div>
-            );
-          })}
+                    return;
+                  }
+                  const { deleteScene: deleteSceneAction } = await import('@/app/actions');
+                  await deleteSceneAction(scene.id);
+                  onScenesUpdate((prev) =>
+                    prev.filter((s) => s.id !== scene.id)
+                  );
+                }}
+                animateIn={scene.id === animateInSceneId}
+              />
+            </div>
+          ))}
         </SortableContext>
       </DndContext>
 
       <button
         onClick={handleAddScene}
-        className="w-full rounded border-2 border-dashed border-zinc-300 bg-zinc-50 px-4 py-6 text-zinc-600 transition-colors hover:border-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
+        className="cursor-pointer w-full rounded border-2 border-dashed border-zinc-300 bg-zinc-50 px-4 py-6 text-zinc-600 transition-colors hover:border-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
       >
         + Додати сцену
       </button>

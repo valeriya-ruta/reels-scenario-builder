@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { requireAuth } from '@/lib/auth';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
-import { Project, Scene, Transition } from '@/lib/domain';
+import { Location, Project, Scene } from '@/lib/domain';
 import ProjectBuilder from '@/components/ProjectBuilder';
 
 interface PageProps {
@@ -17,44 +17,40 @@ export default async function ProjectPage({ params }: PageProps) {
   const { id } = await params;
   const supabase = await createServerSupabaseClient();
 
-  // Fetch project
-  const { data: project, error: projectError } = await supabase
-    .from('projects')
-    .select('*')
-    .eq('id', id)
-    .eq('user_id', user.id)
-    .single();
+  // Fetch project, scenes, and user locations concurrently.
+  const [projectRes, scenesRes, locationsRes] = await Promise.all([
+    supabase
+      .from('projects')
+      .select('*')
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .single(),
+    supabase
+      .from('scenes')
+      .select('*')
+      .eq('project_id', id)
+      .order('order_index', { ascending: true }),
+    supabase
+      .from('locations')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('name', { ascending: true }),
+  ]);
 
-  if (projectError || !project) {
-    redirect('/projects');
-  }
+  const { data: project, error: projectError } = projectRes;
+  if (projectError || !project) redirect('/projects');
 
-  // Fetch scenes ordered by order_index
-  const { data: scenes, error: scenesError } = await supabase
-    .from('scenes')
-    .select('*')
-    .eq('project_id', id)
-    .order('order_index', { ascending: true });
+  const { data: scenes, error: scenesError } = scenesRes;
+  if (scenesError) console.error('Error fetching scenes:', scenesError);
 
-  if (scenesError) {
-    console.error('Error fetching scenes:', scenesError);
-  }
-
-  // Fetch transitions
-  const { data: transitions, error: transitionsError } = await supabase
-    .from('transitions')
-    .select('*')
-    .eq('project_id', id);
-
-  if (transitionsError) {
-    console.error('Error fetching transitions:', transitionsError);
-  }
+  const { data: locations, error: locationsError } = locationsRes;
+  if (locationsError) console.error('Error fetching locations:', locationsError);
 
   return (
     <ProjectBuilder
       project={project as Project}
       initialScenes={(scenes as Scene[]) || []}
-      initialTransitions={(transitions as Transition[]) || []}
+      initialLocations={(locations as Location[]) || []}
     />
   );
 }

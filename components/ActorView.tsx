@@ -46,7 +46,7 @@ export default function ActorView({ snapshotData }: ActorViewProps) {
                   className="mt-1 h-5 w-5 rounded border-zinc-300 bg-white text-zinc-900 focus:ring-2 focus:ring-zinc-400"
                 />
                 <div className="flex-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="text-sm font-medium text-zinc-600">
                       Сцена {scene.order_index + 1}
                     </span>
@@ -54,6 +54,12 @@ export default function ActorView({ snapshotData }: ActorViewProps) {
                     <span className="text-sm text-zinc-500">
                       {formatLabel(scene.framing)}
                     </span>
+                    {scene.location_name && (
+                      <>
+                        <span className="text-zinc-400">•</span>
+                        <span className="text-sm text-zinc-500">{scene.location_name}</span>
+                      </>
+                    )}
                   </div>
                   <p className="mt-2 text-sm text-zinc-700">
                     {expandedSceneId === scene.id
@@ -84,6 +90,12 @@ export default function ActorView({ snapshotData }: ActorViewProps) {
                             {formatLabel(scene.arm_state)}
                           </span>
                         </div>
+                        {scene.location_name && (
+                          <div className="col-span-2">
+                            <span className="text-zinc-600">Локація:</span>{' '}
+                            <span className="text-zinc-700">{scene.location_name}</span>
+                          </div>
+                        )}
                       </div>
                       {scene.actor_note && (
                         <div className="rounded bg-zinc-50 p-3 border border-zinc-200">

@@ -3,7 +3,7 @@
 import { requireAuth } from '@/lib/auth';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import { nanoid } from 'nanoid';
-import { Project, Scene, Transition, SnapshotData } from '@/lib/domain';
+import { Project, Scene, Transition, SnapshotData, Location } from '@/lib/domain';
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 
@@ -149,6 +149,60 @@ export async function createTransition(
   return transition as Transition;
 }
 
+export async function createLocation(name: string): Promise<Location | null> {
+  const user = await requireAuth();
+  if (!user) return null;
+
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+
+  const supabase = await createServerSupabaseClient();
+  const { data, error } = await supabase
+    .from('locations')
+    .insert({ user_id: user.id, name: trimmed })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error creating location:', error);
+    return null;
+  }
+
+  return data as Location;
+}
+
+export async function updateLocation(id: string, name: string): Promise<Location | null> {
+  const user = await requireAuth();
+  if (!user) return null;
+
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+
+  const supabase = await createServerSupabaseClient();
+  const { data, error } = await supabase
+    .from('locations')
+    .update({ name: trimmed })
+    .eq('id', id)
+    .eq('user_id', user.id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error updating location:', error);
+    return null;
+  }
+
+  return data as Location;
+}
+
+export async function deleteLocation(id: string): Promise<void> {
+  const user = await requireAuth();
+  if (!user) return;
+
+  const supabase = await createServerSupabaseClient();
+  await supabase.from('locations').delete().eq('id', id).eq('user_id', user.id);
+}
+
 export async function createSnapshot(projectId: string): Promise<{ actor: string; editor: string } | null> {
   const user = await requireAuth();
   if (!user) return null;
@@ -176,9 +230,34 @@ export async function createSnapshot(projectId: string): Promise<{ actor: string
     .select('*')
     .eq('project_id', projectId);
 
+  const sceneRows = (scenes as Scene[]) || [];
+  const locationIds = [
+    ...new Set(
+      sceneRows
+        .map((s) => s.location_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+
+  const nameById = new Map<string, string>();
+  if (locationIds.length > 0) {
+    const { data: locs } = await supabase
+      .from('locations')
+      .select('id,name')
+      .in('id', locationIds)
+      .eq('user_id', user.id);
+
+    locs?.forEach((l) => nameById.set(l.id, l.name));
+  }
+
+  const scenesForSnapshot: Scene[] = sceneRows.map((s) => ({
+    ...s,
+    location_name: s.location_id ? nameById.get(s.location_id) ?? null : null,
+  }));
+
   const snapshotData: SnapshotData = {
     project: project as Project,
-    scenes: (scenes as Scene[]) || [],
+    scenes: scenesForSnapshot,
     transitions: (transitions as Transition[]) || [],
   };
 
