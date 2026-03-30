@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -18,7 +18,7 @@ import {
 } from '@dnd-kit/sortable';
 import { Location, Project, Scene } from '@/lib/domain';
 import SceneCard from './SceneCard';
-import { reorderScenes, createScene, deleteScene } from '@/app/actions';
+import { reorderScenes, createScene, updateScene } from '@/app/actions';
 import {
   buildOptimisticScene,
   isOptimisticSceneId,
@@ -30,6 +30,8 @@ interface SceneListProps {
   onScenesUpdate: Dispatch<SetStateAction<Scene[]>>;
   locations: Location[];
   onLocationsChange: Dispatch<SetStateAction<Location[]>>;
+  focusSceneId?: string | null;
+  onFocusHandled?: () => void;
 }
 
 export default function SceneList({
@@ -38,9 +40,13 @@ export default function SceneList({
   onScenesUpdate,
   locations,
   onLocationsChange,
+  focusSceneId = null,
+  onFocusHandled,
 }: SceneListProps) {
   const [expandedSceneId, setExpandedSceneId] = useState<string | null>(null);
   const [animateInSceneId, setAnimateInSceneId] = useState<string | null>(null);
+  const [glowSceneId, setGlowSceneId] = useState<string | null>(null);
+  const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -74,6 +80,25 @@ export default function SceneList({
   };
 
   const hasOptimisticScene = scenes.some((s) => isOptimisticSceneId(s.id));
+  
+  useEffect(() => {
+    if (!focusSceneId) return;
+    const target = rowRefs.current[focusSceneId];
+    if (!target) return;
+
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setExpandedSceneId(focusSceneId);
+    setGlowSceneId(focusSceneId);
+    const t = window.setTimeout(() => {
+      setGlowSceneId((current) => (current === focusSceneId ? null : current));
+    }, 1200);
+    onFocusHandled?.();
+
+    return () => window.clearTimeout(t);
+  }, [focusSceneId, scenes, onFocusHandled]);
+
+  const normalizeSceneOrder = (list: Scene[]) =>
+    list.map((s, index) => ({ ...s, order_index: index }));
 
   const handleAddScene = () => {
     const newOrderIndex = scenes.length;
@@ -120,7 +145,13 @@ export default function SceneList({
           strategy={verticalListSortingStrategy}
         >
           {scenes.map((scene) => (
-            <div key={scene.id} className="mb-4 last:mb-0">
+            <div
+              key={scene.id}
+              ref={(el) => {
+                rowRefs.current[scene.id] = el;
+              }}
+              className="mb-4 last:mb-0"
+            >
               <SceneCard
                 scene={scene}
                 project={project}
@@ -147,6 +178,82 @@ export default function SceneList({
                     scenes.map((s) => (s.id === scene.id ? { ...s, ...updates } : s))
                   );
                 }}
+                onSplitLines={(start, end, selectedText) => {
+                  if (isOptimisticSceneId(scene.id)) return;
+                  if (hasOptimisticScene) return;
+
+                  const fullText = scene.lines || '';
+                  if (!fullText) return;
+
+                  const selected = selectedText.trim();
+                  if (!selected) return;
+
+                  const beforeRaw = fullText.slice(0, start);
+                  const afterRaw = fullText.slice(end);
+                  const joiner =
+                    beforeRaw.length > 0 &&
+                    afterRaw.length > 0 &&
+                    !beforeRaw.endsWith('\n') &&
+                    !afterRaw.startsWith('\n')
+                      ? ' '
+                      : '';
+                  const remainingLines = `${beforeRaw}${joiner}${afterRaw}`.trim();
+                  const insertAt = scene.order_index + 1;
+                  const optimistic = buildOptimisticScene(project.id, insertAt);
+
+                  onScenesUpdate((prev) => {
+                    const base = prev.map((s) =>
+                      s.id === scene.id ? { ...s, lines: remainingLines } : s
+                    );
+                    const next = [...base];
+                    next.splice(insertAt, 0, { ...optimistic, lines: selected });
+                    return normalizeSceneOrder(next);
+                  });
+                  setExpandedSceneId(optimistic.id);
+                  setAnimateInSceneId(optimistic.id);
+                  window.setTimeout(
+                    () =>
+                      setAnimateInSceneId((current) =>
+                        current === optimistic.id ? null : current
+                      ),
+                    950
+                  );
+
+                  void (async () => {
+                    await updateScene(scene.id, { lines: remainingLines });
+
+                    const newScene = await createScene(project.id, insertAt);
+                    if (!newScene) {
+                      onScenesUpdate((prev) => {
+                        const withoutOptimistic = prev.filter((s) => s.id !== optimistic.id);
+                        return normalizeSceneOrder(withoutOptimistic);
+                      });
+                      setExpandedSceneId((e) => (e === optimistic.id ? scene.id : e));
+                      setAnimateInSceneId((a) => (a === optimistic.id ? null : a));
+                      return;
+                    }
+
+                    await updateScene(newScene.id, { lines: selected });
+
+                    onScenesUpdate((prev) =>
+                      normalizeSceneOrder(
+                        prev.map((s) =>
+                          s.id === optimistic.id ? { ...newScene, lines: selected } : s
+                        )
+                      )
+                    );
+                    setExpandedSceneId((e) => (e === optimistic.id ? newScene.id : e));
+                    setAnimateInSceneId((a) => (a === optimistic.id ? null : a));
+
+                    const baseIds = scenes.map((s) => s.id);
+                    const currentIndex = baseIds.indexOf(scene.id);
+                    if (currentIndex !== -1) {
+                      const reorderedIds = [...baseIds];
+                      reorderedIds.splice(currentIndex + 1, 0, newScene.id);
+                      void reorderScenes(project.id, reorderedIds);
+                    }
+                  })();
+                }}
                 onDelete={async () => {
                   if (isOptimisticSceneId(scene.id)) {
                     onScenesUpdate((prev) =>
@@ -154,13 +261,30 @@ export default function SceneList({
                     );
                     return;
                   }
-                  const { deleteScene: deleteSceneAction } = await import('@/app/actions');
-                  await deleteSceneAction(scene.id);
+                  const sceneSnapshot = scene;
+                  const sceneId = scene.id;
+                  const sceneOrderIndex = scene.order_index;
+
+                  // Optimistically remove so the list reflows immediately.
                   onScenesUpdate((prev) =>
-                    prev.filter((s) => s.id !== scene.id)
+                    prev.filter((s) => s.id !== sceneId)
                   );
+
+                  const { deleteScene: deleteSceneAction } = await import('@/app/actions');
+                  try {
+                    await deleteSceneAction(sceneId);
+                  } catch {
+                    // Roll back on failure to avoid silent data loss in UI.
+                    onScenesUpdate((prev) => {
+                      const next = [...prev];
+                      const insertAt = Math.max(0, Math.min(sceneOrderIndex, next.length));
+                      next.splice(insertAt, 0, sceneSnapshot);
+                      return normalizeSceneOrder(next);
+                    });
+                  }
                 }}
                 animateIn={scene.id === animateInSceneId}
+                shouldGlow={scene.id === glowSceneId}
               />
             </div>
           ))}

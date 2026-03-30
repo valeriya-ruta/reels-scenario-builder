@@ -11,7 +11,8 @@ export type Framing =
 export type Pose = 'standing' | 'sitting' | 'crouching' | 'leaning';
 
 export type ArmState =
-  | 'normal'
+  | 'arms_at_sides'
+  | 'one_arm_raised'
   | 'holding_object'
   | 'pointing';
 
@@ -128,10 +129,13 @@ const translations: Record<string, string> = {
   'crouching': 'Навпочіпки',
   'leaning': 'Прислонившись',
   
-  // Arm State
-  'normal': 'Звичайне',
+  // Arm State (matches DB arm_state_enum)
+  'arms_at_sides': 'Руки по швах',
+  'one_arm_raised': 'Одна рука піднята',
   'holding_object': 'Тримає предмет',
   'pointing': 'Вказує',
+  // Legacy snapshot values
+  'normal': 'Звичайне',
   
   // Facing
   'toward_camera': 'До камери',

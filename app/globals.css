@@ -34,3 +34,19 @@ textarea {
 .reels-planner-shimmer {
   animation: reels-planner-shimmer 1.2s linear infinite;
 }
+
+@keyframes reels-planner-scene-glow {
+  0% {
+    box-shadow: 0 0 0 rgba(0, 75, 168, 0);
+  }
+  35% {
+    box-shadow: 0 0 0 2px rgba(0, 75, 168, 0.3), 0 0 30px 10px rgba(0, 75, 168, 0.55);
+  }
+  100% {
+    box-shadow: 0 0 0 rgba(0, 75, 168, 0);
+  }
+}
+
+.reels-planner-scene-glow {
+  animation: reels-planner-scene-glow 1.2s ease-out forwards;
+}

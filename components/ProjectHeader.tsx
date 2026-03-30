@@ -2,14 +2,13 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Project, Scene } from '@/lib/domain';
+import { Project } from '@/lib/domain';
 import { updateProjectName, createSnapshot } from '@/app/actions';
 import ShareModal from './ShareModal';
 
 interface ProjectHeaderProps {
   project: Project;
   onProjectUpdate: (project: Project) => void;
-  onScenesUpdate: (scenes: Scene[]) => void;
   backHref?: string;
   backLabel?: string;
 }
@@ -17,7 +16,6 @@ interface ProjectHeaderProps {
 export default function ProjectHeader({
   project,
   onProjectUpdate,
-  onScenesUpdate,
   backHref = '/projects',
   backLabel = 'До всіх сценаріїв',
 }: ProjectHeaderProps) {

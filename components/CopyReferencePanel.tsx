@@ -1,0 +1,248 @@
+'use client';
+
+import { useMemo, useState } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
+import type { Project, Scene } from '@/lib/domain';
+import {
+  generateReferenceFromInstagram,
+  importReferenceScenes,
+} from '@/app/actions';
+import ImportModeDialog from './ImportModeDialog';
+
+interface CopyReferencePanelProps {
+  project: Project;
+  /** Current scenes in the editor (used for conditional import dialog). */
+  existingScenes: Scene[];
+  onScenesUpdate: Dispatch<SetStateAction<Scene[]>>;
+  onSceneAdded?: (sceneId: string) => void;
+}
+
+interface ReferenceResult {
+  transcript: string;
+  language: string | null;
+  scenes: Array<{
+    text: string;
+    startSec: number;
+    endSec: number;
+  }>;
+}
+
+function formatSceneTimeRange(startSec: number, endSec: number): string {
+  const fmt = (s: number) => s.toFixed(1).replace(/\.0$/, '');
+  if (startSec === 0 && endSec === 0) return '';
+  return `${fmt(startSec)}–${fmt(endSec)} с`;
+}
+
+export default function CopyReferencePanel({
+  project,
+  existingScenes,
+  onScenesUpdate,
+  onSceneAdded,
+}: CopyReferencePanelProps) {
+  const [reelUrl, setReelUrl] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<ReferenceResult | null>(null);
+  const [isModeDialogOpen, setIsModeDialogOpen] = useState(false);
+  const [showFullTranscript, setShowFullTranscript] = useState(false);
+  const [addingSceneIndex, setAddingSceneIndex] = useState<number | null>(null);
+
+  const canImport = useMemo(
+    () => Boolean(result && result.scenes.length > 0),
+    [result]
+  );
+
+  const handleGenerate = async () => {
+    setError(null);
+    setIsGenerating(true);
+    try {
+      const data = await generateReferenceFromInstagram(project.id, reelUrl);
+      setResult(data);
+      setShowFullTranscript(false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Не вдалося обробити посилання.';
+      setError(message);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleConfirmImport = async (mode: 'replace' | 'append') => {
+    if (!result) return;
+    setIsImporting(true);
+    setError(null);
+
+    try {
+      const importedScenes = await importReferenceScenes(
+        project.id,
+        result.scenes.map((scene) => scene.text),
+        mode
+      );
+      onScenesUpdate(importedScenes);
+      setIsModeDialogOpen(false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Помилка під час імпорту.';
+      setError(message);
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const handleImportClick = () => {
+    if (!result || result.scenes.length === 0) return;
+    if (existingScenes.length === 0) {
+      void handleConfirmImport('replace');
+    } else {
+      setIsModeDialogOpen(true);
+    }
+  };
+
+  const handleAddSingleScene = async (sceneText: string, index: number) => {
+    if (!sceneText.trim()) return;
+    setAddingSceneIndex(index);
+    setError(null);
+    try {
+      const importedScenes = await importReferenceScenes(
+        project.id,
+        [sceneText],
+        'append'
+      );
+      onScenesUpdate(importedScenes);
+      const newestScene = importedScenes[importedScenes.length - 1];
+      if (newestScene?.id) {
+        onSceneAdded?.(newestScene.id);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Помилка під час додавання сцени.';
+      setError(message);
+    } finally {
+      setAddingSceneIndex((current) => (current === index ? null : current));
+    }
+  };
+
+  return (
+    <aside className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+      <h2 className="text-base font-semibold text-zinc-900">Скопіюй референс</h2>
+      <p className="mt-1 text-sm text-zinc-600">
+        Встав публічний Instagram Reel, отримай транскрипт і заготовку сцен.
+      </p>
+
+      <div className="mt-4">
+        <label htmlFor="copyref-url" className="mb-1 block text-xs font-medium text-zinc-600">
+          Посилання на Reel
+        </label>
+        <input
+          id="copyref-url"
+          type="url"
+          value={reelUrl}
+          onChange={(e) => setReelUrl(e.target.value)}
+          placeholder="https://www.instagram.com/reel/..."
+          className="w-full rounded border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none transition-colors focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400"
+        />
+      </div>
+
+      <button
+        onClick={handleGenerate}
+        disabled={isGenerating || !reelUrl.trim()}
+        className="mt-3 w-full rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
+      >
+        {isGenerating ? 'Обробляю...' : 'Отримати референс'}
+      </button>
+
+      {error && (
+        <div className="mt-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      {result && (
+        <div className="mt-4 space-y-3">
+          <div className="rounded border border-zinc-200 bg-zinc-50 p-3">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-medium text-zinc-800">
+                Референс по сценах ({result.scenes.length})
+              </h3>
+              {result.language && (
+                <span className="text-xs text-zinc-500">Мова: {result.language}</span>
+              )}
+            </div>
+            <div className="max-h-80 space-y-2 overflow-y-auto">
+              {result.scenes.map((scene, index) => {
+                const timeLabel = formatSceneTimeRange(scene.startSec, scene.endSec);
+                const isAddingThisScene = addingSceneIndex === index;
+                return (
+                  <button
+                    type="button"
+                    key={`${index}-${scene.startSec}-${scene.endSec}`}
+                    onClick={() => void handleAddSingleScene(scene.text, index)}
+                    disabled={isImporting || addingSceneIndex !== null}
+                    className="group w-full cursor-pointer rounded border border-zinc-200 bg-white p-2.5 text-left shadow-sm transition-colors hover:border-zinc-400 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-70"
+                    title="Додати цю сцену в кінець списку"
+                  >
+                    <div className="mb-1 flex flex-wrap items-center justify-between gap-1 text-xs text-zinc-500">
+                      <span className="font-medium text-zinc-700">Сцена {index + 1}</span>
+                      {timeLabel ? <span>{timeLabel}</span> : null}
+                    </div>
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="whitespace-pre-wrap text-sm text-zinc-800">{scene.text}</p>
+                      <span
+                        className={[
+                          'mt-0.5 shrink-0 transition-opacity',
+                          isAddingThisScene ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
+                        ].join(' ')}
+                        aria-hidden="true"
+                      >
+                        <img
+                          src="/icons/subdirectory_arrow_right.svg"
+                          alt=""
+                          className="h-4 w-4"
+                        />
+                      </span>
+                    </div>
+                    {isAddingThisScene && (
+                      <p className="mt-2 text-xs font-medium text-zinc-500">Додаю сцену...</p>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowFullTranscript((v) => !v)}
+              className="mt-2 text-xs font-medium text-zinc-600 underline-offset-2 hover:text-zinc-800 hover:underline"
+            >
+              {showFullTranscript ? 'Сховати повний транскрипт' : 'Показати повний транскрипт'}
+            </button>
+            {showFullTranscript && (
+              <p className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap border-t border-zinc-200 pt-2 text-xs text-zinc-600">
+                {result.transcript}
+              </p>
+            )}
+          </div>
+
+          <div className="rounded border border-zinc-200 p-3">
+            <p className="text-sm text-zinc-600">
+              Знайдено сцен: <span className="font-semibold text-zinc-900">{result.scenes.length}</span>
+            </p>
+            <button
+              disabled={!canImport || isImporting}
+              onClick={handleImportClick}
+              className="mt-3 w-full rounded border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-800 transition-colors hover:border-zinc-400 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isImporting ? 'Імпортую...' : 'Додати сцени'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <ImportModeDialog
+        open={isModeDialogOpen}
+        onClose={() => setIsModeDialogOpen(false)}
+        onConfirm={handleConfirmImport}
+        disabled={isImporting}
+      />
+    </aside>
+  );
+}

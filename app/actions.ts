@@ -4,8 +4,45 @@ import { requireAuth } from '@/lib/auth';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import { nanoid } from 'nanoid';
 import { Project, Scene, Transition, SnapshotData, Location } from '@/lib/domain';
-import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
+import { resolveInstagramMediaUrl } from '@/lib/ai/instagramMedia';
+import { transcribeMediaFromUrl } from '@/lib/ai/sttProvider';
+import { splitTranscriptIntoScenes } from '@/lib/ai/sceneSegmentation';
+
+type ImportMode = 'replace' | 'append';
+
+interface ReferencePreview {
+  transcript: string;
+  language: string | null;
+  scenes: Array<{
+    text: string;
+    startSec: number;
+    endSec: number;
+  }>;
+}
+
+const DEFAULT_SCENE_VALUES = {
+  framing: 'above_waist',
+  pose: 'standing',
+  arm_state: 'arms_at_sides',
+  facing: 'toward_camera',
+  camera_motion: null,
+  shot_size: null,
+  actor_note: null,
+  editor_note: null,
+  is_checked: false,
+} satisfies Partial<Scene>;
+
+async function assertProjectOwner(projectId: string, userId: string): Promise<boolean> {
+  const supabase = await createServerSupabaseClient();
+  const { data } = await supabase
+    .from('projects')
+    .select('id')
+    .eq('id', projectId)
+    .eq('user_id', userId)
+    .single();
+  return Boolean(data);
+}
 
 export async function updateProjectName(projectId: string, name: string) {
   const user = await requireAuth();
@@ -53,10 +90,7 @@ export async function createScene(projectId: string, orderIndex: number) {
     .insert({
       project_id: projectId,
       order_index: orderIndex,
-      framing: 'above_waist',
-      pose: 'standing',
-      arm_state: 'arms_at_sides',
-      facing: 'toward_camera',
+      ...DEFAULT_SCENE_VALUES,
     })
     .select()
     .single();
@@ -67,6 +101,110 @@ export async function createScene(projectId: string, orderIndex: number) {
   }
 
   return scene as Scene;
+}
+
+export async function generateReferenceFromInstagram(
+  projectId: string,
+  reelUrl: string
+): Promise<ReferencePreview> {
+  const user = await requireAuth();
+  if (!user) {
+    throw new Error('Необхідно увійти в акаунт.');
+  }
+
+  if (!reelUrl.trim()) {
+    throw new Error('Встав посилання на публічний Instagram Reel.');
+  }
+
+  const isOwner = await assertProjectOwner(projectId, user.id);
+  if (!isOwner) {
+    throw new Error('Проєкт не знайдено або доступ заборонений.');
+  }
+
+  const { mediaUrl } = await resolveInstagramMediaUrl(reelUrl);
+  const transcriptResult = await transcribeMediaFromUrl(mediaUrl);
+  const sceneDrafts = await splitTranscriptIntoScenes(
+    transcriptResult.transcript,
+    transcriptResult.segments
+  );
+
+  return {
+    transcript: transcriptResult.transcript,
+    language: transcriptResult.language,
+    scenes: sceneDrafts,
+  };
+}
+
+export async function importReferenceScenes(
+  projectId: string,
+  sceneTexts: string[],
+  mode: ImportMode
+): Promise<Scene[]> {
+  const user = await requireAuth();
+  if (!user) {
+    throw new Error('Необхідно увійти в акаунт.');
+  }
+
+  if (mode !== 'append' && mode !== 'replace') {
+    throw new Error('Некоректний режим імпорту.');
+  }
+
+  const sanitizedTexts = sceneTexts.map((text) => text.trim()).filter(Boolean);
+  if (sanitizedTexts.length === 0) {
+    throw new Error('Немає сцен для імпорту.');
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const isOwner = await assertProjectOwner(projectId, user.id);
+  if (!isOwner) {
+    throw new Error('Проєкт не знайдено або доступ заборонений.');
+  }
+
+  if (mode === 'replace') {
+    const { error: deleteError } = await supabase
+      .from('scenes')
+      .delete()
+      .eq('project_id', projectId);
+    if (deleteError) {
+      throw new Error(`Не вдалося очистити сцени: ${deleteError.message}`);
+    }
+  }
+
+  const { data: existingScenes, error: existingError } = await supabase
+    .from('scenes')
+    .select('order_index')
+    .eq('project_id', projectId)
+    .order('order_index', { ascending: false })
+    .limit(1);
+
+  if (existingError) {
+    throw new Error(`Не вдалося отримати сцени: ${existingError.message}`);
+  }
+
+  const baseIndex = existingScenes?.[0]?.order_index ?? -1;
+  const payload = sanitizedTexts.map((lines, index) => ({
+    project_id: projectId,
+    order_index: baseIndex + index + 1,
+    lines,
+    ...DEFAULT_SCENE_VALUES,
+  }));
+
+  const { error: insertError } = await supabase.from('scenes').insert(payload);
+  if (insertError) {
+    throw new Error(`Не вдалося імпортувати сцени: ${insertError.message}`);
+  }
+
+  const { data: refreshed, error: refreshError } = await supabase
+    .from('scenes')
+    .select('*')
+    .eq('project_id', projectId)
+    .order('order_index', { ascending: true });
+
+  if (refreshError) {
+    throw new Error(`Не вдалося оновити список сцен: ${refreshError.message}`);
+  }
+
+  return (refreshed ?? []) as Scene[];
 }
 
 export async function updateScene(sceneId: string, updates: Partial<Scene>) {

@@ -18,7 +18,7 @@ export function buildOptimisticScene(projectId: string, orderIndex: number): Sce
     lines: null,
     framing: 'above_waist',
     pose: 'standing',
-    arm_state: 'normal',
+    arm_state: 'arms_at_sides',
     facing: 'toward_camera',
     camera_motion: null,
     shot_size: null,

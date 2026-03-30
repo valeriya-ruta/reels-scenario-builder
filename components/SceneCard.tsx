@@ -34,8 +34,59 @@ interface SceneCardProps {
   isExpanded: boolean;
   onToggleExpand: () => void;
   onUpdate: (updates: Partial<Scene>) => void;
+  onSplitLines: (start: number, end: number, selectedText: string) => void;
   onDelete: () => void;
   animateIn?: boolean;
+  shouldGlow?: boolean;
+}
+
+function getTextAreaCaretPosition(
+  textarea: HTMLTextAreaElement,
+  index: number
+): { left: number; top: number } {
+  const mirror = document.createElement('div');
+  const style = window.getComputedStyle(textarea);
+
+  mirror.style.position = 'absolute';
+  mirror.style.visibility = 'hidden';
+  mirror.style.pointerEvents = 'none';
+  mirror.style.whiteSpace = 'pre-wrap';
+  mirror.style.overflowWrap = 'break-word';
+  mirror.style.wordBreak = 'break-word';
+  mirror.style.left = '-9999px';
+  mirror.style.top = '0';
+
+  mirror.style.width = `${textarea.clientWidth}px`;
+  mirror.style.font = style.font;
+  mirror.style.fontSize = style.fontSize;
+  mirror.style.fontFamily = style.fontFamily;
+  mirror.style.fontWeight = style.fontWeight;
+  mirror.style.fontStyle = style.fontStyle;
+  mirror.style.letterSpacing = style.letterSpacing;
+  mirror.style.lineHeight = style.lineHeight;
+  mirror.style.textTransform = style.textTransform;
+  mirror.style.textIndent = style.textIndent;
+  mirror.style.textAlign = style.textAlign;
+  mirror.style.padding = style.padding;
+  mirror.style.border = style.border;
+  mirror.style.boxSizing = style.boxSizing;
+
+  const textBefore = textarea.value.slice(0, index);
+  mirror.textContent = textBefore;
+
+  const marker = document.createElement('span');
+  marker.textContent = '\u200b';
+  mirror.appendChild(marker);
+
+  document.body.appendChild(mirror);
+  const markerRect = marker.getBoundingClientRect();
+  const mirrorRect = mirror.getBoundingClientRect();
+  document.body.removeChild(mirror);
+
+  return {
+    left: markerRect.left - mirrorRect.left,
+    top: markerRect.top - mirrorRect.top,
+  };
 }
 
 export default function SceneCard({
@@ -48,8 +99,10 @@ export default function SceneCard({
   isExpanded,
   onToggleExpand,
   onUpdate,
+  onSplitLines,
   onDelete,
   animateIn = false,
+  shouldGlow = false,
 }: SceneCardProps) {
   const onDeleteRef = useRef(onDelete);
   onDeleteRef.current = onDelete;
@@ -69,9 +122,13 @@ export default function SceneCard({
   } = useSortable({
     id: scene.id,
     disabled: sortableDisabled || isExiting,
+    transition: {
+      duration: 140,
+      easing: 'cubic-bezier(0.25, 1, 0.5, 1)',
+    },
   });
 
-  const EXIT_MS = 420;
+  const EXIT_MS = 180;
 
   useEffect(() => {
     if (!isExiting) return;
@@ -83,7 +140,7 @@ export default function SceneCard({
 
   const style = {
     transform: isExiting
-      ? 'translateY(-20px)'
+      ? 'translateY(-8px)'
       : CSS.Transform.toString(transform),
     transition: isExiting
       ? `opacity ${EXIT_MS}ms cubic-bezier(0.4, 0, 0.2, 1), transform ${EXIT_MS}ms cubic-bezier(0.4, 0, 0.2, 1)`
@@ -93,12 +150,24 @@ export default function SceneCard({
 
   const [isEditingName, setIsEditingName] = useState(false);
   const [nameValue, setNameValue] = useState(scene.name || '');
+  const textAreaRef = useRef<HTMLTextAreaElement>(null);
+  const [splitPopup, setSplitPopup] = useState<{
+    top: number;
+    left: number;
+    start: number;
+    end: number;
+    selectedText: string;
+  } | null>(null);
   const [isContentMounted, setIsContentMounted] = useState(isExpanded);
   const [isAnimatingOpen, setIsAnimatingOpen] = useState(isExpanded);
 
   useEffect(() => {
     setNameValue(scene.name || '');
   }, [scene.id, scene.name]);
+
+  useEffect(() => {
+    setSplitPopup(null);
+  }, [scene.id, isExpanded]);
 
   const [enterOn, setEnterOn] = useState(!animateIn);
   useEffect(() => {
@@ -179,13 +248,45 @@ export default function SceneCard({
     setIsExiting(true);
   };
 
+  const updateSplitPopup = () => {
+    const ta = textAreaRef.current;
+    if (!ta) return;
+
+    const start = ta.selectionStart ?? 0;
+    const end = ta.selectionEnd ?? 0;
+    if (start === end) {
+      setSplitPopup(null);
+      return;
+    }
+
+    const selectedText = ta.value.slice(start, end);
+    if (!selectedText.trim()) {
+      setSplitPopup(null);
+      return;
+    }
+
+    const rect = ta.getBoundingClientRect();
+    const caret = getTextAreaCaretPosition(ta, start);
+    setSplitPopup({
+      top: Math.max(6, rect.top + caret.top - ta.scrollTop - 38),
+      left: rect.left + caret.left - ta.scrollLeft,
+      start,
+      end,
+      selectedText,
+    });
+  };
+
+  const hideSplitPopup = () => {
+    window.setTimeout(() => setSplitPopup(null), 80);
+  };
+
   return (
     <div
       ref={setNodeRef}
       style={style}
       className={`rounded-lg border border-zinc-200 bg-white p-4 shadow-sm transition-shadow duration-300 ease-in-out ${
         isExiting ? 'pointer-events-none' : 'cursor-pointer hover:shadow-md'
-      }`}
+      } ${shouldGlow ? 'reels-planner-scene-glow' : ''}`}
       onClick={handleCardClick}
     >
       <div style={enterStyle}>
@@ -292,16 +393,52 @@ export default function SceneCard({
               </label>
               <div className="relative">
                 <textarea
+                  ref={textAreaRef}
                   value={scene.lines || ''}
                   onChange={(e) => {
                     onUpdate({ lines: e.target.value });
                     persist({ lines: e.target.value });
+                    setSplitPopup(null);
                   }}
+                  onSelect={updateSplitPopup}
+                  onKeyUp={updateSplitPopup}
+                  onMouseUp={updateSplitPopup}
+                  onScroll={updateSplitPopup}
+                  onBlur={hideSplitPopup}
                   onClick={(e) => e.stopPropagation()}
                   className="w-full rounded border border-zinc-300 bg-white px-3 py-2 pr-16 pb-8 text-zinc-900 placeholder-zinc-500 focus:border-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-400"
                   rows={3}
                   placeholder="Діалог або голос за кадром..."
                 />
+                {splitPopup && (
+                  <div
+                    className="fixed z-[220]"
+                    style={{ top: splitPopup.top, left: splitPopup.left }}
+                  >
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSplitLines(
+                          splitPopup.start,
+                          splitPopup.end,
+                          splitPopup.selectedText
+                        );
+                        setSplitPopup(null);
+                      }}
+                      className="inline-flex items-center gap-2 rounded-2xl border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-800 shadow-lg transition hover:border-zinc-400 hover:bg-zinc-50"
+                    >
+                      <img
+                        src="/icons/subdirectory_arrow_right.svg"
+                        alt=""
+                        aria-hidden="true"
+                        className="h-4 w-4 shrink-0"
+                      />
+                      <span>нова сцена</span>
+                    </button>
+                  </div>
+                )}
                 {hasDialogue && (
                   <div className="absolute bottom-2 right-2 z-10">
                     <DialogueDurationBadge seconds={dialogueSeconds} />
@@ -331,7 +468,12 @@ export default function SceneCard({
               <ChipSelector
                 label="Положення рук"
                 value={scene.arm_state}
-                options={['normal', 'holding_object', 'pointing']}
+                options={[
+                  'arms_at_sides',
+                  'one_arm_raised',
+                  'holding_object',
+                  'pointing',
+                ]}
                 onChange={(value) => {
                   onUpdate({ arm_state: value as ArmState });
                   persist({ arm_state: value as ArmState });
