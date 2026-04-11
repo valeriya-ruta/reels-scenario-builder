@@ -1,9 +1,21 @@
 'use client';
 
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import type { StorytellingStory, VisualType, EngagementType } from '@/lib/domain';
 import { VISUAL_OPTIONS, ENGAGEMENT_OPTIONS } from '@/lib/domain';
 import { updateStorytellingStory } from '@/app/storytelling-actions';
+
+function formatStoryAsText(story: StorytellingStory, index: number): string {
+  const body = (story.text || '').trim() || '—';
+  const visual = story.visual ?? '—';
+  const engagement = story.engagement ?? '—';
+  return [
+    `Сторіс ${index + 1}`,
+    body,
+    `Візуал: ${visual}`,
+    `Інтерактив: ${engagement}`,
+  ].join('\n');
+}
 
 interface StoryCardProps {
   story: StorytellingStory;
@@ -14,6 +26,17 @@ interface StoryCardProps {
 
 export default function StoryCard({ story, index, onUpdate, onDelete }: StoryCardProps) {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const copyStoryText = async () => {
+    try {
+      await navigator.clipboard.writeText(formatStoryAsText(story, index));
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard may be denied
+    }
+  };
 
   const handleTextChange = (text: string) => {
     onUpdate(story.id, { text });
@@ -37,20 +60,43 @@ export default function StoryCard({ story, index, onUpdate, onDelete }: StoryCar
 
   return (
     <div className="flex flex-col gap-4 rounded-2xl border border-zinc-100 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
           Сторіс {index + 1}
         </h3>
-        <button
-          type="button"
-          onClick={() => onDelete(story.id)}
-          className="cursor-pointer p-1 text-zinc-300 transition-colors hover:text-red-500"
-          title="Видалити"
-        >
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
+        <div className="flex shrink-0 items-center gap-0.5">
+          <button
+            type="button"
+            onClick={copyStoryText}
+            className={`cursor-pointer rounded-md p-1.5 transition-colors ${
+              copied
+                ? 'text-emerald-600'
+                : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800'
+            }`}
+            title={copied ? 'Скопійовано' : 'Копіювати текст сторіс'}
+          >
+            {copied ? (
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => onDelete(story.id)}
+            className="cursor-pointer rounded-md p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-red-500"
+            title="Видалити"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       <textarea

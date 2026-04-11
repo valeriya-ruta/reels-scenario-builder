@@ -24,7 +24,7 @@ export default async function ProjectsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-50">
+    <div className="min-h-screen bg-white">
       <div className="mx-auto max-w-4xl px-4 py-8">
         <div className="mb-8 flex items-center justify-between">
           <h1 className="text-2xl font-semibold text-zinc-900">Мої проєкти</h1>
@@ -41,7 +41,7 @@ function CreateProjectButton() {
     <form action={createProject}>
       <button
         type="submit"
-        className="cursor-pointer rounded bg-zinc-900 px-4 py-2 font-medium text-white transition-colors hover:bg-zinc-800"
+        className="cursor-pointer rounded bg-[#004BA8] px-4 py-2 font-medium text-white transition-colors hover:bg-[#0d5bb8]"
       >
         Новий сценарій
       </button>

@@ -208,7 +208,7 @@ export default function StorytellingProjectsList({ projects }: Props) {
             </div>
             <div className="flex justify-end gap-3">
               <button type="button" onClick={() => { setProjectToEdit(null); setEditName(''); }} className="cursor-pointer rounded border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50">Скасувати</button>
-              <button type="button" onClick={saveEdit} className="cursor-pointer rounded bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-800">Зберегти</button>
+              <button type="button" onClick={saveEdit} className="cursor-pointer rounded bg-black px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-900">Зберегти</button>
             </div>
           </div>
         </div>

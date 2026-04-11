@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { Project, Scene } from '@/lib/domain';
 import {
-  generateReferenceFromInstagram,
+  generateReferenceFromVideoLink,
   importReferenceScenes,
 } from '@/app/actions';
 import ImportModeDialog from './ImportModeDialog';
@@ -25,6 +25,17 @@ interface ReferenceResult {
     startSec: number;
     endSec: number;
   }>;
+}
+
+function formatDetectedLanguage(code: string): string {
+  switch (code.toLowerCase()) {
+    case 'uk':
+      return 'українська';
+    case 'en':
+      return 'англійська';
+    default:
+      return code;
+  }
 }
 
 function formatSceneTimeRange(startSec: number, endSec: number): string {
@@ -57,8 +68,13 @@ export default function CopyReferencePanel({
     setError(null);
     setIsGenerating(true);
     try {
-      const data = await generateReferenceFromInstagram(project.id, reelUrl);
-      setResult(data);
+      const response = await generateReferenceFromVideoLink(project.id, reelUrl);
+      if (!response.ok) {
+        setResult(null);
+        setError(response.error);
+        return;
+      }
+      setResult(response.data);
       setShowFullTranscript(false);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Не вдалося обробити посилання.';
@@ -122,22 +138,22 @@ export default function CopyReferencePanel({
   };
 
   return (
-    <aside className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+    <aside className="min-w-0">
       <h2 className="text-base font-semibold text-zinc-900">Скопіюй референс</h2>
       <p className="mt-1 text-sm text-zinc-600">
-        Встав публічний Instagram Reel, отримай транскрипт і заготовку сцен.
+        Встав публічний Instagram Reel або TikTok, отримай транскрипт і заготовку сцен.
       </p>
 
       <div className="mt-4">
         <label htmlFor="copyref-url" className="mb-1 block text-xs font-medium text-zinc-600">
-          Посилання на Reel
+          Посилання на Reel / TikTok
         </label>
         <input
           id="copyref-url"
           type="url"
           value={reelUrl}
           onChange={(e) => setReelUrl(e.target.value)}
-          placeholder="https://www.instagram.com/reel/..."
+          placeholder="Instagram або TikTok URL…"
           className="w-full rounded border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none transition-colors focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400"
         />
       </div>
@@ -145,29 +161,31 @@ export default function CopyReferencePanel({
       <button
         onClick={handleGenerate}
         disabled={isGenerating || !reelUrl.trim()}
-        className="mt-3 w-full rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
+        className="mt-3 w-full rounded bg-black px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-900 disabled:cursor-not-allowed disabled:bg-zinc-400"
       >
         {isGenerating ? 'Обробляю...' : 'Отримати референс'}
       </button>
 
       {error && (
-        <div className="mt-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div className="mt-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
         </div>
       )}
 
       {result && (
-        <div className="mt-4 space-y-3">
-          <div className="rounded border border-zinc-200 bg-zinc-50 p-3">
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="mt-4 space-y-6">
+          <div>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-sm font-medium text-zinc-800">
                 Референс по сценах ({result.scenes.length})
               </h3>
               {result.language && (
-                <span className="text-xs text-zinc-500">Мова: {result.language}</span>
+                <span className="text-xs text-zinc-500">
+                  Мова: {formatDetectedLanguage(result.language)}
+                </span>
               )}
             </div>
-            <div className="max-h-80 space-y-2 overflow-y-auto">
+            <div className="max-h-80 space-y-1 overflow-y-auto">
               {result.scenes.map((scene, index) => {
                 const timeLabel = formatSceneTimeRange(scene.startSec, scene.endSec);
                 const isAddingThisScene = addingSceneIndex === index;
@@ -177,7 +195,7 @@ export default function CopyReferencePanel({
                     key={`${index}-${scene.startSec}-${scene.endSec}`}
                     onClick={() => void handleAddSingleScene(scene.text, index)}
                     disabled={isImporting || addingSceneIndex !== null}
-                    className="group w-full cursor-pointer rounded border border-zinc-200 bg-white p-2.5 text-left shadow-sm transition-colors hover:border-zinc-400 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-70"
+                    className="group w-full cursor-pointer rounded-lg px-1 py-2.5 text-left transition-colors hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-70"
                     title="Додати цю сцену в кінець списку"
                   >
                     <div className="mb-1 flex flex-wrap items-center justify-between gap-1 text-xs text-zinc-500">
@@ -216,20 +234,20 @@ export default function CopyReferencePanel({
               {showFullTranscript ? 'Сховати повний транскрипт' : 'Показати повний транскрипт'}
             </button>
             {showFullTranscript && (
-              <p className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap border-t border-zinc-200 pt-2 text-xs text-zinc-600">
+              <p className="mt-3 max-h-40 overflow-y-auto whitespace-pre-wrap pt-3 text-xs text-zinc-600">
                 {result.transcript}
               </p>
             )}
           </div>
 
-          <div className="rounded border border-zinc-200 p-3">
+          <div>
             <p className="text-sm text-zinc-600">
               Знайдено сцен: <span className="font-semibold text-zinc-900">{result.scenes.length}</span>
             </p>
             <button
               disabled={!canImport || isImporting}
               onClick={handleImportClick}
-              className="mt-3 w-full rounded border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-800 transition-colors hover:border-zinc-400 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-3 w-full rounded bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isImporting ? 'Імпортую...' : 'Додати сцени'}
             </button>

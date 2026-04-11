@@ -1,4 +1,5 @@
 import { optionalServerEnv, requireServerEnv } from '@/lib/env';
+import { DEFAULT_INSTAGRAM_REEL_SCRAPER_ACTOR } from '@/lib/ai/competitorReelsApify';
 
 const INSTAGRAM_HOSTS = new Set(['instagram.com', 'www.instagram.com']);
 
@@ -18,6 +19,10 @@ function normalizeUrl(value: string): URL {
   if (!reelPathPattern.test(parsed.pathname)) {
     throw new Error('Підтримуються лише посилання формату Instagram Reel.');
   }
+
+  // Drop tracking params/fragments (e.g. `igsh`) to keep scraper input stable.
+  parsed.search = '';
+  parsed.hash = '';
 
   return parsed;
 }
@@ -62,14 +67,15 @@ export interface InstagramMediaResult {
 export async function resolveInstagramMediaUrl(reelUrl: string): Promise<InstagramMediaResult> {
   const normalized = normalizeUrl(reelUrl);
   const token = requireServerEnv('APIFY_TOKEN');
-  const actorId = optionalServerEnv('APIFY_INSTAGRAM_ACTOR_ID') || 'apify/instagram-scraper';
+  const actorId =
+    optionalServerEnv('APIFY_INSTAGRAM_ACTOR_ID') ||
+    DEFAULT_INSTAGRAM_REEL_SCRAPER_ACTOR;
 
   const endpoint = `https://api.apify.com/v2/acts/${encodeURIComponent(actorId)}/run-sync-get-dataset-items?token=${encodeURIComponent(token)}`;
+  /** Input schema: `apify/instagram-reel-scraper` — reel or profile URL in `username` array */
   const payload = {
-    directUrls: [normalized.toString()],
-    resultsType: 'details',
+    username: [normalized.toString()],
     resultsLimit: 1,
-    addParentData: false,
   };
 
   const res = await fetch(endpoint, {

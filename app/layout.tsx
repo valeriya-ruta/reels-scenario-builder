@@ -1,19 +1,8 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import { headers } from "next/headers";
 import "./globals.css";
 import AppShell from "@/components/AppShell";
 import { getCurrentUser } from "@/lib/auth";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "Планувальник Рілів",
@@ -33,9 +22,7 @@ export default async function RootLayout({
 
   return (
     <html lang="uk">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-white text-zinc-900`}
-      >
+      <body className="antialiased bg-white text-zinc-900">
         {user && !isAuthRoute ? (
           <AppShell
             userName={user.user_metadata?.full_name ?? null}
@@ -44,7 +31,7 @@ export default async function RootLayout({
             {children}
           </AppShell>
         ) : (
-          <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-4">
+          <div className="flex min-h-screen items-center justify-center bg-white px-4">
             {children}
           </div>
         )}

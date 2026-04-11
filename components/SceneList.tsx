@@ -22,6 +22,7 @@ import { reorderScenes, createScene, updateScene } from '@/app/actions';
 import {
   buildOptimisticScene,
   isOptimisticSceneId,
+  mergeServerSceneWithLocalDraft,
 } from '@/lib/sceneOptimistic';
 
 interface SceneListProps {
@@ -73,9 +74,18 @@ export default function SceneList({
     const newIndex = scenes.findIndex((s) => s.id === over.id);
 
     if (oldIndex !== -1 && newIndex !== -1) {
-      const newScenes = arrayMove(scenes, oldIndex, newIndex);
-      onScenesUpdate(newScenes);
-      await reorderScenes(project.id, newScenes.map((s) => s.id));
+      let reorderedIds: string[] = [];
+      onScenesUpdate((prev) => {
+        const oi = prev.findIndex((s) => s.id === active.id);
+        const ni = prev.findIndex((s) => s.id === over.id);
+        if (oi === -1 || ni === -1) return prev;
+        const next = arrayMove(prev, oi, ni);
+        reorderedIds = next.map((s) => s.id);
+        return next;
+      });
+      if (reorderedIds.length) {
+        await reorderScenes(project.id, reorderedIds);
+      }
     }
   };
 
@@ -118,9 +128,20 @@ export default function SceneList({
     void (async () => {
       const newScene = await createScene(project.id, newOrderIndex);
       if (newScene) {
-        onScenesUpdate((prev) =>
-          prev.map((s) => (s.id === optimistic.id ? newScene : s))
-        );
+        let persistDraft: Partial<Scene> | null = null;
+        onScenesUpdate((prev) => {
+          const local = prev.find((s) => s.id === optimistic.id);
+          if (!local) return prev;
+          persistDraft = mergeServerSceneWithLocalDraft(newScene, local);
+          return prev.map((s) =>
+            s.id === optimistic.id
+              ? { ...newScene, ...persistDraft }
+              : s
+          );
+        });
+        if (persistDraft) {
+          void updateScene(newScene.id, persistDraft);
+        }
         setExpandedSceneId((e) => (e === optimistic.id ? newScene.id : e));
         setAnimateInSceneId((a) =>
           a === optimistic.id ? null : a
@@ -174,8 +195,8 @@ export default function SceneList({
                   )
                 }
                 onUpdate={(updates) => {
-                  onScenesUpdate(
-                    scenes.map((s) => (s.id === scene.id ? { ...s, ...updates } : s))
+                  onScenesUpdate((prev) =>
+                    prev.map((s) => (s.id === scene.id ? { ...s, ...updates } : s))
                   );
                 }}
                 onSplitLines={(start, end, selectedText) => {

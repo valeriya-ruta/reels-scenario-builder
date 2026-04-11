@@ -1,20 +1,65 @@
+@import "@fontsource/google-sans/latin-400.css";
+@import "@fontsource/google-sans/latin-500.css";
+@import "@fontsource/google-sans/latin-600.css";
+@import "@fontsource/google-sans/latin-700.css";
+@import "@fontsource/google-sans/latin-ext-400.css";
+@import "@fontsource/google-sans/latin-ext-500.css";
+@import "@fontsource/google-sans/latin-ext-600.css";
+@import "@fontsource/google-sans/latin-ext-700.css";
+@import "@fontsource/google-sans/cyrillic-400.css";
+@import "@fontsource/google-sans/cyrillic-500.css";
+@import "@fontsource/google-sans/cyrillic-600.css";
+@import "@fontsource/google-sans/cyrillic-700.css";
+@import "@fontsource/google-sans/cyrillic-ext-400.css";
+@import "@fontsource/google-sans/cyrillic-ext-500.css";
+@import "@fontsource/google-sans/cyrillic-ext-600.css";
+@import "@fontsource/google-sans/cyrillic-ext-700.css";
+
 @import "tailwindcss";
 
 :root {
   --background: #ffffff;
-  --foreground: #18181b;
+  --foreground: #000000;
+  --color-text-primary: #000000;
+  --color-text-secondary: #525252;
+  --color-text-muted: #737373;
+  --color-background-canvas: #ffffff;
+  --color-background-secondary: #f5f5f5;
+  --color-border-primary: #e5e5e5;
+  --color-link: #004ba8;
+  --color-link-soft: #e8f0fc;
+  --shadow-card-sm: 0 1px 2px rgba(26, 28, 46, 0.05),
+    0 4px 16px rgba(26, 28, 46, 0.06);
+  --shadow-card: 0 1px 3px rgba(26, 28, 46, 0.06),
+    0 10px 28px rgba(26, 28, 46, 0.08);
+  --border-radius-lg: 0.5rem;
+  --border-radius-md: 0.375rem;
+  --border-radius-xl: 1rem;
+  --border-radius-2xl: 1.25rem;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: "Google Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Google Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Google Sans", ui-sans-serif, system-ui, sans-serif;
+}
+
+.font-display {
+  font-family: "Google Sans", sans-serif;
+  font-optical-sizing: auto;
+  font-style: normal;
+  font-variation-settings: "GRAD" 0;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
+  font-family: "Google Sans", sans-serif;
+  font-optical-sizing: auto;
+  font-style: normal;
+  font-variation-settings: "GRAD" 0;
 }
 
 input,

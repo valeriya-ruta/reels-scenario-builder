@@ -2,6 +2,10 @@
 
 import { useState, useRef, useCallback } from 'react';
 import Sidebar from './Sidebar';
+import { NavBadgeProvider, NavBadgePathSync } from './NavBadgeContext';
+
+/** Ignore repeat toggles from double-clicks / touch quirks so close → open doesn’t fire back-to-back. */
+const TOGGLE_COOLDOWN_MS = 320;
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -16,21 +20,31 @@ const MAX_WIDTH = 420;
 export default function AppShell({ children, userName, userEmail }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_WIDTH);
-  const isResizing = useRef(false);
+  const [isResizing, setIsResizing] = useState(false);
+  const lastSidebarToggleAt = useRef(0);
+
+  const toggleSidebar = useCallback(() => {
+    const now =
+      typeof performance !== 'undefined' && typeof performance.now === 'function'
+        ? performance.now()
+        : Date.now();
+    if (now - lastSidebarToggleAt.current < TOGGLE_COOLDOWN_MS) return;
+    lastSidebarToggleAt.current = now;
+    setSidebarOpen((v) => !v);
+  }, []);
 
   const startResize = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
-    isResizing.current = true;
+    setIsResizing(true);
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
 
     const onMouseMove = (ev: MouseEvent) => {
-      if (!isResizing.current) return;
       setSidebarWidth(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, ev.clientX)));
     };
 
     const onMouseUp = () => {
-      isResizing.current = false;
+      setIsResizing(false);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
       document.removeEventListener('mousemove', onMouseMove);
@@ -42,13 +56,17 @@ export default function AppShell({ children, userName, userEmail }: AppShellProp
   }, []);
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
+    <NavBadgeProvider>
+      <NavBadgePathSync />
+      <div className="flex h-screen flex-col overflow-hidden">
       {/* Top bar */}
-      <header className="flex shrink-0 items-center gap-3 border-b border-zinc-200 bg-white px-4 py-3">
+      <header className="flex shrink-0 items-center gap-3 border-b border-[#e5e5e5] bg-white px-4 py-3">
         <button
-          onClick={() => setSidebarOpen((v) => !v)}
+          type="button"
+          onClick={toggleSidebar}
           className="rounded-lg p-2 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
-          aria-label="Toggle menu"
+          aria-label="Меню"
+          aria-expanded={sidebarOpen}
         >
           <svg
             width="18"
@@ -66,8 +84,8 @@ export default function AppShell({ children, userName, userEmail }: AppShellProp
           </svg>
         </button>
 
-        <a href="/projects" className="group flex flex-col leading-none">
-          <span className="text-[1.65rem] font-bold tracking-wide text-zinc-800 group-hover:text-zinc-900">
+        <a href="/dashboard" className="group flex flex-col leading-none">
+          <span className="text-[1.65rem] font-bold tracking-wide text-zinc-900 group-hover:text-black">
             Ruta
           </span>
           <span className="mt-0.5 text-[0.8rem] font-light tracking-wide text-zinc-500 group-hover:text-zinc-700">
@@ -80,26 +98,31 @@ export default function AppShell({ children, userName, userEmail }: AppShellProp
       <div className="flex flex-1 overflow-hidden">
         {/* Always rendered so the slide transition plays; width collapses to 0 when closed */}
         <div
-          className="relative flex shrink-0 overflow-hidden"
+          className={`relative flex shrink-0 overflow-hidden ${sidebarOpen ? '' : 'pointer-events-none'}`}
           style={{
             width: sidebarOpen ? sidebarWidth : 0,
-            transition: isResizing.current ? 'none' : 'width 0.25s ease',
+            transition: isResizing ? 'none' : 'width 0.25s ease',
           }}
         >
-          <div style={{ width: sidebarWidth, minWidth: sidebarWidth }} className="flex h-full">
+          <div
+            style={{ width: sidebarWidth, minWidth: sidebarWidth }}
+            className="flex h-full"
+            inert={!sidebarOpen ? true : undefined}
+          >
             <Sidebar userName={userName} userEmail={userEmail} />
           </div>
           {/* Drag-to-resize handle */}
           {sidebarOpen && (
             <div
               onMouseDown={startResize}
-              className="absolute right-0 top-0 z-10 h-full w-1.5 cursor-col-resize transition-colors hover:bg-zinc-300"
+              className="absolute right-0 top-0 z-10 h-full w-1.5 cursor-col-resize transition-colors hover:bg-zinc-400/50"
             />
           )}
         </div>
 
-        <main className="flex-1 overflow-y-auto px-8 py-8">{children}</main>
+        <main className="flex-1 overflow-y-auto bg-white px-8 py-8">{children}</main>
       </div>
     </div>
+    </NavBadgeProvider>
   );
 }

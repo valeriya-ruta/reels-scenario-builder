@@ -99,7 +99,7 @@ export default function ProjectHeader({
 
           <button
             onClick={handleShare}
-            className="cursor-pointer rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800"
+            className="cursor-pointer rounded bg-black px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-900"
           >
             Поділитися
           </button>

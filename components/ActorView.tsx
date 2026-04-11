@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { SnapshotData, Scene, formatLabel } from '@/lib/domain';
+import { SnapshotData, formatLabel } from '@/lib/domain';
 
 interface ActorViewProps {
   snapshotData: SnapshotData;
@@ -28,7 +28,7 @@ export default function ActorView({ snapshotData }: ActorViewProps) {
   });
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 md:space-y-4">
       {snapshotData.scenes.map((scene, index) => {
         const nextScene = snapshotData.scenes[index + 1];
         const transitionType = nextScene
@@ -37,84 +37,66 @@ export default function ActorView({ snapshotData }: ActorViewProps) {
 
         return (
           <div key={scene.id} className="space-y-2">
-            <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-              <div className="flex items-start gap-3">
+            <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm md:p-5">
+              <div className="flex items-start gap-3 md:gap-4">
                 <input
                   type="checkbox"
                   checked={checkedScenes.has(scene.id)}
                   onChange={() => handleToggleCheck(scene.id)}
-                  className="mt-1 h-5 w-5 rounded border-zinc-300 bg-white text-zinc-900 focus:ring-2 focus:ring-zinc-400"
+                  className="mt-1 h-6 w-6 shrink-0 rounded border-zinc-300 bg-white text-zinc-900 focus:ring-2 focus:ring-zinc-400"
                 />
-                <div className="flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-medium text-zinc-600">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm md:text-base">
+                    <span className="font-semibold text-zinc-700">
                       Сцена {scene.order_index + 1}
                     </span>
                     <span className="text-zinc-400">•</span>
-                    <span className="text-sm text-zinc-500">
+                    <span className="text-zinc-600">
                       {formatLabel(scene.framing)}
+                    </span>
+                    <span className="text-zinc-400">•</span>
+                    <span className="text-zinc-600">
+                      {formatLabel(scene.arm_state)}
                     </span>
                     {scene.location_name && (
                       <>
                         <span className="text-zinc-400">•</span>
-                        <span className="text-sm text-zinc-500">{scene.location_name}</span>
+                        <span className="text-zinc-600">{scene.location_name}</span>
                       </>
                     )}
                   </div>
-                  <p className="mt-2 text-sm text-zinc-700">
+                  <p
+                    className={
+                      'mt-2.5 text-base leading-relaxed text-zinc-800 md:text-lg' +
+                      (expandedSceneId === scene.id ? ' whitespace-pre-wrap' : '')
+                    }
+                  >
                     {expandedSceneId === scene.id
                       ? scene.lines || 'Немає діалогу'
                       : scene.lines
-                      ? scene.lines.split('\n')[0].substring(0, 80) +
-                        (scene.lines.length > 80 ? '...' : '')
-                      : 'Немає діалогу'}
+                        ? scene.lines.split('\n')[0].substring(0, 100) +
+                          (scene.lines.length > 100 ? '...' : '')
+                        : 'Немає діалогу'}
                   </p>
-                  {expandedSceneId === scene.id && (
-                    <div className="mt-4 space-y-3">
-                      <div>
-                        <p className="text-sm font-medium text-zinc-600">Повний текст</p>
-                        <p className="mt-1 whitespace-pre-wrap text-sm text-zinc-700">
-                          {scene.lines || 'Немає діалогу'}
-                        </p>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <span className="text-zinc-600">Кадрування:</span>{' '}
-                          <span className="text-zinc-700">
-                            {formatLabel(scene.framing)}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-zinc-600">Положення рук:</span>{' '}
-                          <span className="text-zinc-700">
-                            {formatLabel(scene.arm_state)}
-                          </span>
-                        </div>
-                        {scene.location_name && (
-                          <div className="col-span-2">
-                            <span className="text-zinc-600">Локація:</span>{' '}
-                            <span className="text-zinc-700">{scene.location_name}</span>
-                          </div>
-                        )}
-                      </div>
-                      {scene.actor_note && (
-                        <div className="rounded bg-zinc-50 p-3 border border-zinc-200">
-                          <p className="text-xs font-medium text-zinc-600">Примітка для актора</p>
-                          <p className="mt-1 text-sm text-zinc-700">
-                            {scene.actor_note}
-                          </p>
-                        </div>
-                      )}
+                  {expandedSceneId === scene.id && scene.actor_note && (
+                    <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 p-3.5 md:p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-zinc-600 md:text-sm">
+                        Примітка для актора
+                      </p>
+                      <p className="mt-1.5 text-sm leading-relaxed text-zinc-800 md:text-base">
+                        {scene.actor_note}
+                      </p>
                     </div>
                   )}
                   {scene.lines && (
                     <button
+                      type="button"
                       onClick={() =>
                         setExpandedSceneId(
                           expandedSceneId === scene.id ? null : scene.id
                         )
                       }
-                      className="mt-2 text-xs text-zinc-500 hover:text-zinc-700"
+                      className="mt-2.5 text-sm font-medium text-zinc-700 underline decoration-zinc-400 underline-offset-4 hover:text-zinc-900 md:text-base"
                     >
                       {expandedSceneId === scene.id ? 'Показати менше' : 'Показати більше'}
                     </button>
@@ -123,8 +105,8 @@ export default function ActorView({ snapshotData }: ActorViewProps) {
               </div>
             </div>
             {nextScene && transitionType && (
-              <div className="flex items-center justify-center py-1">
-                <span className="rounded-full bg-zinc-200 px-3 py-1 text-xs text-zinc-600">
+              <div className="flex items-center justify-center py-1.5">
+                <span className="rounded-full bg-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 md:text-sm">
                   {formatLabel(transitionType)}
                 </span>
               </div>

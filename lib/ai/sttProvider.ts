@@ -55,8 +55,7 @@ export async function transcribeMediaFromUrl(mediaUrl: string): Promise<Transcri
   formData.append('model', 'whisper-large-v3-turbo');
   formData.append('response_format', 'verbose_json');
   formData.append('temperature', '0');
-  // Auto detect by default, but bias toward Ukrainian in short clips.
-  formData.append('language', 'uk');
+  // Omit `language` so Whisper auto-detects (e.g. Ukrainian vs English).
 
   const sttRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
     method: 'POST',

@@ -262,7 +262,7 @@ export default function ProjectsList({ projects, linkPrefix = '/project' }: Proj
               <button
                 type="button"
                 onClick={saveEdit}
-                className="cursor-pointer rounded bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-800"
+                className="cursor-pointer rounded bg-black px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-900"
               >
                 Зберегти
               </button>

@@ -27,6 +27,21 @@ interface Props {
 
 type ColumnWithStories = StorytellingColumn & { stories: StorytellingStory[] };
 
+function formatColumnStoriesAsText(col: ColumnWithStories): string {
+  const cardBlocks = col.stories.map((s, i) => {
+    const body = (s.text || '').trim() || '—';
+    const visual = s.visual ?? '—';
+    const engagement = s.engagement ?? '—';
+    return [
+      `Сторіс ${i + 1}`,
+      body,
+      `Візуал: ${visual}`,
+      `Інтерактив: ${engagement}`,
+    ].join('\n');
+  });
+  return `${col.name}\n\n${cardBlocks.join('\n\n')}`;
+}
+
 function buildColumnsWithStories(
   columns: StorytellingColumn[],
   stories: StorytellingStory[],
@@ -54,6 +69,17 @@ export default function StorytellingBuilder({ project: initialProject, initialCo
   const [nameValue, setNameValue] = useState(project.name);
   const [editingColId, setEditingColId] = useState<string | null>(null);
   const [colNameValue, setColNameValue] = useState('');
+  const [copiedColumnId, setCopiedColumnId] = useState<string | null>(null);
+
+  const copyColumnText = async (col: ColumnWithStories) => {
+    try {
+      await navigator.clipboard.writeText(formatColumnStoriesAsText(col));
+      setCopiedColumnId(col.id);
+      window.setTimeout(() => setCopiedColumnId((id) => (id === col.id ? null : id)), 2000);
+    } catch {
+      // Clipboard may be denied (e.g. non-secure context); ignore
+    }
+  };
 
   // ── Project name ──
 
@@ -271,12 +297,37 @@ export default function StorytellingBuilder({ project: initialProject, initialCo
                     </div>
                   </div>
                 )}
-                <div className="flex items-center gap-1">
+                <div className="flex shrink-0 items-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => copyColumnText(col)}
+                    className={`cursor-pointer rounded-md p-1.5 transition-colors ${
+                      copiedColumnId === col.id
+                        ? 'text-emerald-600'
+                        : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800'
+                    }`}
+                    title={
+                      copiedColumnId === col.id
+                        ? 'Скопійовано'
+                        : 'Копіювати текст усіх сторіс (картка за карточкою)'
+                    }
+                  >
+                    {copiedColumnId === col.id ? (
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : (
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                    )}
+                  </button>
                   {columns.length > 1 && (
                     <button
                       type="button"
                       onClick={() => handleDeleteColumn(col.id)}
-                      className="cursor-pointer p-1.5 text-zinc-400 transition-colors hover:text-red-500"
+                      className="cursor-pointer rounded-md p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-red-500"
                       title="Видалити колонку"
                     >
                       <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>

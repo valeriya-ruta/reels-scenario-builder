@@ -759,7 +759,7 @@ function ChipSelector({
             className={[
               'cursor-pointer rounded-full px-3 py-1 text-xs font-medium transition-colors',
               value === option
-                ? 'bg-zinc-900 text-white'
+                ? 'bg-black text-white'
                 : 'bg-zinc-200 text-zinc-700 hover:bg-zinc-300',
             ].join(' ')}
           >

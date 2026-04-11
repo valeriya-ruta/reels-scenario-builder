@@ -35,7 +35,7 @@ function CreateButton() {
     <form action={createProject}>
       <button
         type="submit"
-        className="cursor-pointer rounded bg-zinc-900 px-4 py-2 font-medium text-white transition-colors hover:bg-zinc-800"
+        className="cursor-pointer rounded bg-[#004BA8] px-4 py-2 font-medium text-white transition-colors hover:bg-[#0d5bb8]"
       >
         Новий сторітелінг
       </button>

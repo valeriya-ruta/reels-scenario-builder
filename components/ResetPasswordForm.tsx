@@ -146,7 +146,7 @@ export default function ResetPasswordForm() {
       <button
         type="submit"
         disabled={loading}
-        className="w-full rounded bg-zinc-900 px-4 py-2 font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50"
+        className="w-full rounded bg-[#004BA8] px-4 py-2 font-medium text-white transition-colors hover:bg-[#0d5bb8] disabled:opacity-50"
       >
         {loading ? 'Збереження…' : 'Зберегти пароль'}
       </button>

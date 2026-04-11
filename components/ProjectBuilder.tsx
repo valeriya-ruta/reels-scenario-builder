@@ -35,8 +35,8 @@ export default function ProjectBuilder({
           backHref={backHref}
           backLabel={backLabel}
         />
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
-          <div className="lg:col-span-3">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-10">
+          <div className="lg:col-span-7">
             <SceneList
               project={project}
               scenes={scenes}
@@ -47,7 +47,7 @@ export default function ProjectBuilder({
               onFocusHandled={() => setFocusSceneId(null)}
             />
           </div>
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-3">
             <div className="lg:sticky lg:top-6">
               <CopyReferencePanel
                 project={project}

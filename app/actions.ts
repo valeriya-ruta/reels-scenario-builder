@@ -5,9 +5,10 @@ import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import { nanoid } from 'nanoid';
 import { Project, Scene, Transition, SnapshotData, Location } from '@/lib/domain';
 import { headers } from 'next/headers';
-import { resolveInstagramMediaUrl } from '@/lib/ai/instagramMedia';
+import { resolveReferenceMediaUrl } from '@/lib/ai/referenceMedia';
 import { transcribeMediaFromUrl } from '@/lib/ai/sttProvider';
 import { splitTranscriptIntoScenes } from '@/lib/ai/sceneSegmentation';
+import { transformRantToScript } from '@/lib/ai/rantToScript';
 
 type ImportMode = 'replace' | 'append';
 
@@ -20,6 +21,20 @@ interface ReferencePreview {
     endSec: number;
   }>;
 }
+
+export type GenerateReferenceResult =
+  | {
+      ok: true;
+      data: ReferencePreview;
+    }
+  | {
+      ok: false;
+      error: string;
+    };
+
+export type GenerateReelFromRantResult =
+  | { ok: true; projectId: string }
+  | { ok: false; error: string };
 
 const DEFAULT_SCENE_VALUES = {
   framing: 'above_waist',
@@ -103,36 +118,49 @@ export async function createScene(projectId: string, orderIndex: number) {
   return scene as Scene;
 }
 
-export async function generateReferenceFromInstagram(
+export async function generateReferenceFromVideoLink(
   projectId: string,
   reelUrl: string
-): Promise<ReferencePreview> {
-  const user = await requireAuth();
-  if (!user) {
-    throw new Error('Необхідно увійти в акаунт.');
+): Promise<GenerateReferenceResult> {
+  try {
+    const user = await requireAuth();
+    if (!user) {
+      return { ok: false, error: 'Необхідно увійти в акаунт.' };
+    }
+
+    if (!reelUrl.trim()) {
+      return { ok: false, error: 'Встав посилання на публічний Instagram Reel або відео TikTok.' };
+    }
+
+    const isOwner = await assertProjectOwner(projectId, user.id);
+    if (!isOwner) {
+      return { ok: false, error: 'Проєкт не знайдено або доступ заборонений.' };
+    }
+
+    const { mediaUrl } = await resolveReferenceMediaUrl(reelUrl);
+    const transcriptResult = await transcribeMediaFromUrl(mediaUrl);
+    const sceneDrafts = await splitTranscriptIntoScenes(
+      transcriptResult.transcript,
+      transcriptResult.segments
+    );
+
+    return {
+      ok: true,
+      data: {
+        transcript: transcriptResult.transcript,
+        language: transcriptResult.language,
+        scenes: sceneDrafts,
+      },
+    };
+  } catch (error) {
+    const fallback =
+      'Не вдалося обробити посилання. Перевір, що Reel публічний і спробуй ще раз через хвилину.';
+    const message =
+      error instanceof Error && error.message.trim().length > 0
+        ? error.message
+        : fallback;
+    return { ok: false, error: message };
   }
-
-  if (!reelUrl.trim()) {
-    throw new Error('Встав посилання на публічний Instagram Reel.');
-  }
-
-  const isOwner = await assertProjectOwner(projectId, user.id);
-  if (!isOwner) {
-    throw new Error('Проєкт не знайдено або доступ заборонений.');
-  }
-
-  const { mediaUrl } = await resolveInstagramMediaUrl(reelUrl);
-  const transcriptResult = await transcribeMediaFromUrl(mediaUrl);
-  const sceneDrafts = await splitTranscriptIntoScenes(
-    transcriptResult.transcript,
-    transcriptResult.segments
-  );
-
-  return {
-    transcript: transcriptResult.transcript,
-    language: transcriptResult.language,
-    scenes: sceneDrafts,
-  };
 }
 
 export async function importReferenceScenes(
@@ -427,4 +455,67 @@ export async function createSnapshot(projectId: string): Promise<{ actor: string
     actor: `${baseUrl}/share/${actorToken}/actor`,
     editor: `${baseUrl}/share/${editorToken}/editor`,
   };
+}
+
+export async function generateReelFromRant(
+  rant: string
+): Promise<GenerateReelFromRantResult> {
+  try {
+    const user = await requireAuth();
+    if (!user) {
+      return { ok: false, error: 'Необхідно увійти в акаунт.' };
+    }
+
+    const trimmed = rant.trim();
+    if (!trimmed) {
+      return { ok: false, error: 'Текст ренту порожній.' };
+    }
+
+    const { title, scenes } = await transformRantToScript(trimmed);
+
+    const supabase = await createServerSupabaseClient();
+
+    const { data: project, error: projectError } = await supabase
+      .from('projects')
+      .insert({
+        name: title,
+        crew_mode: 'with_crew',
+        user_id: user.id,
+      })
+      .select()
+      .single();
+
+    if (projectError || !project) {
+      return {
+        ok: false,
+        error: projectError?.message ?? 'Не вдалося створити проєкт.',
+      };
+    }
+
+    const scenePayload = scenes.map((s, idx) => ({
+      project_id: project.id,
+      order_index: idx,
+      lines: s.text,
+      ...DEFAULT_SCENE_VALUES,
+    }));
+
+    const { error: insertError } = await supabase
+      .from('scenes')
+      .insert(scenePayload);
+
+    if (insertError) {
+      return {
+        ok: false,
+        error: `Проєкт створено, але не вдалося додати сцени: ${insertError.message}`,
+      };
+    }
+
+    return { ok: true, projectId: project.id };
+  } catch (error) {
+    const message =
+      error instanceof Error && error.message.trim().length > 0
+        ? error.message
+        : 'Не вдалося згенерувати рілс. Спробуй ще раз.';
+    return { ok: false, error: message };
+  }
 }

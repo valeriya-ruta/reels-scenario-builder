@@ -25,15 +25,9 @@ export default async function ActorSharePage({ params }: PageProps) {
 
   return (
     <div className="min-h-screen bg-neutral-900">
-      <div className="mx-auto max-w-2xl px-4 py-6">
-        <div className="mb-6">
-          <div className="mb-2 flex items-center gap-2">
-            <span className="rounded bg-neutral-800 px-2 py-1 text-xs font-medium text-neutral-400">
-              SHOOT MODE
-            </span>
-            <span className="text-xs text-neutral-500">Read-only snapshot</span>
-          </div>
-          <h1 className="text-2xl font-semibold text-white">
+      <div className="mx-auto max-w-2xl px-5 py-7 md:px-6">
+        <div className="mb-7">
+          <h1 className="text-2xl font-semibold leading-tight text-white md:text-3xl">
             {snapshotData.project.name}
           </h1>
         </div>
