@@ -121,7 +121,10 @@ export async function splitTranscriptIntoScenes(
 
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`Gemini scene split failed (${res.status}): ${body}`);
+    console.warn(
+      `Gemini scene split failed (${res.status}); using heuristic scene chunks. ${body.slice(0, 500)}`
+    );
+    return fallbackSceneDrafts(segments);
   }
 
   const payload = (await res.json()) as {
