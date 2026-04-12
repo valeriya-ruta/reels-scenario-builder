@@ -160,10 +160,16 @@ export default function SceneCard({
   } | null>(null);
   const [isContentMounted, setIsContentMounted] = useState(isExpanded);
   const [isAnimatingOpen, setIsAnimatingOpen] = useState(isExpanded);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const advancedPanelId = useId();
 
   useEffect(() => {
     setNameValue(scene.name || '');
   }, [scene.id, scene.name]);
+
+  useEffect(() => {
+    if (!isExpanded) setAdvancedOpen(false);
+  }, [isExpanded]);
 
   useEffect(() => {
     setSplitPopup(null);
@@ -219,11 +225,24 @@ export default function SceneCard({
     persist({ name: trimmed || null });
   };
 
-  const firstLine = scene.lines?.split('\n')[0] || 'Немає діалогу';
-  const truncatedLine =
-    firstLine.length > 60 ? firstLine.substring(0, 60) + '...' : firstLine;
+  const dialoguePreview = scene.lines?.trim()
+    ? scene.lines
+    : 'Немає діалогу';
 
   const hasDialogue = Boolean(scene.lines?.trim());
+
+  const locationSummaryLabel =
+    locations.find((l) => l.id === scene.location_id)?.name ?? 'Локація не обрана';
+  const advancedSummaryLine = [
+    formatLabel(scene.framing),
+    formatLabel(scene.arm_state),
+    formatLabel(scene.camera_motion || 'static'),
+    locationSummaryLabel,
+    formatLabel(scene.scene_transition_action || 'no_action'),
+  ].join(' · ');
+  const hasCrewNotes = Boolean(
+    scene.actor_note?.trim() || scene.editor_note?.trim()
+  );
   const dialogueSeconds = estimateDialogueSeconds(scene.lines);
 
   const handleCardClick = (e: React.MouseEvent) => {
@@ -340,7 +359,9 @@ export default function SceneCard({
                 )}
               </div>
               {!isExpanded && (
-                <p className="mt-1 text-sm text-zinc-700">{truncatedLine}</p>
+                <p className="mt-1 whitespace-pre-wrap break-words text-sm text-zinc-700">
+                  {dialoguePreview}
+                </p>
               )}
             </div>
           </div>
@@ -447,124 +468,180 @@ export default function SceneCard({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <ChipSelector
-                label="Кадрування"
-                value={scene.framing}
-                options={[
-                  'extreme_close_up',
-                  'close_up',
-                  'above_waist',
-                  'full_body',
-                  'overhead',
-                  'low_angle',
-                ]}
-                onChange={(value) => {
-                  onUpdate({ framing: value as Framing });
-                  persist({ framing: value as Framing });
+            <div className="rounded-lg border border-zinc-200 bg-zinc-50/80">
+              <button
+                type="button"
+                id={`${advancedPanelId}-trigger`}
+                aria-expanded={advancedOpen}
+                aria-controls={advancedPanelId}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setAdvancedOpen((o) => !o);
                 }}
-              />
+                className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-zinc-100/90"
+              >
+                <div className="min-w-0 flex-1">
+                  <span className="text-sm font-medium text-zinc-800">
+                    Додаткові налаштування
+                  </span>
+                  {!advancedOpen && (
+                    <p className="mt-1 line-clamp-3 text-xs leading-relaxed text-zinc-600">
+                      {advancedSummaryLine}
+                      {hasCrewNotes ? ' · Примітки' : ''}
+                    </p>
+                  )}
+                </div>
+                <svg
+                  className={`mt-0.5 h-5 w-5 shrink-0 text-zinc-500 transition-transform duration-200 ${
+                    advancedOpen ? 'rotate-180' : ''
+                  }`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 9l-7 7-7-7"
+                  />
+                </svg>
+              </button>
 
-              <ChipSelector
-                label="Положення рук"
-                value={scene.arm_state}
-                options={[
-                  'arms_at_sides',
-                  'one_arm_raised',
-                  'holding_object',
-                  'pointing',
-                ]}
-                onChange={(value) => {
-                  onUpdate({ arm_state: value as ArmState });
-                  persist({ arm_state: value as ArmState });
-                }}
-              />
-            </div>
+              <div
+                id={advancedPanelId}
+                role="region"
+                aria-labelledby={`${advancedPanelId}-trigger`}
+                className={[
+                  'overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out',
+                  advancedOpen
+                    ? 'max-h-[4000px] opacity-100'
+                    : 'pointer-events-none max-h-0 opacity-0',
+                ].join(' ')}
+              >
+                <div className="space-y-4 border-t border-zinc-200 px-3 pb-4 pt-3">
+                  <div className="grid grid-cols-2 gap-4">
+                    <ChipSelector
+                      label="Кадрування"
+                      value={scene.framing}
+                      options={[
+                        'extreme_close_up',
+                        'close_up',
+                        'above_waist',
+                        'full_body',
+                        'overhead',
+                        'low_angle',
+                      ]}
+                      onChange={(value) => {
+                        onUpdate({ framing: value as Framing });
+                        persist({ framing: value as Framing });
+                      }}
+                    />
 
-            <div className="grid grid-cols-2 gap-4">
-              <ChipSelector
-                label="Рух камери"
-                value={scene.camera_motion || 'static'}
-                options={[
-                  'static',
-                  'push_in',
-                  'pull_out',
-                  'pan_left',
-                  'pan_right',
-                  'tilt_up',
-                  'tilt_down',
-                  'handheld',
-                ]}
-                onChange={(value) => {
-                  onUpdate({ camera_motion: value as CameraMotion });
-                  persist({
-                    camera_motion: value as CameraMotion,
-                  });
-                }}
-              />
-              <LocationPicker
-                locations={locations}
-                locationId={scene.location_id ?? null}
-                disabled={isOptimisticSceneId(scene.id)}
-                onSceneLocationChange={(locationId) => {
-                  onUpdate({ location_id: locationId });
-                  persist({ location_id: locationId });
-                }}
-                onLocationsChange={onLocationsChange}
-                onLocationDeleted={onLocationDeleted}
-              />
-            </div>
+                    <ChipSelector
+                      label="Положення рук"
+                      value={scene.arm_state}
+                      options={[
+                        'arms_at_sides',
+                        'one_arm_raised',
+                        'holding_object',
+                        'pointing',
+                      ]}
+                      onChange={(value) => {
+                        onUpdate({ arm_state: value as ArmState });
+                        persist({ arm_state: value as ArmState });
+                      }}
+                    />
+                  </div>
 
-            <div>
-              <ChipSelector
-                label="Дія для переходу"
-                value={scene.scene_transition_action || 'no_action'}
-                options={['no_action', 'turn_matchcut', 'through_object']}
-                onChange={(value) => {
-                  onUpdate({
-                    scene_transition_action: value as TransitionAction,
-                  });
-                  persist({
-                    scene_transition_action: value as TransitionAction,
-                  });
-                }}
-              />
-            </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <ChipSelector
+                      label="Рух камери"
+                      value={scene.camera_motion || 'static'}
+                      options={[
+                        'static',
+                        'push_in',
+                        'pull_out',
+                        'pan_left',
+                        'pan_right',
+                        'tilt_up',
+                        'tilt_down',
+                        'handheld',
+                      ]}
+                      onChange={(value) => {
+                        onUpdate({ camera_motion: value as CameraMotion });
+                        persist({
+                          camera_motion: value as CameraMotion,
+                        });
+                      }}
+                    />
+                    <LocationPicker
+                      locations={locations}
+                      locationId={scene.location_id ?? null}
+                      disabled={isOptimisticSceneId(scene.id)}
+                      onSceneLocationChange={(locationId) => {
+                        onUpdate({ location_id: locationId });
+                        persist({ location_id: locationId });
+                      }}
+                      onLocationsChange={onLocationsChange}
+                      onLocationDeleted={onLocationDeleted}
+                    />
+                  </div>
 
-            <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700">
-                Примітка для актора
-              </label>
-              <textarea
-                value={scene.actor_note || ''}
-                onChange={(e) => {
-                  onUpdate({ actor_note: e.target.value });
-                  persist({ actor_note: e.target.value });
-                }}
-                onClick={(e) => e.stopPropagation()}
-                className="w-full rounded border border-zinc-300 bg-white px-3 py-2 text-zinc-900 placeholder-zinc-500 focus:border-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-400"
-                rows={2}
-                placeholder="Примітка для актора..."
-              />
-            </div>
+                  <div>
+                    <ChipSelector
+                      label="Дія для переходу"
+                      value={scene.scene_transition_action || 'no_action'}
+                      options={['no_action', 'turn_matchcut', 'through_object']}
+                      onChange={(value) => {
+                        onUpdate({
+                          scene_transition_action: value as TransitionAction,
+                        });
+                        persist({
+                          scene_transition_action: value as TransitionAction,
+                        });
+                      }}
+                    />
+                  </div>
 
-            <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700">
-                Примітка для редактора
-              </label>
-              <textarea
-                value={scene.editor_note || ''}
-                onChange={(e) => {
-                  onUpdate({ editor_note: e.target.value });
-                  persist({
-                    editor_note: e.target.value,
-                  });
-                }}
-                onClick={(e) => e.stopPropagation()}
-                className="w-full rounded border border-zinc-300 bg-white px-3 py-2 text-zinc-900 placeholder-zinc-500 focus:border-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-400"
-                rows={2}
-                placeholder="Примітка для редактора..."
-              />
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-zinc-700">
+                      Примітка для актора
+                    </label>
+                    <textarea
+                      value={scene.actor_note || ''}
+                      onChange={(e) => {
+                        onUpdate({ actor_note: e.target.value });
+                        persist({ actor_note: e.target.value });
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-full rounded border border-zinc-300 bg-white px-3 py-2 text-zinc-900 placeholder-zinc-500 focus:border-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-400"
+                      rows={2}
+                      placeholder="Примітка для актора..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-zinc-700">
+                      Примітка для редактора
+                    </label>
+                    <textarea
+                      value={scene.editor_note || ''}
+                      onChange={(e) => {
+                        onUpdate({ editor_note: e.target.value });
+                        persist({
+                          editor_note: e.target.value,
+                        });
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-full rounded border border-zinc-300 bg-white px-3 py-2 text-zinc-900 placeholder-zinc-500 focus:border-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-400"
+                      rows={2}
+                      placeholder="Примітка для редактора..."
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         ) : null}
