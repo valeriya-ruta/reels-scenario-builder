@@ -192,11 +192,17 @@ function resolveColorToHex(input: string): string {
     return normalizeHex(LOCAL_COLOR_ALIASES[closestAlias]);
   }
 
-  const best = didYouMean(trimmed, colorNames, {
-    matchPath: ['name'],
+  const bestColorName = didYouMean(
+    trimmed,
+    colorNames.map((color) => color.name),
+    {
     thresholdType: ThresholdTypeEnums.SIMILARITY,
     threshold: 0.2,
-  }) as { name: string; hex: string } | null;
+    },
+  ) as string | null;
+  const best = bestColorName
+    ? colorNames.find((color) => color.name === bestColorName)
+    : null;
   return best?.hex ? normalizeHex(best.hex) : DEFAULT_FAV;
 }
 
