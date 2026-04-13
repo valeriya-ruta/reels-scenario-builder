@@ -14,13 +14,20 @@
     "@dnd-kit/modifiers": "^9.0.0",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "@fontsource/cormorant-garamond": "^5.2.11",
     "@fontsource/google-sans": "^5.2.1",
+    "@fontsource/manrope": "^5.2.8",
+    "@napi-rs/canvas": "^0.1.97",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.49.0",
+    "color-name-list": "^14.36.0",
+    "didyoumean2": "^7.0.4",
+    "lucide-react": "^1.8.0",
     "nanoid": "^5.0.9",
     "next": "16.1.6",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

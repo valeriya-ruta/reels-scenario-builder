@@ -84,12 +84,12 @@ export default function ProjectHeader({
                   }
                 }}
                 autoFocus
-                className="w-full rounded border border-zinc-300 bg-white px-3 py-2 text-lg font-semibold text-zinc-900 focus:border-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-400"
+                className="w-full rounded border border-zinc-300 bg-white px-3 py-2 text-lg font-semibold text-zinc-900 focus:border-[color:var(--accent)] focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]/25"
               />
             ) : (
               <h1
                 onClick={() => setIsEditingName(true)}
-                className="cursor-pointer text-2xl font-semibold text-zinc-900 hover:text-zinc-700 truncate"
+                className="font-display cursor-pointer truncate text-2xl font-semibold text-zinc-900 hover:text-zinc-700"
                 title={project.name}
               >
                 {project.name}
@@ -98,8 +98,9 @@ export default function ProjectHeader({
           </div>
 
           <button
+            type="button"
             onClick={handleShare}
-            className="cursor-pointer rounded bg-black px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-900"
+            className="btn-primary shrink-0 rounded-xl bg-[color:var(--accent)] px-4 py-2 text-sm font-medium text-white transition-[background,transform] hover:brightness-110"
           >
             Поділитися
           </button>

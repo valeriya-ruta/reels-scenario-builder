@@ -37,6 +37,13 @@ const navItems: NavItem[] = [
     badgeKey: 'reels',
   },
   {
+    label: 'Карусель',
+    href: '/carousel',
+    matchPrefixes: ['/carousel'],
+    active: true,
+    badgeKey: 'carousel',
+  },
+  {
     label: 'Аналіз конкурентів',
     href: '/competitor-analysis',
     matchPrefixes: ['/competitor-analysis'],
@@ -49,8 +56,6 @@ const navItems: NavItem[] = [
     active: true,
     badgeKey: 'storytelling',
   },
-  { label: 'Карусель', href: null, matchPrefixes: [], active: false },
-  { label: 'Налаштування', href: '/settings', matchPrefixes: ['/settings'], active: true },
 ];
 
 export default function Sidebar({ userName, userEmail }: SidebarProps) {
@@ -92,17 +97,24 @@ export default function Sidebar({ userName, userEmail }: SidebarProps) {
   }, [feedbackOpen]);
 
   return (
-    <aside className="relative flex h-full w-full flex-col overflow-hidden border-r border-[#e5e5e5] bg-white px-2 py-4">
-      <nav className="flex flex-1 flex-col gap-0.5">
+    <aside className="relative flex h-full w-full flex-col overflow-hidden border-r border-[color:var(--border)] bg-white px-2 pb-4 pt-3">
+      <a
+        href="/dashboard"
+        className="font-display mb-3 block px-3 text-lg font-bold leading-tight tracking-tight text-zinc-900 transition-colors hover:text-[color:var(--accent)]"
+      >
+        Ruta
+      </a>
+
+      <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
         {navItems.map((item) => {
           if (!item.active) {
             return (
               <div
                 key={item.label}
-                className="flex cursor-default select-none items-center justify-between rounded-lg px-3 py-2.5 text-sm text-zinc-500"
+                className="flex cursor-not-allowed select-none items-center justify-between rounded-lg px-3 py-2.5 text-sm text-zinc-500 opacity-40"
               >
                 <span className="truncate">{item.label}</span>
-                <span className="ml-2 shrink-0 rounded bg-[#f5f5f5] px-1.5 py-0.5 text-[10px] font-medium leading-none text-zinc-500">
+                <span className="ml-2 shrink-0 rounded-full bg-[color:var(--surface2)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide leading-none text-zinc-600">
                   незабаром
                 </span>
               </div>
@@ -116,16 +128,17 @@ export default function Sidebar({ userName, userEmail }: SidebarProps) {
             <a
               key={item.label}
               href={item.href}
-              className={`flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+              className={[
+                'relative flex items-center gap-2 rounded-lg py-2.5 pl-3 pr-3 text-sm font-medium transition-[background,color] duration-150 ease-out',
                 isCurrentPage
-                  ? 'bg-[#e8f0fc] text-[#004BA8] ring-1 ring-[#004BA8]/20'
-                  : 'text-zinc-600 hover:bg-[#f5f5f5] hover:text-black'
-              }`}
+                  ? 'border-l-[3px] border-[color:var(--accent)] bg-[color:var(--accent-soft)] text-[color:var(--accent)]'
+                  : 'border-l-[3px] border-transparent text-zinc-600 hover:bg-[color:var(--surface)] hover:text-zinc-900',
+              ].join(' ')}
             >
-              <span className="min-w-0 flex-1 truncate">{item.label}</span>
+              <span className="min-w-0 flex-1 truncate pr-2">{item.label}</span>
               {hasDot && (
                 <span
-                  className="h-2 w-2 shrink-0 rounded-full bg-[#004BA8]"
+                  className="pointer-events-none absolute right-[10px] top-[6px] h-[7px] w-[7px] shrink-0 rounded-full bg-[color:var(--accent)]"
                   title="Є нове"
                   aria-hidden
                 />
@@ -135,32 +148,32 @@ export default function Sidebar({ userName, userEmail }: SidebarProps) {
         })}
       </nav>
 
-      <div className="relative mt-auto" ref={popoverRef}>
+      <div className="relative mt-auto border-t border-[color:var(--border)] pt-3" ref={popoverRef}>
         {accountOpen && (
-          <div className="absolute bottom-full left-0 z-20 mb-2 w-52 rounded-xl border border-[#e5e5e5] bg-white py-1 shadow-xl">
+          <div className="absolute bottom-full left-0 z-20 mb-2 w-52 rounded-xl border border-[color:var(--border)] bg-white py-1 shadow-xl">
             <a
               href="/settings"
-              className="flex w-full cursor-pointer items-center px-4 py-2.5 text-left text-sm text-zinc-800 transition-colors hover:bg-[#f5f5f5]"
+              className="flex w-full cursor-pointer items-center px-4 py-2.5 text-left text-sm leading-normal text-zinc-800 transition-colors hover:bg-[color:var(--surface)]"
               onClick={() => setAccountOpen(false)}
             >
               Налаштування
             </a>
             <button
               type="button"
-              onClick={handleSignOut}
-              className="flex w-full cursor-pointer items-center px-4 py-2.5 text-left text-sm text-zinc-800 transition-colors hover:bg-[#f5f5f5]"
-            >
-              Вийти
-            </button>
-            <button
-              type="button"
               onClick={() => {
                 setAccountOpen(false);
                 setFeedbackOpen(true);
               }}
-              className="flex w-full cursor-pointer items-center px-4 py-2.5 text-left text-sm text-zinc-800 transition-colors hover:bg-[#f5f5f5]"
+              className="flex w-full cursor-pointer items-center px-4 py-2.5 text-left text-sm leading-normal text-zinc-800 transition-colors hover:bg-[color:var(--surface)]"
             >
               Дати фідбек
+            </button>
+            <button
+              type="button"
+              onClick={handleSignOut}
+              className="flex w-full cursor-pointer items-center px-4 py-2.5 text-left text-sm leading-normal text-zinc-800 transition-colors hover:bg-[color:var(--surface)]"
+            >
+              Вийти
             </button>
           </div>
         )}
@@ -168,9 +181,9 @@ export default function Sidebar({ userName, userEmail }: SidebarProps) {
         <button
           type="button"
           onClick={() => setAccountOpen((v) => !v)}
-          className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-[#f5f5f5]"
+          className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-[color:var(--surface)]"
         >
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f5f5f5] text-zinc-600">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[color:var(--surface)] text-zinc-600">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 24 24"
@@ -184,7 +197,7 @@ export default function Sidebar({ userName, userEmail }: SidebarProps) {
               />
             </svg>
           </div>
-          <span className="truncate text-sm font-medium text-zinc-800">{displayName}</span>
+          <span className="truncate text-sm font-medium leading-normal text-zinc-800">{displayName}</span>
         </button>
       </div>
 
@@ -202,13 +215,13 @@ export default function Sidebar({ userName, userEmail }: SidebarProps) {
             onClick={() => setFeedbackOpen(false)}
           />
           <div
-            className="relative z-[101] w-full max-w-md cursor-default rounded-2xl border border-[#e5e5e5] bg-white p-6 shadow-xl"
+            className="relative z-[101] w-full max-w-md cursor-default rounded-2xl border border-[color:var(--border)] bg-white p-6 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <button
               type="button"
               onClick={() => setFeedbackOpen(false)}
-              className="absolute right-3 top-3 cursor-pointer rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-[#f5f5f5] hover:text-zinc-900"
+              className="absolute right-3 top-3 cursor-pointer rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-[color:var(--surface)] hover:text-zinc-900"
               aria-label="Закрити"
             >
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -218,7 +231,7 @@ export default function Sidebar({ userName, userEmail }: SidebarProps) {
             <h2 id="feedback-modal-title" className="font-display pr-10 text-xl font-semibold text-zinc-900">
               Дати фідбек!
             </h2>
-            <p className="mt-4 text-sm leading-relaxed text-zinc-600">
+            <p className="mt-4 text-sm leading-normal text-zinc-600">
               Я дуже хочу дізнатись про те, що тобі сподобалось/не сподобалось, які функції додати або що
               виправити. Будь-ласка, напиши мені в Телеграм!
             </p>
@@ -226,7 +239,7 @@ export default function Sidebar({ userName, userEmail }: SidebarProps) {
               href={TELEGRAM_FEEDBACK_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-6 flex w-full cursor-pointer items-center justify-center rounded-xl bg-[#004BA8] px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-[#0d5bb8]"
+              className="btn-primary mt-6 flex w-full cursor-pointer items-center justify-center rounded-xl bg-[color:var(--accent)] px-4 py-3 text-sm font-medium text-white transition-colors hover:brightness-110"
             >
               Написати в Телеграм
             </a>

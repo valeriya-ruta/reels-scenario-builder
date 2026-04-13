@@ -4,10 +4,8 @@ function ShimmerBlock({
   className: string;
 }) {
   return (
-    <div className={`relative overflow-hidden rounded bg-zinc-200/70 ${className}`}>
-      <div className="absolute inset-0">
-        <div className="absolute left-0 top-0 h-full w-1/2 bg-gradient-to-r from-transparent via-white/60 to-transparent reels-planner-shimmer" />
-      </div>
+    <div className={`relative overflow-hidden rounded-lg bg-[color:var(--surface)] ${className}`}>
+      <div className="reels-planner-skeleton-shimmer absolute inset-0 rounded-lg opacity-90" />
     </div>
   );
 }
@@ -24,25 +22,23 @@ export default function ProjectLoading() {
           </div>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-6">
           {Array.from({ length: 6 }).map((_, idx) => (
             <div
-              // eslint-disable-next-line react/no-array-index-key
-              key={idx}
-              className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm"
+              key={`sk-sc-${idx}`}
+              className="rounded-lg border border-[color:var(--border)] bg-white p-5 card-shadow"
             >
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4 flex-1">
+                <div className="flex flex-1 items-center gap-4">
                   <ShimmerBlock className="h-6 w-6 rounded" />
                   <div className="flex-1 space-y-2">
                     <ShimmerBlock className="h-4 w-3/5" />
                     <ShimmerBlock className="h-3 w-2/5" />
                   </div>
                 </div>
-                <ShimmerBlock className="h-6 w-10 rounded" />
+                <ShimmerBlock className="h-7 w-14 rounded-full" />
               </div>
 
-              {/* Collapsed scenes only: avoids rendering heavy inputs while loading */}
               <div className="mt-4 space-y-3">
                 <ShimmerBlock className="h-6 w-full" />
               </div>
@@ -53,4 +49,3 @@ export default function ProjectLoading() {
     </div>
   );
 }
-

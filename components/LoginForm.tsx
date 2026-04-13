@@ -63,7 +63,10 @@ export default function LoginForm() {
   const isForgot = flow === 'forgot-password';
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 rounded-lg bg-white p-6 shadow-sm border border-zinc-200">
+    <form
+      onSubmit={handleSubmit}
+      className="card-shadow space-y-4 rounded-xl border border-[color:var(--border)] bg-white p-6"
+    >
       {error && (
         <div className="rounded bg-red-50 px-3 py-2 text-sm text-red-700 border border-red-200">
           {error}
@@ -79,7 +82,7 @@ export default function LoginForm() {
       {isSignUp && (
         <div>
           <label htmlFor="name" className="block text-sm font-medium text-zinc-700">
-            Ім&apos;я
+            Як тебе звати?
           </label>
           <input
             id="name"
@@ -87,7 +90,7 @@ export default function LoginForm() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             required={isSignUp}
-            className="mt-1 w-full rounded border border-zinc-300 bg-white px-3 py-2 text-zinc-900 placeholder-zinc-500 focus:border-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-400"
+            className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm leading-normal text-zinc-900 placeholder-zinc-500 focus:border-[color:var(--accent)] focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]/25"
             placeholder="Як тебе звати?"
           />
         </div>
@@ -103,7 +106,7 @@ export default function LoginForm() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
-          className="mt-1 w-full rounded border border-zinc-300 bg-white px-3 py-2 text-zinc-900 placeholder-zinc-500 focus:border-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-400"
+          className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm leading-normal text-zinc-900 placeholder-zinc-500 focus:border-[color:var(--accent)] focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]/25"
           placeholder="you@example.com"
         />
       </div>
@@ -136,13 +139,13 @@ export default function LoginForm() {
               onChange={(e) => setPassword(e.target.value)}
               required={!isForgot}
               autoComplete={isSignUp ? 'new-password' : 'current-password'}
-              className="w-full rounded border border-zinc-300 bg-white py-2 pl-3 pr-11 text-zinc-900 placeholder-zinc-500 focus:border-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-400"
+              className="w-full rounded-lg border border-zinc-300 bg-white py-2 pl-3 pr-11 text-sm leading-normal text-zinc-900 placeholder-zinc-500 focus:border-[color:var(--accent)] focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]/25"
               placeholder="••••••••"
             />
             <button
               type="button"
               onClick={() => setShowPassword((v) => !v)}
-              className="absolute inset-y-0 right-0 flex cursor-pointer items-center rounded-r px-2.5 text-zinc-500 transition-colors hover:text-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-0"
+              className="absolute inset-y-0 right-0 flex cursor-pointer items-center rounded-r px-2.5 text-zinc-500 transition-colors hover:text-zinc-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--accent)]"
               aria-label={showPassword ? 'Приховати пароль' : 'Показати пароль'}
               aria-pressed={showPassword}
             >
@@ -155,7 +158,7 @@ export default function LoginForm() {
       <button
         type="submit"
         disabled={loading || (isForgot && forgotSent)}
-        className="w-full rounded bg-[#004BA8] px-4 py-2 font-medium text-white transition-colors hover:bg-[#0d5bb8] disabled:opacity-50"
+        className="btn-primary w-full rounded-xl bg-[color:var(--accent)] px-4 py-2 font-medium text-white transition-[background,transform] hover:brightness-110 disabled:opacity-50"
       >
         {loading
           ? 'Завантаження...'

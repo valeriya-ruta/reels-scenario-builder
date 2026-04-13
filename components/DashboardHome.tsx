@@ -5,6 +5,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useNavBadges } from '@/components/NavBadgeContext';
+import { useToast } from '@/components/ToastProvider';
 import { generateReelFromRant } from '@/app/actions';
 
 const MIN_WORDS_FOR_ACTIONS = 50;
@@ -30,6 +31,7 @@ function countWords(text: string): number {
 export default function DashboardHome() {
   const router = useRouter();
   const { setBadge } = useNavBadges();
+  const toast = useToast();
   const [rant, setRant] = useState('');
   const [loading, setLoading] = useState<'reels' | 'storytelling' | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +49,7 @@ export default function DashboardHome() {
 
     if (!result.ok) {
       setError(result.error);
+      toast?.pushToast(result.error, 'error');
       setLoading(null);
       return;
     }
@@ -63,32 +66,37 @@ export default function DashboardHome() {
 
   const wordsNeeded = Math.max(0, MIN_WORDS_FOR_ACTIONS - wordCount);
 
-  const actionBtnClass =
-    'rounded-xl px-5 py-3 text-sm font-semibold shadow-md transition-colors';
-  const actionBtnEnabled = `${actionBtnClass} cursor-pointer bg-[#004BA8] text-white hover:bg-[#0d5bb8]`;
-  const actionBtnDisabled = `${actionBtnClass} cursor-not-allowed bg-zinc-200 text-zinc-500 shadow-none`;
-  const actionBtnLoading = `${actionBtnClass} cursor-wait bg-[#004BA8]/70 text-white/80 shadow-none`;
+  const primaryBtn =
+    'btn-primary w-full rounded-xl px-5 py-3 text-sm font-semibold shadow-md transition-[background,transform,opacity] duration-150 ease-out';
+  const primaryOn = `${primaryBtn} cursor-pointer bg-[color:var(--accent)] text-white hover:brightness-110`;
+  const primaryLoading = `${primaryBtn} cursor-wait bg-[color:var(--accent)]/70 text-white/90 shadow-none`;
+  const primaryOff = `${primaryBtn} cursor-not-allowed bg-zinc-200 text-zinc-500 shadow-none`;
+
+  const secondaryOn =
+    'w-full rounded-xl border-2 border-[color:var(--accent)] bg-white px-5 py-3 text-sm font-semibold text-[color:var(--accent)] shadow-sm transition-[background,border-color,transform,opacity] duration-150 ease-out hover:bg-[color:var(--accent-soft)]';
+  const secondaryOff =
+    'w-full cursor-not-allowed rounded-xl border-2 border-zinc-200 bg-zinc-100 px-5 py-3 text-sm font-semibold text-zinc-500 shadow-none';
 
   return (
-    <div className="mx-auto max-w-5xl pb-16">
-      <div className="pt-2">
-        <h1 className="text-center text-2xl font-bold tracking-tight text-black sm:text-3xl">
+    <div className="mx-auto max-w-5xl space-y-6 pb-16">
+      <div className="space-y-6 pt-2">
+        <h1 className="font-display text-center text-2xl font-bold tracking-tight text-black sm:text-3xl">
           Виплесни всі свої думки
         </h1>
 
-        <div className="mt-6 flex flex-col gap-6 lg:flex-row lg:items-stretch lg:gap-8">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-stretch lg:gap-8">
           <div className="order-2 flex w-full flex-col gap-3 lg:order-2 lg:w-56 lg:shrink-0 lg:pt-1">
             <span className="relative block w-full">
               <button
                 type="button"
                 onClick={goReels}
                 disabled={!canUseContentActions || isBusy}
-                className={`relative z-0 w-full ${
+                className={`relative z-0 ${
                   loading === 'reels'
-                    ? actionBtnLoading
+                    ? primaryLoading
                     : canUseContentActions && !isBusy
-                      ? actionBtnEnabled
-                      : actionBtnDisabled
+                      ? primaryOn
+                      : primaryOff
                 }`}
               >
                 {loading === 'reels' ? (
@@ -116,8 +124,8 @@ export default function DashboardHome() {
                 type="button"
                 onClick={goStorytell}
                 disabled={!canUseContentActions || isBusy}
-                className={`relative z-0 w-full ${
-                  canUseContentActions && !isBusy ? actionBtnEnabled : actionBtnDisabled
+                className={`relative z-0 ${
+                  canUseContentActions && !isBusy ? secondaryOn : secondaryOff
                 }`}
               >
                 Написати сторітел
@@ -130,16 +138,12 @@ export default function DashboardHome() {
                 />
               )}
             </span>
-            <button
-              type="button"
-              disabled
-              className="flex cursor-not-allowed items-center justify-center gap-2 rounded-xl border border-[#e5e5e5] bg-[#f5f5f5] px-5 py-3 text-sm font-medium text-zinc-500"
+            <Link
+              href="/carousel"
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-[color:var(--border)] bg-white px-5 py-3 text-sm font-medium text-zinc-800 shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-[color:var(--accent)]/35 hover:shadow-md"
             >
-              Зробити каруселі
-              <span className="rounded bg-[#ebebeb] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-600">
-                незабаром
-              </span>
-            </button>
+              Зробити карусель
+            </Link>
           </div>
 
           <div className="order-1 min-w-0 flex-1 lg:order-1">
@@ -148,25 +152,25 @@ export default function DashboardHome() {
               onChange={(e) => setRant(e.target.value)}
               disabled={isBusy}
               placeholder="Про що будемо розповідати сьогодні?"
-              className="min-h-[88px] w-full resize-y rounded-xl border border-[#e5e5e5] bg-white px-3 py-2 text-left text-sm leading-relaxed text-black placeholder:text-zinc-400 focus:border-[#004BA8] focus:ring-2 focus:ring-[#004BA8]/20 disabled:opacity-60 sm:min-h-[100px]"
+              className="min-h-[88px] w-full resize-y rounded-xl border border-[color:var(--border)] bg-white px-3 py-2 text-left text-sm leading-normal text-black placeholder:text-zinc-400 focus:border-[color:var(--accent)] focus:shadow-[inset_0_0_0_2px_var(--accent)] focus:outline-none focus:ring-0 disabled:opacity-60 sm:min-h-[100px]"
             />
-            <p className="mt-2 text-left text-xs text-zinc-500">
+            <p className="mt-2 text-left text-xs leading-normal text-zinc-600">
               {canUseContentActions
                 ? `У тексті ${wordCount} ${wordLabel(wordCount)} — можна переходити до рілсів або сторітелу.`
                 : `Мінімум ${MIN_WORDS_FOR_ACTIONS} слів, щоб увімкнути кнопки. Зараз: ${wordCount}. Залишилось: ${wordsNeeded}.`}
             </p>
             {error && (
-              <p className="mt-2 text-left text-xs text-red-600">{error}</p>
+              <p className="mt-2 text-left text-xs leading-normal text-red-700">{error}</p>
             )}
           </div>
         </div>
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+      <div className="grid min-h-[124px] grid-cols-1 gap-6 md:grid-cols-2">
         <Link
           href="/competitor-analysis"
           prefetch
-          className="group flex h-full min-h-[106px] gap-4 rounded-2xl border border-[#e5e5e5] bg-white p-6 text-left text-inherit no-underline shadow-[0_4px_20px_rgba(0,0,0,0.05)] transition-all hover:border-[#004BA8]/35 hover:shadow-md"
+          className="card-shadow group flex min-h-[124px] gap-4 rounded-2xl border border-[color:var(--border)] bg-white p-5 text-left text-inherit no-underline transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-[color:var(--accent)]/35 hover:shadow-[0_8px_24px_rgba(0,0,0,0.1)]"
         >
           <div className="relative flex h-14 w-14 shrink-0 items-center justify-center">
             <Image
@@ -178,17 +182,17 @@ export default function DashboardHome() {
             />
           </div>
           <div className="min-w-0 flex-1 text-left">
-            <span className="font-display block text-lg font-semibold text-black group-hover:text-[#004BA8]">
+            <span className="font-display block text-lg font-semibold text-black group-hover:text-[color:var(--accent)]">
               Аналіз конкурентів
             </span>
-            <span className="mt-2 block text-sm text-zinc-600">Подивись, що залітає в інших.</span>
+            <span className="mt-2 block text-sm leading-normal text-zinc-600">Подивись, що залітає в інших.</span>
           </div>
         </Link>
         <div
-          className="flex h-full min-h-[106px] gap-4 rounded-2xl border border-dashed border-[#e5e5e5] bg-[#fafafa] p-6 text-left select-none"
+          className="card-shadow flex min-h-[124px] cursor-not-allowed gap-4 rounded-2xl border border-dashed border-[color:var(--border)] bg-[color:var(--surface)] p-5 text-left opacity-40 select-none"
           aria-disabled="true"
         >
-          <div className="relative flex h-14 w-14 shrink-0 items-center justify-center">
+          <div className="relative flex h-14 w-14 shrink-0 items-center justify-center opacity-100">
             <Image
               src="/stats-trend-icon.png"
               alt=""
@@ -199,33 +203,35 @@ export default function DashboardHome() {
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-start justify-between gap-2">
-              <h2 className="font-display text-lg font-semibold text-zinc-500">Статистика</h2>
-              <span className="shrink-0 rounded bg-[#ebebeb] px-2 py-0.5 text-[10px] font-semibold text-zinc-600">
-                незабаром
+              <h2 className="font-display text-lg font-semibold text-zinc-600">Статистика</h2>
+              <span className="shrink-0 rounded-full bg-[color:var(--surface2)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-600">
+                скоро
               </span>
             </div>
-            <p className="mt-2 text-sm text-zinc-500">Тут з&apos;являться твої цифри та динаміка.</p>
+            <p className="mt-2 text-sm leading-normal text-zinc-600">Тут з&apos;являться твої цифри та динаміка.</p>
           </div>
         </div>
       </div>
 
       {SHOW_TREND_FORMATS_SECTION && (
-        <section className="mt-10">
-          <h2 className="font-display text-lg font-semibold text-black">🔥 Трендові формати</h2>
-          <p className="mt-1 text-sm text-zinc-600">Оновлюємо вручну — забирай ідеї для стрічки.</p>
-          <div className="mt-4 flex gap-3 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {TREND_ITEMS.map((item) => (
-              <a
-                key={item.title}
-                href={item.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="min-w-[200px] shrink-0 rounded-xl border border-[#e5e5e5] bg-white px-4 py-3 shadow-sm transition-transform hover:-translate-y-0.5 hover:border-[#004BA8]/30 hover:shadow-md"
-              >
-                <p className="text-sm font-semibold text-black">{item.title}</p>
-                <p className="mt-1 truncate text-xs text-zinc-500">{item.url.replace(/^https:\/\//, '')}</p>
-              </a>
-            ))}
+        <section className="mt-10 space-y-4">
+          <h2 className="font-display text-lg font-semibold text-black">Трендові формати</h2>
+          <p className="text-sm leading-normal text-zinc-600">Оновлюємо вручну — забирай ідеї для стрічки.</p>
+          <div className="rounded-xl border border-[color:var(--border)] border-l-[3px] border-l-[color:var(--accent)] bg-[color:var(--surface)]/80 p-4">
+            <div className="flex gap-3 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {TREND_ITEMS.map((item) => (
+                <a
+                  key={item.title}
+                  href={item.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="min-w-[200px] shrink-0 rounded-xl border border-[color:var(--border)] bg-white px-4 py-3 card-shadow transition-transform duration-200 ease-out hover:-translate-y-0.5 hover:border-[color:var(--accent)]/30 hover:shadow-md"
+                >
+                  <p className="text-sm font-semibold text-black">{item.title}</p>
+                  <p className="mt-1 truncate text-xs leading-normal text-zinc-600">{item.url.replace(/^https:\/\//, '')}</p>
+                </a>
+              ))}
+            </div>
           </div>
         </section>
       )}

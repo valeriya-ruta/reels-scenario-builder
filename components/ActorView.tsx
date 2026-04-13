@@ -37,13 +37,13 @@ export default function ActorView({ snapshotData }: ActorViewProps) {
 
         return (
           <div key={scene.id} className="space-y-2">
-            <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm md:p-5">
+            <div className="rounded-lg border border-[color:var(--border)] bg-white p-5 card-shadow">
               <div className="flex items-start gap-3 md:gap-4">
                 <input
                   type="checkbox"
                   checked={checkedScenes.has(scene.id)}
                   onChange={() => handleToggleCheck(scene.id)}
-                  className="mt-1 h-6 w-6 shrink-0 rounded border-zinc-300 bg-white text-zinc-900 focus:ring-2 focus:ring-zinc-400"
+                  className="mt-1 h-6 w-6 shrink-0 rounded border-zinc-300 bg-white text-[color:var(--accent)] focus:ring-2 focus:ring-[color:var(--accent)]"
                 />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm md:text-base">

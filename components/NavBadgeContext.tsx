@@ -10,17 +10,18 @@ import {
 } from 'react';
 import { usePathname } from 'next/navigation';
 
-export type NavBadgeKey = 'reels' | 'storytelling';
+export type NavBadgeKey = 'reels' | 'storytelling' | 'carousel';
 
 const STORAGE_PREFIX = 'ruta-nav-dot:';
 
 function readStored(): Record<NavBadgeKey, boolean> {
   if (typeof window === 'undefined') {
-    return { reels: false, storytelling: false };
+    return { reels: false, storytelling: false, carousel: false };
   }
   return {
     reels: sessionStorage.getItem(`${STORAGE_PREFIX}reels`) === '1',
     storytelling: sessionStorage.getItem(`${STORAGE_PREFIX}storytelling`) === '1',
+    carousel: sessionStorage.getItem(`${STORAGE_PREFIX}carousel`) === '1',
   };
 }
 
@@ -43,6 +44,7 @@ export function NavBadgeProvider({ children }: { children: React.ReactNode }) {
   const [badges, setBadges] = useState<Record<NavBadgeKey, boolean>>({
     reels: false,
     storytelling: false,
+    carousel: false,
   });
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate nav dots from sessionStorage after SSR

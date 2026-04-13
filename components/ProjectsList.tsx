@@ -57,7 +57,7 @@ function SortableProjectRow({
     <div
       ref={setNodeRef}
       style={style}
-      className="group flex items-stretch rounded-lg border border-zinc-200 bg-white shadow-sm transition-colors hover:border-zinc-300 hover:bg-zinc-50"
+      className="group flex items-stretch rounded-lg border border-[color:var(--border)] bg-white card-shadow transition-colors hover:border-zinc-300 hover:bg-zinc-50"
     >
       <button
         type="button"
@@ -76,9 +76,16 @@ function SortableProjectRow({
         </svg>
       </button>
 
-      <Link href={`${linkPrefix}/${project.id}`} className="flex-1 p-4">
+      <Link href={`${linkPrefix}/${project.id}`} className="flex-1 p-5">
         <div>
-          <h2 className="font-medium text-zinc-900">{project.name}</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="font-display font-medium text-zinc-900">{project.name}</h2>
+            {project.scenario_unseen ? (
+              <span className="inline-flex shrink-0 rounded-full bg-[color:var(--accent-soft)] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--accent)]">
+                Нове
+              </span>
+            ) : null}
+          </div>
           <p className="mt-1 text-sm text-zinc-600">
             Оновлено {new Date(project.updated_at).toLocaleDateString('uk-UA')}
           </p>
@@ -159,8 +166,13 @@ export default function ProjectsList({ projects, linkPrefix = '/project' }: Proj
 
   if (items.length === 0) {
     return (
-      <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-8 text-center text-zinc-600">
-        <p>Поки що немає проєктів. Створіть свій перший проєкт, щоб почати.</p>
+      <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[color:var(--border)] bg-[color:var(--surface)]/60 px-6 py-14 text-center">
+        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-white card-shadow text-zinc-500">
+          <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+          </svg>
+        </div>
+        <p className="max-w-sm text-sm leading-normal text-zinc-700">Тут поки що нічого немає. Створи перший проєкт, щоб почати.</p>
       </div>
     );
   }
@@ -233,18 +245,18 @@ export default function ProjectsList({ projects, linkPrefix = '/project' }: Proj
       </DndContext>
 
       {projectToEdit && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-lg">
-            <h2 className="mb-2 text-lg font-semibold text-zinc-900">Перейменувати проєкт</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="card-shadow w-full max-w-sm rounded-xl border border-[color:var(--border)] bg-white p-6 shadow-lg">
+            <h2 className="font-display mb-2 text-lg font-semibold text-zinc-900">Перейменувати проєкт</h2>
             <div className="mb-4">
-              <label className="mb-1 block text-sm font-medium text-zinc-700">
+              <label className="mb-1 block text-sm font-medium leading-normal text-zinc-700">
                 Назва
               </label>
               <input
                 type="text"
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
-                className="w-full rounded border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-400"
+                className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm leading-normal text-zinc-900 focus:border-[color:var(--accent)] focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]/25"
                 autoFocus
               />
             </div>
@@ -255,14 +267,14 @@ export default function ProjectsList({ projects, linkPrefix = '/project' }: Proj
                   setProjectToEdit(null);
                   setEditName('');
                 }}
-                className="cursor-pointer rounded border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+                className="cursor-pointer rounded-lg border border-[color:var(--border)] px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-[color:var(--surface)]"
               >
                 Скасувати
               </button>
               <button
                 type="button"
                 onClick={saveEdit}
-                className="cursor-pointer rounded bg-black px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-900"
+                className="btn-primary cursor-pointer rounded-lg bg-[color:var(--accent)] px-3 py-1.5 text-sm font-medium text-white hover:brightness-110"
               >
                 Зберегти
               </button>
@@ -272,24 +284,24 @@ export default function ProjectsList({ projects, linkPrefix = '/project' }: Proj
       )}
 
       {projectToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-lg">
-            <h2 className="mb-2 text-lg font-semibold text-zinc-900">Видалити проєкт?</h2>
-            <p className="mb-4 text-sm text-zinc-600">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="card-shadow w-full max-w-sm rounded-xl border border-[color:var(--border)] bg-white p-6 shadow-lg">
+            <h2 className="font-display mb-2 text-lg font-semibold text-zinc-900">Видалити проєкт?</h2>
+            <p className="mb-4 text-sm leading-normal text-zinc-600">
               Ви впевнені, що хочете видалити «{projectToDelete.name}»? Цю дію не можна скасувати.
             </p>
             <div className="flex justify-end gap-3">
               <button
                 type="button"
                 onClick={() => setProjectToDelete(null)}
-                className="cursor-pointer rounded border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+                className="cursor-pointer rounded-lg border border-[color:var(--border)] px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-[color:var(--surface)]"
               >
                 Скасувати
               </button>
               <button
                 type="button"
                 onClick={confirmDelete}
-                className="cursor-pointer rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
+                className="cursor-pointer rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
               >
                 Видалити
               </button>

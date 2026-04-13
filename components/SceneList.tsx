@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { LayoutTemplate, X } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -25,6 +26,48 @@ import {
   mergeServerSceneWithLocalDraft,
 } from '@/lib/sceneOptimistic';
 
+interface ReelFormulaTemplate {
+  id: string;
+  name: string;
+  scenes: string[];
+  description: string;
+}
+
+const REEL_FORMULA_TEMPLATES: ReelFormulaTemplate[] = [
+  {
+    id: 'problem-solution',
+    name: 'Проблема → Рішення',
+    scenes: ['Гачок', 'Проблема', 'Біль', 'Рішення', 'CTA'],
+    description: 'Класична структура для порад і туторіалів',
+  },
+  {
+    id: 'escalation-turn',
+    name: 'Ескалація → Поворот',
+    scenes: ['Гачок', 'Проблема', 'Більша проблема', 'Несподіваний урок', 'CTA'],
+    description: 'Для сторітелінгу - коли спочатку стає гірше, а потім краще',
+  },
+  {
+    id: 'result-first',
+    name: 'Результат спочатку',
+    scenes: ['Гачок (результат)', 'Біль (до)', 'Як я це зробив', 'CTA'],
+    description: 'Покажи результат першим - для before/after і кейсів',
+  },
+];
+
+function sceneCardVariantFor(
+  scene: Scene,
+  idx: number,
+  total: number
+): 'hook' | 'cta' | 'default' {
+  const n = (scene.name ?? '').trim().toUpperCase();
+  if (n === 'ХУК') return 'hook';
+  if (n === 'CTA') return 'cta';
+  if (total <= 1) return 'default';
+  if (idx === 0) return 'hook';
+  if (idx === total - 1) return 'cta';
+  return 'default';
+}
+
 interface SceneListProps {
   project: Project;
   scenes: Scene[];
@@ -47,7 +90,10 @@ export default function SceneList({
   const [expandedSceneId, setExpandedSceneId] = useState<string | null>(null);
   const [animateInSceneId, setAnimateInSceneId] = useState<string | null>(null);
   const [glowSceneId, setGlowSceneId] = useState<string | null>(null);
+  const [localFocusSceneId, setLocalFocusSceneId] = useState<string | null>(null);
+  const [isFormulaPickerOpen, setIsFormulaPickerOpen] = useState(false);
   const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const effectiveFocusSceneId = focusSceneId ?? localFocusSceneId;
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -92,20 +138,27 @@ export default function SceneList({
   const hasOptimisticScene = scenes.some((s) => isOptimisticSceneId(s.id));
   
   useEffect(() => {
-    if (!focusSceneId) return;
-    const target = rowRefs.current[focusSceneId];
+    if (!effectiveFocusSceneId) return;
+    const target = rowRefs.current[effectiveFocusSceneId];
     if (!target) return;
 
     target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    setExpandedSceneId(focusSceneId);
-    setGlowSceneId(focusSceneId);
+    setExpandedSceneId(effectiveFocusSceneId);
+    setGlowSceneId(effectiveFocusSceneId);
     const t = window.setTimeout(() => {
-      setGlowSceneId((current) => (current === focusSceneId ? null : current));
+      setGlowSceneId((current) =>
+        current === effectiveFocusSceneId ? null : current
+      );
     }, 1200);
-    onFocusHandled?.();
+    if (focusSceneId) {
+      onFocusHandled?.();
+    }
+    if (localFocusSceneId) {
+      setLocalFocusSceneId(null);
+    }
 
     return () => window.clearTimeout(t);
-  }, [focusSceneId, scenes, onFocusHandled]);
+  }, [effectiveFocusSceneId, focusSceneId, localFocusSceneId, scenes, onFocusHandled]);
 
   const normalizeSceneOrder = (list: Scene[]) =>
     list.map((s, index) => ({ ...s, order_index: index }));
@@ -154,8 +207,121 @@ export default function SceneList({
     })();
   };
 
+  const handleFormulaSelect = (template: ReelFormulaTemplate) => {
+    if (hasOptimisticScene) return;
+
+    const newScenesStartIndex = scenes.length;
+    const optimisticScenes = template.scenes.map((sceneName, index) => ({
+      ...buildOptimisticScene(project.id, newScenesStartIndex + index),
+      name: sceneName,
+      lines: '',
+    }));
+
+    const firstAddedSceneId = optimisticScenes[0]?.id ?? null;
+    if (!firstAddedSceneId) {
+      setIsFormulaPickerOpen(false);
+      return;
+    }
+
+    onScenesUpdate((prev) =>
+      normalizeSceneOrder([...prev, ...optimisticScenes])
+    );
+    setExpandedSceneId(firstAddedSceneId);
+    setAnimateInSceneId(firstAddedSceneId);
+    setLocalFocusSceneId(firstAddedSceneId);
+    setIsFormulaPickerOpen(false);
+    window.setTimeout(
+      () =>
+        setAnimateInSceneId((current) =>
+          current === firstAddedSceneId ? null : current
+        ),
+      950
+    );
+
+    void (async () => {
+      for (let idx = 0; idx < optimisticScenes.length; idx += 1) {
+        const optimisticScene = optimisticScenes[idx];
+        const nextOrderIndex = newScenesStartIndex + idx;
+        const newScene = await createScene(project.id, nextOrderIndex);
+
+        if (!newScene) {
+          onScenesUpdate((prev) =>
+            normalizeSceneOrder(
+              prev.filter((scene) => scene.id !== optimisticScene.id)
+            )
+          );
+          continue;
+        }
+
+        const sceneDraft = {
+          name: optimisticScene.name,
+          lines: optimisticScene.lines,
+        };
+        onScenesUpdate((prev) =>
+          normalizeSceneOrder(
+            prev.map((scene) =>
+              scene.id === optimisticScene.id
+                ? { ...newScene, ...sceneDraft }
+                : scene
+            )
+          )
+        );
+        await updateScene(newScene.id, sceneDraft);
+
+        if (optimisticScene.id === firstAddedSceneId) {
+          setExpandedSceneId(newScene.id);
+          setLocalFocusSceneId(newScene.id);
+        }
+      }
+    })();
+  };
+
+  if (scenes.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-[color:var(--border)] bg-[color:var(--surface)]/50 px-6 py-16 text-center">
+        <div className="mx-auto flex max-w-sm flex-col items-center gap-4">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white card-shadow text-[color:var(--accent)]">
+            <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} aria-hidden>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+          </div>
+          <p className="font-display text-lg font-semibold text-zinc-800">Поки без сцен</p>
+          <p className="text-sm leading-normal text-zinc-600">Додай першу сцену — натисни кнопку нижче.</p>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              onClick={() => setIsFormulaPickerOpen(true)}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-[color:var(--border)] bg-white px-5 py-3 text-sm font-semibold text-zinc-800 transition-colors hover:border-[color:var(--accent)]/40 hover:bg-[color:var(--surface)]"
+            >
+              <LayoutTemplate className="h-4 w-4" />
+              Структура
+            </button>
+            <button
+              type="button"
+              onClick={handleAddScene}
+              className="btn-primary rounded-xl bg-[color:var(--accent)] px-5 py-3 text-sm font-semibold text-white transition-[background,transform] hover:brightness-110"
+            >
+              Додай першу сцену →
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => setIsFormulaPickerOpen(true)}
+          disabled={hasOptimisticScene}
+          className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-[color:var(--border)] bg-white px-4 py-2.5 text-sm font-medium text-zinc-800 transition-colors hover:border-[color:var(--accent)]/40 hover:bg-[color:var(--surface)] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <LayoutTemplate className="h-4 w-4" />
+          Структура
+        </button>
+      </div>
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -165,7 +331,7 @@ export default function SceneList({
           items={scenes.map((s) => s.id)}
           strategy={verticalListSortingStrategy}
         >
-          {scenes.map((scene) => (
+          {scenes.map((scene, idx) => (
             <div
               key={scene.id}
               ref={(el) => {
@@ -175,6 +341,7 @@ export default function SceneList({
             >
               <SceneCard
                 scene={scene}
+                sceneVariant={sceneCardVariantFor(scene, idx, scenes.length)}
                 project={project}
                 locations={locations}
                 onLocationsChange={onLocationsChange}
@@ -313,11 +480,100 @@ export default function SceneList({
       </DndContext>
 
       <button
+        type="button"
         onClick={handleAddScene}
-        className="cursor-pointer w-full rounded border-2 border-dashed border-zinc-300 bg-zinc-50 px-4 py-6 text-zinc-600 transition-colors hover:border-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
+        className="w-full cursor-pointer rounded-xl border-2 border-dashed border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-6 text-sm font-medium leading-normal text-zinc-700 transition-colors hover:border-[color:var(--accent)]/40 hover:bg-white hover:text-zinc-900"
       >
         + Додати сцену
       </button>
+      <FormulaPickerModal
+        open={isFormulaPickerOpen}
+        formulas={REEL_FORMULA_TEMPLATES}
+        onClose={() => setIsFormulaPickerOpen(false)}
+        onSelect={handleFormulaSelect}
+      />
+    </div>
+  );
+}
+
+interface FormulaPickerModalProps {
+  open: boolean;
+  formulas: ReelFormulaTemplate[];
+  onClose: () => void;
+  onSelect: (formula: ReelFormulaTemplate) => void;
+}
+
+function FormulaPickerModal({
+  open,
+  formulas,
+  onClose,
+  onSelect,
+}: FormulaPickerModalProps) {
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end bg-black/40 px-3 pb-0 pt-8 sm:items-center sm:justify-center sm:p-4"
+      onClick={onClose}
+    >
+      <div
+        className="card-shadow w-full max-w-2xl rounded-t-2xl border border-[color:var(--border)] bg-white p-4 shadow-xl sm:rounded-2xl sm:p-6"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="font-display text-lg font-semibold text-zinc-900">
+              Обери структуру рілсу
+            </h3>
+            <p className="mt-1 text-sm text-zinc-600">
+              Сцени додадуться до поточного сценарію
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800"
+            aria-label="Закрити"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="mt-4 space-y-3">
+          {formulas.map((formula) => (
+            <button
+              key={formula.id}
+              type="button"
+              onClick={() => onSelect(formula)}
+              className="w-full rounded-xl border border-[color:var(--border)] bg-white p-4 text-left transition-colors hover:border-[color:var(--accent)]/40 hover:bg-[color:var(--surface)]"
+            >
+              <p className="text-sm font-semibold text-zinc-900">{formula.name}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                {formula.scenes.map((scene, index) => (
+                  <div key={`${formula.id}-${scene}`} className="flex items-center gap-1.5">
+                    <span className="rounded-full bg-[color:var(--accent-soft)] px-2.5 py-1 text-xs font-semibold text-[color:var(--accent)]">
+                      {scene}
+                    </span>
+                    {index < formula.scenes.length - 1 && (
+                      <span className="text-xs text-zinc-400">→</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2 text-sm text-zinc-600">{formula.description}</p>
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

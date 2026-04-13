@@ -14,6 +14,7 @@ import {
   startCompetitorActorRun,
 } from '@/lib/ai/competitorReelsApify';
 import type { IdeaScanRow, IdeaScanSummary, IdeaTopReelsPayload } from '@/lib/ideaScanTypes';
+import { transcribeMediaFromUrl } from '@/lib/ai/sttProvider';
 
 const APIFY_BASE = 'https://api.apify.com/v2';
 const FALLBACK_REEL_ACTOR_ID = 'xMc5Ga1oCONPmWJIa';
@@ -293,6 +294,26 @@ export async function refetchReelVideoUrl(
       return { ok: false, error: 'У відповіді немає videoUrl.' };
     }
     return { ok: true, videoUrl: freshVideoUrl };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export type TranscribeReelVideoResult =
+  | { ok: true; transcript: string }
+  | { ok: false; error: string };
+
+/** Full spoken transcript from the reel’s video file (not scene-split). */
+export async function transcribeCompetitorReelVideo(
+  videoUrl: string
+): Promise<TranscribeReelVideoResult> {
+  try {
+    const user = await requireAuth();
+    if (!user) return { ok: false, error: 'Потрібен вхід.' };
+    const url = videoUrl.trim();
+    if (!url) return { ok: false, error: 'Немає посилання на відео.' };
+    const result = await transcribeMediaFromUrl(url);
+    return { ok: true, transcript: result.transcript };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }

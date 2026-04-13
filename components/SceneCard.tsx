@@ -23,8 +23,12 @@ import {
 } from '@/lib/dialogueDuration';
 import LocationPicker from './LocationPicker';
 
+export type SceneCardVariant = 'default' | 'hook' | 'cta';
+
 interface SceneCardProps {
   scene: Scene;
+  /** Visual role from list order only (not persisted). */
+  sceneVariant?: SceneCardVariant;
   project: Project;
   locations: Location[];
   onLocationsChange: Dispatch<SetStateAction<Location[]>>;
@@ -91,6 +95,7 @@ function getTextAreaCaretPosition(
 
 export default function SceneCard({
   scene,
+  sceneVariant = 'default',
   project,
   locations,
   onLocationsChange,
@@ -210,7 +215,15 @@ export default function SceneCard({
     return () => window.clearTimeout(timeout);
   }, [isExpanded]);
 
-  const defaultName = `Сцена ${scene.order_index + 1}`;
+  const sceneIndexLabel = scene.order_index + 1;
+  const defaultName = `Сцена ${sceneIndexLabel}`;
+
+  const variantSurface =
+    sceneVariant === 'hook'
+      ? 'border-[color:var(--accent)]/25 bg-[color:var(--accent-soft)]/60'
+      : sceneVariant === 'cta'
+        ? 'border-emerald-200/80 bg-emerald-50/50'
+        : 'border-zinc-200 bg-white';
 
   const persist = (updates: Partial<Scene>) => {
     if (!isOptimisticSceneId(scene.id)) {
@@ -240,8 +253,13 @@ export default function SceneCard({
     locationSummaryLabel,
     formatLabel(scene.scene_transition_action || 'no_action'),
   ].join(' · ');
+  const editorNoteIsDurationHint = scene.editor_note?.trim().startsWith('~');
+  const aiDurationHint = editorNoteIsDurationHint
+    ? scene.editor_note!.trim()
+    : null;
   const hasCrewNotes = Boolean(
-    scene.actor_note?.trim() || scene.editor_note?.trim()
+    scene.actor_note?.trim() ||
+      (scene.editor_note?.trim() && !editorNoteIsDurationHint)
   );
   const dialogueSeconds = estimateDialogueSeconds(scene.lines);
 
@@ -303,22 +321,32 @@ export default function SceneCard({
     <div
       ref={setNodeRef}
       style={style}
-      className={`rounded-lg border border-zinc-200 bg-white p-4 shadow-sm transition-shadow duration-300 ease-in-out ${
-        isExiting ? 'pointer-events-none' : 'cursor-pointer hover:shadow-md'
+      className={`relative rounded-lg border p-5 card-shadow transition-shadow duration-300 ease-in-out ${variantSurface} ${
+        isExiting ? 'pointer-events-none' : 'cursor-pointer hover:shadow-[0_4px_12px_rgba(0,0,0,0.1)]'
       } ${shouldGlow ? 'reels-planner-scene-glow' : ''}`}
       onClick={handleCardClick}
     >
-      <div style={enterStyle}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4 flex-1">
+      {sceneVariant === 'hook' && (
+        <span className="absolute left-4 top-3 rounded bg-[color:var(--accent)]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[color:var(--accent)]">
+          ХУК
+        </span>
+      )}
+      {sceneVariant === 'cta' && (
+        <span className="absolute left-4 top-3 rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-800">
+          CTA
+        </span>
+      )}
+      <div style={enterStyle} className={sceneVariant !== 'default' ? 'pt-5' : ''}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 flex-1 items-start gap-4">
             <div
               {...attributes}
               {...listeners}
               data-drag-handle
               className={
                 sortableDisabled
-                  ? 'cursor-default text-zinc-300'
-                  : 'cursor-grab text-zinc-500 hover:text-zinc-600'
+                  ? 'mt-0.5 cursor-default text-zinc-300'
+                  : 'mt-0.5 cursor-grab text-zinc-500 hover:text-zinc-600'
               }
               onClick={(e) => e.stopPropagation()}
             >
@@ -326,8 +354,11 @@ export default function SceneCard({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
               </svg>
             </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                Сцена {sceneIndexLabel}
+              </p>
+              <div className="mt-0.5 flex flex-wrap items-center gap-2">
                 {isEditingName ? (
                   <input
                     autoFocus
@@ -343,11 +374,11 @@ export default function SceneCard({
                     }}
                     onClick={(e) => e.stopPropagation()}
                     placeholder={defaultName}
-                    className="text-sm font-medium text-zinc-600 bg-transparent border-b border-zinc-400 outline-none w-32 placeholder-zinc-400"
+                    className="w-40 border-b border-zinc-400 bg-transparent text-sm font-medium text-zinc-800 placeholder-zinc-400"
                   />
                 ) : (
                   <span
-                    className="text-sm font-medium text-zinc-600 cursor-text hover:text-zinc-900 hover:underline decoration-dashed underline-offset-2"
+                    className="cursor-text text-sm font-medium text-zinc-800 decoration-dashed underline-offset-2 hover:text-zinc-950 hover:underline"
                     onClick={(e) => {
                       e.stopPropagation();
                       setIsEditingName(true);
@@ -359,15 +390,22 @@ export default function SceneCard({
                 )}
               </div>
               {!isExpanded && (
-                <p className="mt-1 whitespace-pre-wrap break-words text-sm text-zinc-700">
+                <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-normal text-zinc-700">
                   {dialoguePreview}
                 </p>
               )}
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2 self-start pt-0.5">
             {!isExpanded && hasDialogue && (
-              <DialogueDurationBadge seconds={dialogueSeconds} />
+              <div className="flex items-center gap-1.5">
+                <DialogueDurationBadge seconds={dialogueSeconds} />
+                {aiDurationHint && (
+                  <span className="text-xs tabular-nums text-zinc-500" title="Орієнтовний час з AI">
+                    {aiDurationHint}
+                  </span>
+                )}
+              </div>
             )}
             <button
               onClick={(e) => {
@@ -427,7 +465,7 @@ export default function SceneCard({
                   onScroll={updateSplitPopup}
                   onBlur={hideSplitPopup}
                   onClick={(e) => e.stopPropagation()}
-                  className="w-full rounded border border-zinc-300 bg-white px-3 py-2 pr-16 pb-8 text-zinc-900 placeholder-zinc-500 focus:border-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-400"
+                  className="w-full rounded border border-zinc-300 bg-white px-3 py-2 pr-16 pb-8 text-sm leading-normal text-zinc-900 placeholder-zinc-500 focus:border-zinc-400 focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]/30"
                   rows={3}
                   placeholder="Діалог або голос за кадром..."
                 />
@@ -461,8 +499,11 @@ export default function SceneCard({
                   </div>
                 )}
                 {hasDialogue && (
-                  <div className="absolute bottom-2 right-2 z-10">
+                  <div className="absolute bottom-2 right-2 z-10 flex items-center gap-1.5">
                     <DialogueDurationBadge seconds={dialogueSeconds} />
+                    {aiDurationHint && (
+                      <span className="text-xs tabular-nums text-zinc-400">{aiDurationHint}</span>
+                    )}
                   </div>
                 )}
               </div>
@@ -616,7 +657,7 @@ export default function SceneCard({
                         persist({ actor_note: e.target.value });
                       }}
                       onClick={(e) => e.stopPropagation()}
-                      className="w-full rounded border border-zinc-300 bg-white px-3 py-2 text-zinc-900 placeholder-zinc-500 focus:border-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-400"
+                      className="w-full rounded border border-zinc-300 bg-white px-3 py-2 text-sm leading-normal text-zinc-900 placeholder-zinc-500 focus:border-zinc-400 focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]/30"
                       rows={2}
                       placeholder="Примітка для актора..."
                     />
@@ -635,7 +676,7 @@ export default function SceneCard({
                         });
                       }}
                       onClick={(e) => e.stopPropagation()}
-                      className="w-full rounded border border-zinc-300 bg-white px-3 py-2 text-zinc-900 placeholder-zinc-500 focus:border-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-400"
+                      className="w-full rounded border border-zinc-300 bg-white px-3 py-2 text-sm leading-normal text-zinc-900 placeholder-zinc-500 focus:border-zinc-400 focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]/30"
                       rows={2}
                       placeholder="Примітка для редактора..."
                     />
@@ -789,9 +830,9 @@ function DialogueDurationBadge({ seconds }: { seconds: number }) {
         type="button"
         aria-describedby={open ? tooltipId : undefined}
         className={[
-          'inline-flex shrink-0 cursor-help items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium',
+          'inline-flex shrink-0 cursor-help items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium tabular-nums',
           toneClass,
-          'focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-1',
+          'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--accent)]',
         ].join(' ')}
         aria-label={`Орієнтовна тривалість ${seconds} секунд, ${labelHint}. Наведи курсор для пояснення.`}
         onClick={(e) => e.stopPropagation()}
@@ -836,7 +877,7 @@ function ChipSelector({
             className={[
               'cursor-pointer rounded-full px-3 py-1 text-xs font-medium transition-colors',
               value === option
-                ? 'bg-black text-white'
+                ? 'bg-[color:var(--accent)] text-white'
                 : 'bg-zinc-200 text-zinc-700 hover:bg-zinc-300',
             ].join(' ')}
           >

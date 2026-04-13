@@ -4,11 +4,13 @@ import { requireAuth } from '@/lib/auth';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import { nanoid } from 'nanoid';
 import { Project, Scene, Transition, SnapshotData, Location } from '@/lib/domain';
+import { DEFAULT_SCENE_VALUES } from '@/lib/sceneDefaults';
 import { headers } from 'next/headers';
 import { resolveReferenceMediaUrl } from '@/lib/ai/referenceMedia';
 import { transcribeMediaFromUrl } from '@/lib/ai/sttProvider';
 import { splitTranscriptIntoScenes } from '@/lib/ai/sceneSegmentation';
 import { transformRantToScript } from '@/lib/ai/rantToScript';
+import { templatizeTranscriptToScenes } from '@/lib/ai/transcriptToTemplate';
 
 type ImportMode = 'replace' | 'append';
 
@@ -35,18 +37,6 @@ export type GenerateReferenceResult =
 export type GenerateReelFromRantResult =
   | { ok: true; projectId: string }
   | { ok: false; error: string };
-
-const DEFAULT_SCENE_VALUES = {
-  framing: 'above_waist',
-  pose: 'standing',
-  arm_state: 'arms_at_sides',
-  facing: 'toward_camera',
-  camera_motion: null,
-  shot_size: null,
-  actor_note: null,
-  editor_note: null,
-  is_checked: false,
-} satisfies Partial<Scene>;
 
 async function assertProjectOwner(projectId: string, userId: string): Promise<boolean> {
   const supabase = await createServerSupabaseClient();
@@ -497,6 +487,8 @@ export async function generateReelFromRant(
       order_index: idx,
       lines: s.text,
       ...DEFAULT_SCENE_VALUES,
+      name: s.name ?? null,
+      editor_note: s.editor_note ?? null,
     }));
 
     const { error: insertError } = await supabase
@@ -518,4 +510,130 @@ export async function generateReelFromRant(
         : 'Не вдалося згенерувати рілс. Спробуй ще раз.';
     return { ok: false, error: message };
   }
+}
+
+export type SaveCompetitorReelToScenarioResult =
+  | { ok: true; projectId: string }
+  | { ok: false; error: string };
+
+/**
+ * Transcribes the reel video, generalizes the transcript into a reusable template (placeholders in [brackets]),
+ * creates a new reels project with scenes, bookmarks the reel on the scan, and marks the project as unseen for the list badge.
+ */
+export async function saveCompetitorReelToScenario(
+  scanId: string,
+  reel: { shortCode: string; videoUrl: string; url: string }
+): Promise<SaveCompetitorReelToScenarioResult> {
+  try {
+    const user = await requireAuth();
+    if (!user) {
+      return { ok: false, error: 'Необхідно увійти в акаунт.' };
+    }
+
+    const shortCode = reel.shortCode.trim();
+    const videoUrl = reel.videoUrl.trim();
+    if (!shortCode || !videoUrl) {
+      return { ok: false, error: 'Немає відео для транскрипції.' };
+    }
+
+    const supabase = await createServerSupabaseClient();
+
+    const { data: scanRow, error: scanErr } = await supabase
+      .from('idea_scans')
+      .select('id, saved_reel_ids')
+      .eq('id', scanId)
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (scanErr || !scanRow) {
+      return { ok: false, error: 'Скан не знайдено.' };
+    }
+
+    const saved = (scanRow.saved_reel_ids as string[] | null) ?? [];
+    if (saved.includes(shortCode)) {
+      return { ok: false, error: 'Цей рілс уже збережено.' };
+    }
+
+    const transcriptResult = await transcribeMediaFromUrl(videoUrl);
+    const { title, scenes } = await templatizeTranscriptToScenes(
+      transcriptResult.transcript
+    );
+
+    const projectInsert: Record<string, unknown> = {
+      name: title,
+      crew_mode: 'with_crew',
+      user_id: user.id,
+      project_type: 'reels',
+      scenario_unseen: true,
+    };
+
+    const { data: project, error: projectError } = await supabase
+      .from('projects')
+      .insert(projectInsert)
+      .select()
+      .single();
+
+    if (projectError || !project) {
+      const msg = projectError?.message ?? '';
+      if (msg.includes('scenario_unseen') || msg.includes('project_type')) {
+        return {
+          ok: false,
+          error:
+            'Потрібна міграція БД (колонки scenario_unseen / project_type). Запусти migration_projects_scenario_unseen.sql у Supabase.',
+        };
+      }
+      return {
+        ok: false,
+        error: projectError?.message ?? 'Не вдалося створити проєкт.',
+      };
+    }
+
+    const scenePayload = scenes.map((s, idx) => ({
+      project_id: project.id,
+      order_index: idx,
+      lines: s.text,
+      ...DEFAULT_SCENE_VALUES,
+    }));
+
+    const { error: insertError } = await supabase.from('scenes').insert(scenePayload);
+
+    if (insertError) {
+      await supabase.from('projects').delete().eq('id', project.id);
+      return {
+        ok: false,
+        error: `Не вдалося додати сцени: ${insertError.message}`,
+      };
+    }
+
+    const nextSaved = [...saved, shortCode];
+    const { error: updateErr } = await supabase
+      .from('idea_scans')
+      .update({ saved_reel_ids: nextSaved })
+      .eq('id', scanId)
+      .eq('user_id', user.id);
+
+    if (updateErr) {
+      console.error('idea_scans saved_reel_ids update', updateErr);
+    }
+
+    return { ok: true, projectId: project.id as string };
+  } catch (error) {
+    const message =
+      error instanceof Error && error.message.trim().length > 0
+        ? error.message
+        : 'Не вдалося зберегти рілс. Спробуй ще раз.';
+    return { ok: false, error: message };
+  }
+}
+
+export async function markProjectScenarioSeen(projectId: string): Promise<void> {
+  const user = await requireAuth();
+  if (!user) return;
+
+  const supabase = await createServerSupabaseClient();
+  await supabase
+    .from('projects')
+    .update({ scenario_unseen: false })
+    .eq('id', projectId)
+    .eq('user_id', user.id);
 }

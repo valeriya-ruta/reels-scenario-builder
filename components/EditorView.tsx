@@ -24,7 +24,7 @@ export default function EditorView({ snapshotData }: EditorViewProps) {
         return (
           <div key={scene.id} className="space-y-4">
             {/* Scene Card - Minimal */}
-            <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+            <div className="rounded-lg border border-[color:var(--border)] bg-white p-5 card-shadow">
               <div className="mb-2 flex items-center gap-2">
                 <span className="text-sm font-medium text-zinc-600">
                   Сцена {scene.order_index + 1}
@@ -59,7 +59,7 @@ export default function EditorView({ snapshotData }: EditorViewProps) {
 
             {/* Transition Seam - Prominent */}
             {transition && (
-              <div className="rounded-lg border-2 border-zinc-300 bg-zinc-50 p-4 shadow-sm">
+              <div className="rounded-lg border-2 border-[color:var(--border)] bg-[color:var(--surface)] p-5 card-shadow">
                 <div className="text-center">
                   <p className="text-lg font-semibold text-zinc-900">
                     {formatLabel(transition.type)}

@@ -18,13 +18,14 @@ export default function ShareModal({ actorLink, editorLink, onClose }: ShareModa
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-lg">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="card-shadow w-full max-w-md rounded-xl border border-[color:var(--border)] bg-white p-6 shadow-lg">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-zinc-900">Посилання для поділу</h2>
+          <h2 className="font-display text-xl font-semibold text-zinc-900">Посилання для поділу</h2>
           <button
+            type="button"
             onClick={onClose}
-            className="cursor-pointer text-zinc-600 hover:text-zinc-900"
+            className="cursor-pointer rounded-lg p-1 text-zinc-600 transition-colors hover:bg-[color:var(--surface)] hover:text-zinc-900"
           >
             <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -32,9 +33,9 @@ export default function ShareModal({ actorLink, editorLink, onClose }: ShareModa
           </button>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-5">
           <div>
-            <label className="mb-2 block text-sm font-medium text-zinc-700">
+            <label className="mb-2 block text-sm font-medium leading-normal text-zinc-700">
               Посилання для актора (Режим зйомки)
             </label>
             <div className="flex gap-2">
@@ -42,11 +43,12 @@ export default function ShareModal({ actorLink, editorLink, onClose }: ShareModa
                 type="text"
                 value={actorLink}
                 readOnly
-                className="flex-1 rounded border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm text-zinc-900"
+                className="min-h-[40px] flex-1 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2 text-sm leading-normal text-zinc-900"
               />
               <button
+                type="button"
                 onClick={() => copyToClipboard(actorLink, 'actor')}
-                className="cursor-pointer rounded bg-black px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-900"
+                className="btn-primary shrink-0 rounded-lg bg-[color:var(--accent)] px-4 py-2 text-sm font-medium text-white hover:brightness-110"
               >
                 {copied === 'actor' ? 'Скопійовано!' : 'Копіювати'}
               </button>
@@ -54,7 +56,7 @@ export default function ShareModal({ actorLink, editorLink, onClose }: ShareModa
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-zinc-700">
+            <label className="mb-2 block text-sm font-medium leading-normal text-zinc-700">
               Посилання для редактора (Режим редагування)
             </label>
             <div className="flex gap-2">
@@ -62,11 +64,12 @@ export default function ShareModal({ actorLink, editorLink, onClose }: ShareModa
                 type="text"
                 value={editorLink}
                 readOnly
-                className="flex-1 rounded border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm text-zinc-900"
+                className="min-h-[40px] flex-1 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2 text-sm leading-normal text-zinc-900"
               />
               <button
+                type="button"
                 onClick={() => copyToClipboard(editorLink, 'editor')}
-                className="cursor-pointer rounded bg-black px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-900"
+                className="btn-primary shrink-0 rounded-lg bg-[color:var(--accent)] px-4 py-2 text-sm font-medium text-white hover:brightness-110"
               >
                 {copied === 'editor' ? 'Скопійовано!' : 'Копіювати'}
               </button>

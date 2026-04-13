@@ -14,8 +14,9 @@ import {
   pollCompetitorScan,
   refetchReelVideoUrl,
   startCompetitorScan,
-  updateIdeaScanSavedReels,
+  transcribeCompetitorReelVideo,
 } from '@/app/competitor-analysis-actions';
+import { saveCompetitorReelToScenario } from '@/app/actions';
 
 type Screen = 'home' | 'scanning' | 'results';
 
@@ -180,35 +181,6 @@ function LikesIcon({ className }: { className?: string }) {
   );
 }
 
-function TemplateBody({ text }: { text: string }) {
-  const lines = text.split('\n').filter(Boolean);
-  return (
-    <div className="space-y-1">
-      {lines.map((line, li) => (
-        <p
-          key={li}
-          className="text-[13px] leading-[1.5] text-[var(--color-text-secondary)]"
-        >
-          {line.split(/(\[[^\]]+\])/g).map((part, i) => {
-            if (/^\[[^\]]+\]$/.test(part)) {
-              const inner = part.slice(1, -1);
-              return (
-                <span
-                  key={i}
-                  className="mx-0.5 inline rounded border-[0.5px] border-[var(--color-border-primary)] bg-white px-1.5 py-0.5 text-[11px] font-medium text-[var(--color-text-primary)]"
-                >
-                  {inner}
-                </span>
-              );
-            }
-            return <span key={i}>{part}</span>;
-          })}
-        </p>
-      ))}
-    </div>
-  );
-}
-
 export default function CompetitorAnalysisView() {
   const [screen, setScreen] = useState<Screen>('home');
   const [searchInput, setSearchInput] = useState('');
@@ -225,6 +197,11 @@ export default function CompetitorAnalysisView() {
   const [homeError, setHomeError] = useState<string | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveBusy, setSaveBusy] = useState(false);
+  const transcriptCacheRef = useRef<Record<string, string>>({});
+  const [transcriptLoading, setTranscriptLoading] = useState(false);
+  const [transcriptError, setTranscriptError] = useState<string | null>(null);
+  const [transcriptText, setTranscriptText] = useState<string | null>(null);
   const scanCancelledRef = useRef(false);
 
   const viralThresholdCount = currentScan?.top_reels.summary.qualifiedCount ?? 0;
@@ -418,20 +395,72 @@ export default function CompetitorAnalysisView() {
   const selectedReel =
     activeIdx !== null ? (reelItems[activeIdx] ?? null) : null;
 
+  useEffect(() => {
+    if (!selectedReel) {
+      setTranscriptText(null);
+      setTranscriptError(null);
+      setTranscriptLoading(false);
+      return;
+    }
+    const url = selectedReel.videoUrl.trim();
+    if (!url) {
+      setTranscriptText(null);
+      setTranscriptError('Немає посилання на відео для транскрипції.');
+      setTranscriptLoading(false);
+      return;
+    }
+    const cacheKey = `${selectedReel.shortCode}|${url}`;
+    const cached = transcriptCacheRef.current[cacheKey];
+    if (cached !== undefined) {
+      setTranscriptText(cached);
+      setTranscriptError(null);
+      setTranscriptLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setTranscriptLoading(true);
+    setTranscriptError(null);
+    setTranscriptText(null);
+    void transcribeCompetitorReelVideo(url).then((res) => {
+      if (cancelled) return;
+      if (res.ok) {
+        transcriptCacheRef.current[cacheKey] = res.transcript;
+        setTranscriptText(res.transcript);
+        setTranscriptError(null);
+      } else {
+        setTranscriptError(res.error);
+        setTranscriptText(null);
+      }
+      setTranscriptLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedReel?.shortCode, selectedReel?.videoUrl]);
+
   const onSaveTemplate = useCallback(
     async (reel: DisplayReel) => {
       if (!currentScan?.id) return;
       if (savedShortCodes.includes(reel.shortCode)) return;
       setSaveError(null);
-      const next = [...savedShortCodes, reel.shortCode];
-      const res = await updateIdeaScanSavedReels(currentScan.id, next);
-      if (!res.ok) {
-        setSaveError(res.error ?? 'Не вдалося зберегти.');
-        return;
+      setSaveBusy(true);
+      try {
+        const res = await saveCompetitorReelToScenario(currentScan.id, {
+          shortCode: reel.shortCode,
+          videoUrl: reel.videoUrl,
+          url: reel.url,
+        });
+        if (!res.ok) {
+          setSaveError(res.error);
+          return;
+        }
+        const next = [...savedShortCodes, reel.shortCode];
+        setSavedShortCodes(next);
+        setCurrentScan((prev) => (prev ? { ...prev, saved_reel_ids: next } : prev));
+        void loadRecents();
+      } finally {
+        setSaveBusy(false);
       }
-      setSavedShortCodes(next);
-      setCurrentScan((prev) => (prev ? { ...prev, saved_reel_ids: next } : prev));
-      void loadRecents();
     },
     [currentScan?.id, savedShortCodes, loadRecents]
   );
@@ -472,13 +501,13 @@ export default function CompetitorAnalysisView() {
               <button
                 type="submit"
                 disabled={!searchInput.trim()}
-                className="shrink-0 cursor-pointer rounded-[var(--border-radius-lg)] bg-[#004BA8] px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#0d5bb8] disabled:cursor-not-allowed disabled:opacity-40"
+                className="btn-primary shrink-0 cursor-pointer rounded-[var(--border-radius-lg)] bg-[color:var(--accent)] px-6 py-3 text-sm font-semibold text-white shadow-sm transition-[background,transform] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Сканувати
               </button>
             </form>
             {scanError && (
-              <div className="mt-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">
+              <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm leading-normal text-red-800">
                 {scanError}
               </div>
             )}
@@ -489,7 +518,7 @@ export default function CompetitorAnalysisView() {
               Нещодавні
             </h2>
             {homeError && (
-              <div className="mt-2 rounded bg-red-50 px-3 py-2 text-sm text-red-700">
+              <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm leading-normal text-red-800">
                 {homeError}
               </div>
             )}
@@ -510,13 +539,39 @@ export default function CompetitorAnalysisView() {
                     <span />
                   </div>
                   {recentsLoading ? (
-                    <p className="px-5 py-10 text-center text-sm text-[var(--color-text-muted)]">
-                      Завантаження…
-                    </p>
+                    <div className="space-y-0 px-5 py-6">
+                      {Array.from({ length: 4 }).map((_, i) => (
+                        <div
+                          key={`recent-sk-${i}`}
+                          className="border-b border-[var(--color-border-primary)] py-4 last:border-b-0"
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className="h-10 w-10 shrink-0 rounded-full bg-[var(--color-background-secondary)]">
+                              <div className="reels-planner-skeleton-shimmer h-full w-full rounded-full opacity-80" />
+                            </div>
+                            <div className="flex-1 space-y-2">
+                              <div className="relative h-4 w-40 overflow-hidden rounded bg-[var(--color-background-secondary)]">
+                                <div className="reels-planner-skeleton-shimmer absolute inset-0 opacity-90" />
+                              </div>
+                              <div className="relative h-3 w-28 overflow-hidden rounded bg-[var(--color-background-secondary)]">
+                                <div className="reels-planner-skeleton-shimmer absolute inset-0 opacity-90" />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   ) : recentEntries.length === 0 ? (
-                    <p className="px-5 py-10 text-center text-sm text-[var(--color-text-muted)]">
-                      Ще немає сканувань. Введи @username або посилання на профіль і натисни «Сканувати».
-                    </p>
+                    <div className="flex flex-col items-center justify-center px-5 py-12 text-center">
+                      <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-[var(--color-background-secondary)] text-[var(--color-text-muted)]">
+                        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                        </svg>
+                      </div>
+                      <p className="max-w-sm text-sm leading-normal text-[var(--color-text-muted)]">
+                        Тут поки що нічого немає. Введи @username або посилання на профіль і натисни «Сканувати».
+                      </p>
+                    </div>
                   ) : (
                     <ul>
                       {recentEntries.map((entry) => (
@@ -616,7 +671,7 @@ export default function CompetitorAnalysisView() {
                 ← Назад
               </button>
               <div className="mt-5 flex flex-wrap items-center gap-2">
-                <h1 className="text-xl font-bold tracking-tight text-[var(--color-text-primary)]">
+                <h1 className="font-display text-xl font-bold tracking-tight text-[var(--color-text-primary)]">
                   Аналіз профілю
                 </h1>
                 <span
@@ -697,9 +752,9 @@ export default function CompetitorAnalysisView() {
                           <button
                             type="button"
                             onClick={() => onReelCardClick(index)}
-                            className={`w-full cursor-pointer border-l-2 text-left shadow-sm transition-colors ${
+                            className={`w-full cursor-pointer border-l-[3px] text-left shadow-sm transition-colors ${
                               active
-                                ? 'border-[var(--color-text-primary)] bg-white'
+                                ? 'border-[color:var(--accent)] bg-white'
                                 : 'border-transparent bg-white hover:bg-[#fafbfd]'
                             }`}
                             style={{
@@ -898,14 +953,26 @@ export default function CompetitorAnalysisView() {
 
                       <section className="shrink-0" style={{ padding: '12px 20px' }}>
                         <p className="text-[10px] font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
-                          ШАБЛОН
+                          ТРАНСКРИПТ
                         </p>
-                        <p className="mt-2 text-[11px] text-[var(--color-text-muted)]">
-                          Паттерн: {selectedReel.templatePattern}
-                        </p>
-                        <div className="mt-3">
-                          <TemplateBody text={selectedReel.templateBody} />
-                        </div>
+                        {transcriptLoading ? (
+                          <div className="mt-3 flex items-center gap-2 text-[13px] text-[var(--color-text-muted)]">
+                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-[var(--color-border-primary)] border-t-[#004BA8]" />
+                            Розпізнаємо мову…
+                          </div>
+                        ) : transcriptError ? (
+                          <p className="mt-3 text-[13px] leading-relaxed text-red-600">
+                            {transcriptError}
+                          </p>
+                        ) : transcriptText ? (
+                          <p className="mt-3 whitespace-pre-wrap text-[13px] leading-relaxed text-[var(--color-text-secondary)]">
+                            {transcriptText}
+                          </p>
+                        ) : (
+                          <p className="mt-3 text-[13px] text-[var(--color-text-muted)]">
+                            —
+                          </p>
+                        )}
                       </section>
 
                       <div
@@ -926,10 +993,13 @@ export default function CompetitorAnalysisView() {
                         ) : (
                           <button
                             type="button"
+                            disabled={saveBusy}
                             onClick={() => void onSaveTemplate(selectedReel)}
-                            className="w-full cursor-pointer rounded-[var(--border-radius-lg)] bg-gradient-to-r from-[#004BA8] to-[#0d5bb8] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:from-[#0d5bb8] hover:to-[#1565c0]"
+                            className="w-full cursor-pointer rounded-[var(--border-radius-lg)] bg-gradient-to-r from-[#004BA8] to-[#0d5bb8] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:from-[#0d5bb8] hover:to-[#1565c0] disabled:cursor-wait disabled:opacity-80"
                           >
-                            Зберегти в рілси
+                            {saveBusy
+                              ? 'Транскрипція та шаблон…'
+                              : 'Зберегти в рілси'}
                           </button>
                         )}
                       </div>

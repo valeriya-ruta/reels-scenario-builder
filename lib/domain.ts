@@ -53,6 +53,8 @@ export interface Project {
   created_at: string;
   updated_at: string;
   user_id: string;
+  /** True until the user opens this project from «Мої проєкти» (competitor import). */
+  scenario_unseen?: boolean;
 }
 
 export interface Location {

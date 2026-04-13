@@ -19,34 +19,37 @@ export default function ImportModeDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl">
-        <h3 className="text-lg font-semibold text-zinc-900">Імпорт сцен</h3>
-        <p className="mt-2 text-sm text-zinc-600">
+      <div className="card-shadow w-full max-w-md rounded-xl border border-[color:var(--border)] bg-white p-6 shadow-xl">
+        <h3 className="font-display text-lg font-semibold text-zinc-900">Імпорт сцен</h3>
+        <p className="mt-2 text-sm leading-normal text-zinc-600">
           Обери, як вставити сцени з референсу.
         </p>
 
-        <div className="mt-4 space-y-2">
+        <div className="mt-5 space-y-2">
           <button
+            type="button"
             disabled={disabled}
             onClick={() => onConfirm('replace')}
-            className="w-full rounded border border-zinc-300 px-4 py-2 text-left text-sm text-zinc-800 transition-colors hover:border-zinc-400 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+            className="w-full rounded-lg border border-[color:var(--border)] px-4 py-3 text-left text-sm leading-normal text-zinc-800 transition-colors hover:border-[color:var(--accent)]/40 hover:bg-[color:var(--surface)] disabled:cursor-not-allowed disabled:opacity-60"
           >
             Замінити всі поточні сцени
           </button>
           <button
+            type="button"
             disabled={disabled}
             onClick={() => onConfirm('append')}
-            className="w-full rounded border border-zinc-300 px-4 py-2 text-left text-sm text-zinc-800 transition-colors hover:border-zinc-400 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+            className="w-full rounded-lg border border-[color:var(--border)] px-4 py-3 text-left text-sm leading-normal text-zinc-800 transition-colors hover:border-[color:var(--accent)]/40 hover:bg-[color:var(--surface)] disabled:cursor-not-allowed disabled:opacity-60"
           >
             Додати в кінець поточного сценарію
           </button>
         </div>
 
-        <div className="mt-4 flex justify-end">
+        <div className="mt-6 flex justify-end">
           <button
+            type="button"
             onClick={onClose}
             disabled={disabled}
-            className="rounded px-3 py-2 text-sm text-zinc-600 transition-colors hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-lg px-4 py-2 text-sm leading-normal text-zinc-600 transition-colors hover:bg-[color:var(--surface)] disabled:cursor-not-allowed disabled:opacity-60"
           >
             Скасувати
           </button>

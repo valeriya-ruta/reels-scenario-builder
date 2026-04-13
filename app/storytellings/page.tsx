@@ -21,7 +21,7 @@ export default async function StorytellingsPage() {
     <div className="min-h-screen">
       <div className="mx-auto max-w-4xl px-4 py-8">
         <div className="mb-8 flex items-center justify-between">
-          <h1 className="text-2xl font-semibold text-zinc-900">Мої сторітелінги</h1>
+          <h1 className="font-display text-2xl font-semibold text-zinc-900">Мої сторітелінги</h1>
           <CreateButton />
         </div>
         <StorytellingProjectsList projects={(projects as StorytellingProject[]) || []} />
@@ -35,7 +35,7 @@ function CreateButton() {
     <form action={createProject}>
       <button
         type="submit"
-        className="cursor-pointer rounded bg-[#004BA8] px-4 py-2 font-medium text-white transition-colors hover:bg-[#0d5bb8]"
+        className="btn-primary cursor-pointer rounded-xl bg-[color:var(--accent)] px-4 py-2 font-medium text-white transition-[background,transform] hover:brightness-110"
       >
         Новий сторітелінг
       </button>

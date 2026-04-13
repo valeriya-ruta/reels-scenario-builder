@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Location, Project, Scene } from '@/lib/domain';
+import { markProjectScenarioSeen } from '@/app/actions';
 import ProjectHeader from './ProjectHeader';
 import SceneList from './SceneList';
 import CopyReferencePanel from './CopyReferencePanel';
@@ -25,6 +26,12 @@ export default function ProjectBuilder({
   const [scenes, setScenes] = useState(initialScenes);
   const [locations, setLocations] = useState(initialLocations);
   const [focusSceneId, setFocusSceneId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!initialProject.scenario_unseen) return;
+    void markProjectScenarioSeen(initialProject.id);
+    setProject((p) => ({ ...p, scenario_unseen: false }));
+  }, [initialProject.id, initialProject.scenario_unseen]);
 
   return (
     <div className="min-h-screen bg-white">

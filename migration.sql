@@ -202,3 +202,34 @@ CREATE TRIGGER update_projects_updated_at
   BEFORE UPDATE ON projects
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
+
+-- Brand DNA settings
+CREATE TABLE IF NOT EXISTS brand_settings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL UNIQUE,
+  theme TEXT NOT NULL CHECK (theme IN ('light', 'dark')),
+  vibe TEXT NOT NULL CHECK (vibe IN ('bold', 'refined')),
+  fav_color_hex TEXT NOT NULL,
+  color_light_bg TEXT NOT NULL,
+  color_dark_bg TEXT NOT NULL,
+  color_accent1 TEXT NOT NULL,
+  color_accent2 TEXT NOT NULL,
+  title_font TEXT NOT NULL,
+  body_font TEXT NOT NULL DEFAULT 'Manrope',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE brand_settings ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users manage own brand settings" ON brand_settings;
+CREATE POLICY "Users manage own brand settings"
+  ON brand_settings FOR ALL
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+DROP TRIGGER IF EXISTS update_brand_settings_updated_at ON brand_settings;
+CREATE TRIGGER update_brand_settings_updated_at
+  BEFORE UPDATE ON brand_settings
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
