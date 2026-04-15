@@ -13,6 +13,9 @@ import { transformRantToScript } from '@/lib/ai/rantToScript';
 import { templatizeTranscriptToScenes } from '@/lib/ai/transcriptToTemplate';
 
 type ImportMode = 'replace' | 'append';
+type ActionResult<T = undefined> =
+  | (T extends undefined ? { ok: true } : { ok: true; data: T })
+  | { ok: false; error: string };
 
 interface ReferencePreview {
   transcript: string;
@@ -49,16 +52,32 @@ async function assertProjectOwner(projectId: string, userId: string): Promise<bo
   return Boolean(data);
 }
 
-export async function updateProjectName(projectId: string, name: string) {
+export async function updateProjectName(
+  projectId: string,
+  name: string
+): Promise<ActionResult<{ name: string }>> {
   const user = await requireAuth();
-  if (!user) return;
+  if (!user) {
+    return { ok: false, error: 'Необхідно увійти в акаунт.' };
+  }
+
+  const trimmed = name.trim();
+  if (!trimmed) {
+    return { ok: false, error: 'Назва не може бути порожньою.' };
+  }
 
   const supabase = await createServerSupabaseClient();
-  await supabase
+  const { error } = await supabase
     .from('projects')
-    .update({ name })
+    .update({ name: trimmed })
     .eq('id', projectId)
     .eq('user_id', user.id);
+
+  if (error) {
+    return { ok: false, error: 'Не вдалося оновити назву сценарію.' };
+  }
+
+  return { ok: true, data: { name: trimmed } };
 }
 
 export async function deleteProject(projectId: string) {
@@ -359,32 +378,46 @@ export async function deleteLocation(id: string): Promise<void> {
   await supabase.from('locations').delete().eq('id', id).eq('user_id', user.id);
 }
 
-export async function createSnapshot(projectId: string): Promise<{ actor: string; editor: string } | null> {
+export async function createSnapshot(
+  projectId: string
+): Promise<ActionResult<{ actor: string; editor: string }>> {
   const user = await requireAuth();
-  if (!user) return null;
+  if (!user) {
+    return { ok: false, error: 'Необхідно увійти в акаунт.' };
+  }
 
   const supabase = await createServerSupabaseClient();
 
   // Fetch project, scenes, and transitions
-  const { data: project } = await supabase
+  const { data: project, error: projectError } = await supabase
     .from('projects')
     .select('*')
     .eq('id', projectId)
     .eq('user_id', user.id)
     .single();
 
-  if (!project) return null;
+  if (projectError || !project) {
+    return { ok: false, error: 'Не вдалося знайти сценарій для шерингу.' };
+  }
 
-  const { data: scenes } = await supabase
+  const { data: scenes, error: scenesError } = await supabase
     .from('scenes')
     .select('*')
     .eq('project_id', projectId)
     .order('order_index', { ascending: true });
 
-  const { data: transitions } = await supabase
+  if (scenesError) {
+    return { ok: false, error: 'Не вдалося зібрати сцени для шерингу.' };
+  }
+
+  const { data: transitions, error: transitionsError } = await supabase
     .from('transitions')
     .select('*')
     .eq('project_id', projectId);
+
+  if (transitionsError) {
+    return { ok: false, error: 'Не вдалося зібрати переходи для шерингу.' };
+  }
 
   const sceneRows = (scenes as Scene[]) || [];
   const locationIds = [
@@ -429,21 +462,48 @@ export async function createSnapshot(projectId: string): Promise<{ actor: string
 
   if (error) {
     console.error('Error creating snapshot:', error);
-    return null;
+    return { ok: false, error: 'Не вдалося створити посилання для шерингу.' };
   }
 
-  // Construct URLs based on an explicit base URL or the current request origin
-  // - In production (e.g. Vercel), set NEXT_PUBLIC_APP_URL to your deployed URL
-  // - Otherwise we fall back to the origin header, and finally to relative paths
+  // Prefer explicit env, then forwarded/origin headers for deploy proxies.
+  // If we cannot determine an absolute base URL, fail clearly.
   const envBaseUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
-  const origin = (await headers()).get('origin')?.trim();
+  const requestHeaders = await headers();
+  const origin = requestHeaders.get('origin')?.trim();
+  const forwardedHost = requestHeaders.get('x-forwarded-host')?.trim();
+  const forwardedProto = requestHeaders.get('x-forwarded-proto')?.trim();
+  const host = requestHeaders.get('host')?.trim();
+
   const baseUrl =
     (envBaseUrl && envBaseUrl.replace(/\/$/, '')) ||
     (origin && origin.replace(/\/$/, '')) ||
-    '';
+    (forwardedHost
+      ? `${(forwardedProto || 'https').replace(/:$/, '')}://${forwardedHost}`.replace(
+          /\/$/,
+          ''
+        )
+      : '') ||
+    (host
+      ? `${(forwardedProto || 'http').replace(/:$/, '')}://${host}`.replace(
+          /\/$/,
+          ''
+        )
+      : '');
+
+  if (!baseUrl) {
+    return {
+      ok: false,
+      error:
+        'Не вдалося визначити адресу застосунку для посилання. Додай NEXT_PUBLIC_APP_URL.',
+    };
+  }
+
   return {
-    actor: `${baseUrl}/share/${actorToken}/actor`,
-    editor: `${baseUrl}/share/${editorToken}/editor`,
+    ok: true,
+    data: {
+      actor: `${baseUrl}/share/${actorToken}/actor`,
+      editor: `${baseUrl}/share/${editorToken}/editor`,
+    },
   };
 }
 

@@ -98,13 +98,6 @@ export default function Sidebar({ userName, userEmail }: SidebarProps) {
 
   return (
     <aside className="relative flex h-full w-full flex-col overflow-hidden border-r border-[color:var(--border)] bg-white px-2 pb-4 pt-3">
-      <a
-        href="/dashboard"
-        className="font-display mb-3 block px-3 text-lg font-bold leading-tight tracking-tight text-zinc-900 transition-colors hover:text-[color:var(--accent)]"
-      >
-        Ruta
-      </a>
-
       <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
         {navItems.map((item) => {
           if (!item.active) {

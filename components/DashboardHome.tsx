@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useNavBadges } from '@/components/NavBadgeContext';
 import { useToast } from '@/components/ToastProvider';
 import { generateReelFromRant } from '@/app/actions';
+import SubscriptionStatus from '@/components/SubscriptionStatus';
 
 const MIN_WORDS_FOR_ACTIONS = 50;
 
@@ -79,6 +80,7 @@ export default function DashboardHome() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 pb-16">
+      <SubscriptionStatus />
       <div className="space-y-6 pt-2">
         <h1 className="font-display text-center text-2xl font-bold tracking-tight text-black sm:text-3xl">
           Виплесни всі свої думки

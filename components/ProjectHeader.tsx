@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Project } from '@/lib/domain';
 import { updateProjectName, createSnapshot } from '@/app/actions';
@@ -23,22 +23,56 @@ export default function ProjectHeader({
   const [isEditingName, setIsEditingName] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareLinks, setShareLinks] = useState<{ actor: string; editor: string } | null>(null);
+  const [isSharing, setIsSharing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    setName(project.name);
+  }, [project.name]);
 
   const handleNameBlur = async () => {
-    if (name !== project.name && name.trim()) {
-      await updateProjectName(project.id, name);
-      onProjectUpdate({ ...project, name });
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setName(project.name);
+      setIsEditingName(false);
+      return;
+    }
+
+    if (trimmed === project.name) {
+      setName(project.name);
+      setIsEditingName(false);
+      return;
+    }
+
+    setErrorMessage(null);
+    const result = await updateProjectName(project.id, trimmed);
+    if (result.ok) {
+      onProjectUpdate({ ...project, name: result.data.name });
+      setName(result.data.name);
     } else {
       setName(project.name);
+      setErrorMessage(result.error);
     }
     setIsEditingName(false);
   };
 
   const handleShare = async () => {
-    const links = await createSnapshot(project.id);
-    if (links) {
-      setShareLinks(links);
+    if (isSharing) return;
+
+    setErrorMessage(null);
+    setIsSharing(true);
+    try {
+      const result = await createSnapshot(project.id);
+      if (!result.ok) {
+        setErrorMessage(result.error);
+        return;
+      }
+      setShareLinks(result.data);
       setShowShareModal(true);
+    } catch {
+      setErrorMessage('Не вдалося створити посилання для шерингу.');
+    } finally {
+      setIsSharing(false);
     }
   };
 
@@ -100,11 +134,13 @@ export default function ProjectHeader({
           <button
             type="button"
             onClick={handleShare}
-            className="btn-primary shrink-0 rounded-xl bg-[color:var(--accent)] px-4 py-2 text-sm font-medium text-white transition-[background,transform] hover:brightness-110"
+            disabled={isSharing}
+            className="btn-primary shrink-0 rounded-xl bg-[color:var(--accent)] px-4 py-2 text-sm font-medium text-white transition-[background,transform] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
           >
-            Поділитися
+            {isSharing ? 'Створюю посилання...' : 'Поділитися'}
           </button>
         </div>
+        {errorMessage && <p className="text-sm text-red-600">{errorMessage}</p>}
       </div>
 
       {showShareModal && shareLinks && (

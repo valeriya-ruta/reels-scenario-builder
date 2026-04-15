@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/auth';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import { Project } from '@/lib/domain';
 import ProjectsList from '@/components/ProjectsList';
+import NewReelSubmitButton from '@/components/NewReelSubmitButton';
 
 export default async function ProjectsPage() {
   const user = await requireAuth();
@@ -39,12 +40,10 @@ export default async function ProjectsPage() {
 function CreateProjectButton() {
   return (
     <form action={createProject}>
-      <button
-        type="submit"
-        className="btn-primary cursor-pointer rounded-xl bg-[color:var(--accent)] px-4 py-2 font-medium text-white transition-[background,transform] hover:brightness-110"
-      >
-        Новий сценарій
-      </button>
+      <NewReelSubmitButton
+        idleLabel="Новий сценарій"
+        pendingLabel="Створюю сценарій..."
+      />
     </form>
   );
 }

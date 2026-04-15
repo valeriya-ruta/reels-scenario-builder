@@ -278,34 +278,42 @@ export default function SceneList({
 
   if (scenes.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-[color:var(--border)] bg-[color:var(--surface)]/50 px-6 py-16 text-center">
-        <div className="mx-auto flex max-w-sm flex-col items-center gap-4">
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white card-shadow text-[color:var(--accent)]">
-            <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} aria-hidden>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
-          </div>
-          <p className="font-display text-lg font-semibold text-zinc-800">Поки без сцен</p>
-          <p className="text-sm leading-normal text-zinc-600">Додай першу сцену — натисни кнопку нижче.</p>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <button
-              type="button"
-              onClick={() => setIsFormulaPickerOpen(true)}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-[color:var(--border)] bg-white px-5 py-3 text-sm font-semibold text-zinc-800 transition-colors hover:border-[color:var(--accent)]/40 hover:bg-[color:var(--surface)]"
-            >
-              <LayoutTemplate className="h-4 w-4" />
-              Структура
-            </button>
-            <button
-              type="button"
-              onClick={handleAddScene}
-              className="btn-primary rounded-xl bg-[color:var(--accent)] px-5 py-3 text-sm font-semibold text-white transition-[background,transform] hover:brightness-110"
-            >
-              Додай першу сцену →
-            </button>
+      <>
+        <div className="rounded-2xl border border-dashed border-[color:var(--border)] bg-[color:var(--surface)]/50 px-6 py-16 text-center">
+          <div className="mx-auto flex max-w-sm flex-col items-center gap-4">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white card-shadow text-[color:var(--accent)]">
+              <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+            </div>
+            <p className="font-display text-lg font-semibold text-zinc-800">Поки без сцен</p>
+            <p className="text-sm leading-normal text-zinc-600">Додай першу сцену — натисни кнопку нижче.</p>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => setIsFormulaPickerOpen(true)}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-[color:var(--border)] bg-white px-5 py-3 text-sm font-semibold text-zinc-800 transition-colors hover:border-[color:var(--accent)]/40 hover:bg-[color:var(--surface)]"
+              >
+                <LayoutTemplate className="h-4 w-4" />
+                Структура
+              </button>
+              <button
+                type="button"
+                onClick={handleAddScene}
+                className="btn-primary rounded-xl bg-[color:var(--accent)] px-5 py-3 text-sm font-semibold text-white transition-[background,transform] hover:brightness-110"
+              >
+                Додай першу сцену →
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+        <FormulaPickerModal
+          open={isFormulaPickerOpen}
+          formulas={REEL_FORMULA_TEMPLATES}
+          onClose={() => setIsFormulaPickerOpen(false)}
+          onSelect={handleFormulaSelect}
+        />
+      </>
     );
   }
 

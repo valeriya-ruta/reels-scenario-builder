@@ -7,11 +7,16 @@ import { useRouter } from 'next/navigation';
 
 type AuthFlow = 'sign-in' | 'sign-up' | 'forgot-password';
 
-export default function LoginForm() {
+type LoginFormProps = {
+  initialFlow?: AuthFlow;
+};
+
+export default function LoginForm({ initialFlow = 'sign-in' }: LoginFormProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [flow, setFlow] = useState<AuthFlow>('sign-in');
+  const [phone, setPhone] = useState('');
+  const [flow, setFlow] = useState<AuthFlow>(initialFlow);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [forgotSent, setForgotSent] = useState(false);
@@ -39,9 +44,10 @@ export default function LoginForm() {
         const { error: signUpError } = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { full_name: name } },
+          options: { data: { full_name: name, phone } },
         });
         if (signUpError) throw signUpError;
+        router.push('/subscribe');
         router.refresh();
       } else {
         const { error: signInError } = await supabase.auth.signInWithPassword({
@@ -49,7 +55,7 @@ export default function LoginForm() {
           password,
         });
         if (signInError) throw signInError;
-        router.push('/projects');
+        router.push('/dashboard');
         router.refresh();
       }
     } catch (err: unknown) {
@@ -80,20 +86,38 @@ export default function LoginForm() {
       )}
 
       {isSignUp && (
-        <div>
-          <label htmlFor="name" className="block text-sm font-medium text-zinc-700">
-            Як тебе звати?
-          </label>
-          <input
-            id="name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required={isSignUp}
-            className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm leading-normal text-zinc-900 placeholder-zinc-500 focus:border-[color:var(--accent)] focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]/25"
-            placeholder="Як тебе звати?"
-          />
-        </div>
+        <>
+          <div>
+            <label htmlFor="name" className="block text-sm font-medium text-zinc-700">
+              Як тебе звати?
+            </label>
+            <input
+              id="name"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required={isSignUp}
+              className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm leading-normal text-zinc-900 placeholder-zinc-500 focus:border-[color:var(--accent)] focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]/25"
+              placeholder="Як тебе звати?"
+            />
+          </div>
+          <div>
+            <label htmlFor="phone" className="block text-sm font-medium text-zinc-700">
+              Телефон для оплати
+            </label>
+            <input
+              id="phone"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              required={isSignUp}
+              className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm leading-normal text-zinc-900 placeholder-zinc-500 focus:border-[color:var(--accent)] focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]/25"
+              placeholder="+380..."
+            />
+          </div>
+        </>
       )}
 
       <div>

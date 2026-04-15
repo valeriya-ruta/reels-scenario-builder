@@ -18,7 +18,12 @@ export default async function RootLayout({
   const { user } = await getCurrentUser();
   const headerList = await headers();
   const pathname = headerList.get("x-pathname") ?? "";
-  const isAuthRoute = pathname.startsWith("/auth");
+  const isAuthRoute =
+    pathname.startsWith("/auth") ||
+    pathname === "/subscribe" ||
+    pathname === "/trial/success" ||
+    pathname === "/" ||
+    pathname === "/signup";
 
   return (
     <html lang="uk">

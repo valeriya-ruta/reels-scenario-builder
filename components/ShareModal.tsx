@@ -10,11 +10,17 @@ interface ShareModalProps {
 
 export default function ShareModal({ actorLink, editorLink, onClose }: ShareModalProps) {
   const [copied, setCopied] = useState<'actor' | 'editor' | null>(null);
+  const [copyError, setCopyError] = useState<string | null>(null);
 
   const copyToClipboard = async (text: string, type: 'actor' | 'editor') => {
-    await navigator.clipboard.writeText(text);
-    setCopied(type);
-    setTimeout(() => setCopied(null), 2000);
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(type);
+      setCopyError(null);
+      setTimeout(() => setCopied(null), 2000);
+    } catch {
+      setCopyError('Не вдалося скопіювати. Скопіюй посилання вручну.');
+    }
   };
 
   return (
@@ -76,6 +82,7 @@ export default function ShareModal({ actorLink, editorLink, onClose }: ShareModa
             </div>
           </div>
         </div>
+        {copyError && <p className="mt-4 text-sm text-red-600">{copyError}</p>}
       </div>
     </div>
   );

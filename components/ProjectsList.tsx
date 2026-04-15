@@ -156,6 +156,7 @@ export default function ProjectsList({ projects, linkPrefix = '/project' }: Proj
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
   const [projectToEdit, setProjectToEdit] = useState<Project | null>(null);
   const [editName, setEditName] = useState('');
+  const [editError, setEditError] = useState<string | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -206,10 +207,15 @@ export default function ProjectsList({ projects, linkPrefix = '/project' }: Proj
     const trimmed = editName.trim();
     if (!trimmed) return;
 
-    await updateProjectName(projectToEdit.id, trimmed);
+    setEditError(null);
+    const result = await updateProjectName(projectToEdit.id, trimmed);
+    if (!result.ok) {
+      setEditError(result.error);
+      return;
+    }
     setItems((current) =>
       current.map((p) =>
-        p.id === projectToEdit.id ? { ...p, name: trimmed } : p
+        p.id === projectToEdit.id ? { ...p, name: result.data.name } : p
       )
     );
     setProjectToEdit(null);
@@ -236,6 +242,7 @@ export default function ProjectsList({ projects, linkPrefix = '/project' }: Proj
                 onStartEdit={() => {
                   setProjectToEdit(project);
                   setEditName(project.name);
+                  setEditError(null);
                 }}
                 onStartDelete={() => setProjectToDelete(project)}
               />
@@ -255,10 +262,16 @@ export default function ProjectsList({ projects, linkPrefix = '/project' }: Proj
               <input
                 type="text"
                 value={editName}
-                onChange={(e) => setEditName(e.target.value)}
+                onChange={(e) => {
+                  setEditName(e.target.value);
+                  setEditError(null);
+                }}
                 className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm leading-normal text-zinc-900 focus:border-[color:var(--accent)] focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]/25"
                 autoFocus
               />
+              {editError && (
+                <p className="mt-2 text-sm text-red-600">{editError}</p>
+              )}
             </div>
             <div className="flex justify-end gap-3">
               <button
@@ -266,6 +279,7 @@ export default function ProjectsList({ projects, linkPrefix = '/project' }: Proj
                 onClick={() => {
                   setProjectToEdit(null);
                   setEditName('');
+                  setEditError(null);
                 }}
                 className="cursor-pointer rounded-lg border border-[color:var(--border)] px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-[color:var(--surface)]"
               >

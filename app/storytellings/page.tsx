@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/auth';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import type { StorytellingProject } from '@/lib/domain';
 import StorytellingProjectsList from '@/components/StorytellingProjectsList';
+import NewReelSubmitButton from '@/components/NewReelSubmitButton';
 
 export default async function StorytellingsPage() {
   const user = await requireAuth();
@@ -33,12 +34,10 @@ export default async function StorytellingsPage() {
 function CreateButton() {
   return (
     <form action={createProject}>
-      <button
-        type="submit"
-        className="btn-primary cursor-pointer rounded-xl bg-[color:var(--accent)] px-4 py-2 font-medium text-white transition-[background,transform] hover:brightness-110"
-      >
-        Новий сторітелінг
-      </button>
+      <NewReelSubmitButton
+        idleLabel="Новий сторітелінг"
+        pendingLabel="Створюю сторітелінг..."
+      />
     </form>
   );
 }

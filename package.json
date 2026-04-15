@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "dev:https": "next dev --experimental-https",
+    "dev": "next dev -p 3001",
+    "dev:https": "next dev -p 3001 --experimental-https",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p 3001",
     "lint": "eslint"
   },
   "dependencies": {
@@ -27,6 +27,7 @@
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "server-only": "^0.0.1",
     "sharp": "^0.34.5"
   },
   "devDependencies": {
