@@ -59,7 +59,7 @@ function SortableCarouselRow({
       <button
         type="button"
         aria-label="Перемістити карусель"
-        className="flex cursor-grab items-center px-3 text-zinc-400 hover:text-zinc-600"
+        className="flex cursor-grab items-center px-1.5 text-zinc-400 hover:text-zinc-600 md:px-3"
         {...attributes}
         {...listeners}
       >
@@ -73,7 +73,7 @@ function SortableCarouselRow({
         </svg>
       </button>
 
-      <Link href={`/carousel/${project.id}`} className="flex-1 p-5">
+      <Link href={`/carousel/${project.id}`} className="flex-1 p-2.5 md:p-5">
         <h2 className="font-display font-medium text-zinc-900">{project.name}</h2>
         <p className="mt-1 text-sm text-zinc-600">
           Оновлено {new Date(project.updated_at).toLocaleDateString('uk-UA')}

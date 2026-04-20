@@ -127,7 +127,7 @@ export default function AppShell({ children, userName, userEmail }: AppShellProp
                   )}
                 </div>
 
-                <main className="page-enter flex-1 overflow-y-auto bg-white px-8 pt-8 pb-20 md:py-8">
+                <main className="page-enter flex-1 overflow-y-auto bg-white px-3 pt-6 pb-20 md:px-8 md:py-8">
                   {children}
                 </main>
               </div>

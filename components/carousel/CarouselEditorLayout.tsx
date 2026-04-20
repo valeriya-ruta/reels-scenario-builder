@@ -109,8 +109,7 @@ function SortableThumb({
       <span
         {...attributes}
         {...listeners}
-        className="absolute left-0 top-0 z-[1] flex h-full w-6 cursor-grab items-center justify-center bg-gradient-to-r from-black/25 to-transparent text-white opacity-0 hover:opacity-100"
-        onClick={(e) => e.stopPropagation()}
+        className="absolute left-0 top-0 z-[1] flex h-full w-6 cursor-grab touch-none select-none items-center justify-center bg-gradient-to-r from-black/25 to-transparent text-white opacity-0 hover:opacity-100"
       >
         <GripVertical className="h-3 w-3" />
       </span>
@@ -266,7 +265,9 @@ export default function CarouselEditorLayout({
   const mobilePreviewScale = previewScale * mobileScaleFactor;
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(PointerSensor, {
+      activationConstraint: { delay: 220, tolerance: 8 },
+    }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
