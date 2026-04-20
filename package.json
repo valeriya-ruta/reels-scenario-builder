@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3001",
+    "dev": "node -e \"console.log('\\n  Reels Planner → http://localhost:3001 (use this port, not 3000)\\n')\" && next dev -p 3001",
     "dev:https": "next dev -p 3001 --experimental-https",
     "build": "next build",
     "start": "next start -p 3001",
@@ -20,6 +20,8 @@
     "@napi-rs/canvas": "^0.1.97",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.49.0",
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.37.0",
     "canvas-confetti": "^1.9.4",
     "color-name-list": "^14.36.0",
     "didyoumean2": "^7.0.4",

@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     if (!verifyWebhookSignature(body)) {
       // eslint-disable-next-line no-console
       console.warn('INVALID_SIGNATURE');
-      return NextResponse.json(buildWebhookAck(orderReference), { status: 200 });
+      return new Response('Unauthorized', { status: 401 });
     }
 
     const admin = createServiceRoleClient();

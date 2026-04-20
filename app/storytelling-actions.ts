@@ -5,6 +5,7 @@ import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import type { StorytellingColumn, StorytellingStory, VisualType, EngagementType } from '@/lib/domain';
 import { ENGAGEMENT_OPTIONS, VISUAL_OPTIONS } from '@/lib/domain';
 import { generateStoriesFromRant } from '@/lib/ai/rantToStories';
+import { aiLimit } from '@/lib/ratelimit';
 import type { Slide } from '@/lib/ai/rantToStories';
 
 // ── Project actions ──
@@ -193,6 +194,11 @@ export async function createStorytellingProjectFromRant(
   const trimmed = rant.trim();
   if (!trimmed) {
     return { ok: false, error: 'Введи рент перед генерацією.' };
+  }
+
+  const { success } = await aiLimit.limit(user.id);
+  if (!success) {
+    return { ok: false, error: 'Ліміт запитів вичерпано. Спробуй пізніше.' };
   }
 
   let output: Awaited<ReturnType<typeof generateStoriesFromRant>>;

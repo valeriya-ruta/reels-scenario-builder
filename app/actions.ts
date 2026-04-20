@@ -15,6 +15,7 @@ import { transcribeMediaFromUrl, type TranscriptSegment } from '@/lib/ai/sttProv
 import { splitTranscriptIntoScenes } from '@/lib/ai/sceneSegmentation';
 import { transformRantToScript } from '@/lib/ai/rantToScript';
 import { templatizeTranscriptToScenes } from '@/lib/ai/transcriptToTemplate';
+import { aiLimit, transcribeLimit } from '@/lib/ratelimit';
 
 type ImportMode = 'replace' | 'append';
 type ActionResult<T = undefined> =
@@ -150,8 +151,19 @@ export async function generateReferenceFromVideoLink(
       return { ok: false, error: 'Проєкт не знайдено або доступ заборонений.' };
     }
 
+    const tr = await transcribeLimit.limit(user.id);
+    if (!tr.success) {
+      return { ok: false, error: 'Ліміт запитів вичерпано. Спробуй пізніше.' };
+    }
+
     const { mediaUrl } = await resolveReferenceMediaUrl(reelUrl);
     const transcriptResult = await transcribeMediaFromUrl(mediaUrl);
+
+    const ai = await aiLimit.limit(user.id);
+    if (!ai.success) {
+      return { ok: false, error: 'Ліміт запитів вичерпано. Спробуй пізніше.' };
+    }
+
     const sceneDrafts = await splitTranscriptIntoScenes(
       transcriptResult.transcript,
       transcriptResult.segments
@@ -525,6 +537,11 @@ export async function generateReelFromRant(
       return { ok: false, error: 'Текст ренту порожній.' };
     }
 
+    const { success } = await aiLimit.limit(user.id);
+    if (!success) {
+      return { ok: false, error: 'Ліміт запитів вичерпано. Спробуй пізніше.' };
+    }
+
     const { title, scenes } = await transformRantToScript(trimmed);
 
     const supabase = await createServerSupabaseClient();
@@ -640,6 +657,11 @@ export async function saveCompetitorReelToScenario(
       return { ok: false, error: 'Цей рілс уже збережено.' };
     }
 
+    const trLimit = await transcribeLimit.limit(user.id);
+    if (!trLimit.success) {
+      return { ok: false, error: 'Ліміт запитів вичерпано. Спробуй пізніше.' };
+    }
+
     let transcript = '';
     let segments: TranscriptSegment[] = [];
 
@@ -665,6 +687,11 @@ export async function saveCompetitorReelToScenario(
 
     let title = 'Рілс з конкурента';
     let scenes: Array<{ text: string }> = [];
+
+    const aiLimitResult = await aiLimit.limit(user.id);
+    if (!aiLimitResult.success) {
+      return { ok: false, error: 'Ліміт запитів вичерпано. Спробуй пізніше.' };
+    }
 
     try {
       const templated = await templatizeTranscriptToScenes(transcript, tplContext);

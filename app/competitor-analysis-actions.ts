@@ -20,6 +20,8 @@ import {
   type IdeaTopReelsPayload,
 } from '@/lib/ideaScanTypes';
 import { transcribeMediaFromUrl } from '@/lib/ai/sttProvider';
+import { scanLimitFree, scanLimitPaid, transcribeLimit } from '@/lib/ratelimit';
+import { userHasPaidScanAccess } from '@/lib/userScanTier';
 
 const APIFY_BASE = 'https://api.apify.com/v2';
 const FALLBACK_REEL_ACTOR_ID = 'xMc5Ga1oCONPmWJIa';
@@ -117,6 +119,13 @@ export async function startCompetitorScan(inputHandle: string): Promise<StartSca
 
     if (cached) {
       return { ok: true, kind: 'cached', scan: cached as IdeaScanRow };
+    }
+
+    const paid = await userHasPaidScanAccess(supabase, user.id);
+    const scanLimiter = paid ? scanLimitPaid : scanLimitFree;
+    const { success: scanOk } = await scanLimiter.limit(user.id);
+    if (!scanOk) {
+      return { ok: false, error: 'Ліміт запитів вичерпано. Спробуй пізніше.' };
     }
 
     const actorInput = buildCompetitorActorInput(handle);
@@ -266,6 +275,14 @@ export async function refetchReelVideoUrl(
     const code = shortCode.trim();
     if (!code) return { ok: false, error: 'Невірний shortCode.' };
 
+    const supabase = await createServerSupabaseClient();
+    const paid = await userHasPaidScanAccess(supabase, user.id);
+    const scanLimiter = paid ? scanLimitPaid : scanLimitFree;
+    const { success: scanOk } = await scanLimiter.limit(user.id);
+    if (!scanOk) {
+      return { ok: false, error: 'Ліміт запитів вичерпано. Спробуй пізніше.' };
+    }
+
     const token = requireServerEnv('APIFY_TOKEN');
     const actorId =
       optionalServerEnv('APIFY_INSTAGRAM_REEL_ACTOR_ID') ?? FALLBACK_REEL_ACTOR_ID;
@@ -356,6 +373,12 @@ export async function transcribeCompetitorReelVideo(
     if (!user) return { ok: false, error: 'Потрібен вхід.' };
     const url = videoUrl.trim();
     if (!url) return { ok: false, error: 'Немає посилання на відео.' };
+
+    const { success: trOk } = await transcribeLimit.limit(user.id);
+    if (!trOk) {
+      return { ok: false, error: 'Ліміт запитів вичерпано. Спробуй пізніше.' };
+    }
+
     const result = await transcribeMediaFromUrl(url);
     if (ctx) {
       await mergeIdeaScanReelTranscript(ctx.scanId, ctx.shortCode, result.transcript);

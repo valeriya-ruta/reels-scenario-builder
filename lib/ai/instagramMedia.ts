@@ -1,4 +1,5 @@
 import { optionalServerEnv, requireServerEnv } from '@/lib/env';
+import { isAbsoluteHttpUrlString } from '@/lib/isAbsoluteHttpUrl';
 import { DEFAULT_INSTAGRAM_REEL_SCRAPER_ACTOR } from '@/lib/ai/competitorReelsApify';
 
 const INSTAGRAM_HOSTS = new Set(['instagram.com', 'www.instagram.com']);
@@ -27,36 +28,77 @@ function normalizeUrl(value: string): URL {
   return parsed;
 }
 
-function pickMediaUrl(item: Record<string, unknown>): string | null {
-  const candidates = [
-    item.videoUrl,
-    item.video_url,
-    item.videoHdUrl,
-    item.video_versions,
-    item.displayUrl,
-    item.display_url,
-  ];
-
-  for (const candidate of candidates) {
-    if (typeof candidate === 'string' && candidate.startsWith('http')) {
-      return candidate;
+function walkCollectHttpUrls(val: unknown, depth: number, out: string[]): void {
+  if (depth <= 0 || out.length >= 40) return;
+  if (typeof val === 'string') {
+    if (isAbsoluteHttpUrlString(val)) out.push(val.trim());
+    return;
+  }
+  if (Array.isArray(val)) {
+    for (const el of val) walkCollectHttpUrls(el, depth - 1, out);
+    return;
+  }
+  if (val && typeof val === 'object') {
+    for (const k of Object.keys(val as object)) {
+      walkCollectHttpUrls((val as Record<string, unknown>)[k], depth - 1, out);
     }
+  }
+}
 
+function looksLikeImageOnlyUrl(u: string): boolean {
+  return /\.(jpe?g|png|gif|webp)(\?|#|$)/i.test(u);
+}
+
+function pickBestMediaUrl(urls: string[]): string | null {
+  const uniq = [...new Set(urls)].filter((u) => !looksLikeImageOnlyUrl(u));
+  if (uniq.length === 0) return null;
+  const mp4 = uniq.find((u) => /\.mp4(\?|$)/i.test(u));
+  if (mp4) return mp4;
+  const cdn = uniq.find((u) => {
+    try {
+      return /fbcdn\.net|cdninstagram\.com|scontent/i.test(new URL(u).hostname);
+    } catch {
+      return false;
+    }
+  });
+  return cdn ?? uniq[0];
+}
+
+function collectFromKeys(item: Record<string, unknown>, keys: string[]): string[] {
+  const out: string[] = [];
+  for (const key of keys) {
+    const candidate = item[key];
+    if (typeof candidate === 'string' && isAbsoluteHttpUrlString(candidate)) {
+      out.push(candidate.trim());
+    }
     if (Array.isArray(candidate)) {
-      const version = candidate.find(
-        (entry) =>
-          typeof entry === 'object' &&
-          entry !== null &&
-          'url' in entry &&
-          typeof (entry as { url?: unknown }).url === 'string'
-      ) as { url: string } | undefined;
-      if (version?.url) {
-        return version.url;
+      for (const entry of candidate) {
+        if (typeof entry === 'object' && entry !== null && 'url' in entry) {
+          const u = (entry as { url?: unknown }).url;
+          if (typeof u === 'string' && isAbsoluteHttpUrlString(u)) {
+            out.push(u.trim());
+          }
+        }
+        if (typeof entry === 'string' && isAbsoluteHttpUrlString(entry)) {
+          out.push(entry.trim());
+        }
       }
     }
   }
+  return out;
+}
 
-  return null;
+function pickMediaUrl(item: Record<string, unknown>): string | null {
+  const videoKeys = ['videoUrl', 'video_url', 'videoHdUrl', 'video_versions'];
+  const bestVideo = pickBestMediaUrl(collectFromKeys(item, videoKeys));
+  if (bestVideo) return bestVideo;
+
+  const deep: string[] = [];
+  walkCollectHttpUrls(item, 6, deep);
+  const bestDeep = pickBestMediaUrl(deep);
+  if (bestDeep) return bestDeep;
+
+  return pickBestMediaUrl(collectFromKeys(item, ['displayUrl', 'display_url']));
 }
 
 export interface InstagramMediaResult {

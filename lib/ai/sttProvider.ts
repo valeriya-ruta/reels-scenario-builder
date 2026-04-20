@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import ffmpegStatic from 'ffmpeg-static';
 
 import { requireServerEnv } from '@/lib/env';
+import { isAbsoluteHttpUrlString } from '@/lib/isAbsoluteHttpUrl';
 
 export interface TranscriptSegment {
   startSec: number;
@@ -151,46 +152,69 @@ async function parseTranscriptionResponse(sttRes: Response): Promise<TranscriptR
   };
 }
 
+/**
+ * Transcribes audio from a remote media file. Intentionally does **not** pass `url` to Groq:
+ * Groq’s hosted fetch often fails on Instagram/TikTok CDNs and may return errors like
+ * "Failed to parse URL from /pipeline" even when the URL is valid for server-side fetch.
+ */
 export async function transcribeMediaFromUrl(mediaUrl: string): Promise<TranscriptResult> {
   const apiKey = requireServerEnv('GROQ_API_KEY');
 
-  const formUrl = buildGroqFormData();
-  formUrl.append('url', mediaUrl);
-
-  let sttRes = await groqTranscribe(apiKey, formUrl);
-
-  if (!sttRes.ok) {
-    const mediaRes = await fetch(mediaUrl);
-    if (!mediaRes.ok) {
-      throw new Error(`Unable to download media for transcription (${mediaRes.status})`);
-    }
-
-    const contentType = mediaRes.headers.get('content-type') || 'audio/mp4';
-    const mediaBuffer = await mediaRes.arrayBuffer();
-    const rawBuf = Buffer.from(mediaBuffer);
-    const inputExt = guessInputExt(contentType, mediaUrl);
-
-    let audioBuf: Buffer;
-    try {
-      audioBuf = await transcodeToSpeechFlac(rawBuf, inputExt);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      const firstErr = await sttRes.text();
-      throw new Error(
-        `Transcription failed (Groq: ${firstErr.slice(0, 280)}). Audio extract: ${msg}`
-      );
-    }
-
-    const upload = new File([new Uint8Array(audioBuf)], 'reel-audio.flac', { type: 'audio/flac' });
-    const formFile = buildGroqFormData();
-    formFile.append('file', upload);
-
-    sttRes = await groqTranscribe(apiKey, formFile);
+  if (!isAbsoluteHttpUrlString(mediaUrl)) {
+    throw new Error(
+      'Отримано некоректне посилання на відео (потрібен повний https://…). Спробуй інше посилання або пізніше.'
+    );
   }
+
+  let mediaRes: Response;
+  try {
+    mediaRes = await fetch(mediaUrl, {
+      redirect: 'follow',
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        Accept: '*/*',
+      },
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(
+      `Не вдалося завантажити відео: ${msg}. Якщо рілс публічний — спробуй ще раз через хвилину.`
+    );
+  }
+
+  if (!mediaRes.ok) {
+    throw new Error(
+      `Не вдалося завантажити відео (HTTP ${mediaRes.status}). Можливо, Reel приватний або тимчасово недоступний.`
+    );
+  }
+
+  const contentType = mediaRes.headers.get('content-type') || 'audio/mp4';
+  const mediaBuffer = await mediaRes.arrayBuffer();
+  const rawBuf = Buffer.from(mediaBuffer);
+  const inputExt = guessInputExt(contentType, mediaUrl);
+
+  let audioBuf: Buffer;
+  try {
+    audioBuf = await transcodeToSpeechFlac(rawBuf, inputExt);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(
+      `Не вдалося витягнути аудіо з відео. Спробуй інший рілс або пізніше. (${msg.slice(0, 320)})`
+    );
+  }
+
+  const upload = new File([new Uint8Array(audioBuf)], 'reel-audio.flac', { type: 'audio/flac' });
+  const formFile = buildGroqFormData();
+  formFile.append('file', upload);
+
+  const sttRes = await groqTranscribe(apiKey, formFile);
 
   if (!sttRes.ok) {
     const body = await sttRes.text();
-    throw new Error(`STT request failed (${sttRes.status}): ${body}`);
+    throw new Error(
+      `Помилка транскрипції (${sttRes.status}): ${body.slice(0, 500)}`
+    );
   }
 
   return parseTranscriptionResponse(sttRes);

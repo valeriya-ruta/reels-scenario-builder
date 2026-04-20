@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { generateStoriesFromRant } from '@/lib/ai/rantToStories';
+import { createServerSupabaseClient } from '@/lib/supabaseServer';
+import { aiLimit } from '@/lib/ratelimit';
 
 export const runtime = 'nodejs';
 
@@ -14,6 +16,22 @@ export async function POST(req: Request) {
   const rant = body.rant?.trim();
   if (!rant) {
     return NextResponse.json({ error: 'Введи рент перед генерацією.' }, { status: 400 });
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: 'Необхідно увійти в акаунт.' }, { status: 401 });
+  }
+
+  const { success, reset } = await aiLimit.limit(user.id);
+  if (!success) {
+    return NextResponse.json(
+      { error: 'Ліміт запитів вичерпано. Спробуй пізніше.', reset },
+      { status: 429 },
+    );
   }
 
   try {

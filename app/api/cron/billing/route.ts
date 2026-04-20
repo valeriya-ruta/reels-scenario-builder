@@ -14,6 +14,7 @@ type CronJobResult = {
   error?: string;
 };
 
+/** Vercel Cron must send Authorization: Bearer <CRON_SECRET> (set in project env). No other auth on this path. */
 function authorizeCron(request: Request): boolean {
   const secret = process.env.CRON_SECRET?.trim();
   if (!secret) return false;
