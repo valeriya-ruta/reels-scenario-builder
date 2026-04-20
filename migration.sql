@@ -214,8 +214,7 @@ CREATE TABLE IF NOT EXISTS brand_settings (
   color_dark_bg TEXT NOT NULL,
   color_accent1 TEXT NOT NULL,
   color_accent2 TEXT NOT NULL,
-  title_font TEXT NOT NULL,
-  body_font TEXT NOT NULL DEFAULT 'Manrope',
+  font_id TEXT NOT NULL DEFAULT 'montserrat',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, type ComponentType } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { createClient } from '@/lib/supabaseClient';
 import { useNavBadges, type NavBadgeKey } from '@/components/NavBadgeContext';
@@ -19,43 +19,47 @@ type NavItem =
       matchPrefixes: string[];
       active: true;
       badgeKey?: NavBadgeKey;
+      icon?: ComponentType<{ className?: string }>;
     }
   | {
       label: string;
       href: null;
       matchPrefixes: string[];
       active: false;
+      icon?: ComponentType<{ className?: string }>;
     };
 
 const navItems: NavItem[] = [
   { label: 'Головна', href: '/dashboard', matchPrefixes: ['/dashboard'], active: true },
   {
-    label: 'Написати рілс',
+    label: 'Рілси',
     href: '/projects',
     matchPrefixes: ['/projects', '/project/'],
     active: true,
     badgeKey: 'reels',
   },
   {
-    label: 'Карусель',
+    label: 'Каруселі',
     href: '/carousel',
     matchPrefixes: ['/carousel'],
     active: true,
     badgeKey: 'carousel',
   },
   {
-    label: 'Аналіз конкурентів',
-    href: '/competitor-analysis',
-    matchPrefixes: ['/competitor-analysis'],
-    active: true,
-  },
-  {
-    label: 'Сторітел',
+    label: 'Сторітели',
     href: '/storytellings',
     matchPrefixes: ['/storytellings', '/storytelling/'],
     active: true,
     badgeKey: 'storytelling',
   },
+  {
+    label: 'Аналіз профілю',
+    href: '/competitor-analysis',
+    matchPrefixes: ['/competitor-analysis'],
+    active: true,
+  },
+  { label: 'Статистика', href: null, matchPrefixes: [], active: false },
+  { label: 'Календар', href: null, matchPrefixes: [], active: false },
 ];
 
 export default function Sidebar({ userName, userEmail }: SidebarProps) {
@@ -108,7 +112,7 @@ export default function Sidebar({ userName, userEmail }: SidebarProps) {
               >
                 <span className="truncate">{item.label}</span>
                 <span className="ml-2 shrink-0 rounded-full bg-[color:var(--surface2)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide leading-none text-zinc-600">
-                  незабаром
+                  Soon
                 </span>
               </div>
             );
@@ -128,13 +132,10 @@ export default function Sidebar({ userName, userEmail }: SidebarProps) {
                   : 'border-l-[3px] border-transparent text-zinc-600 hover:bg-[color:var(--surface)] hover:text-zinc-900',
               ].join(' ')}
             >
+              {item.icon ? <item.icon className="h-4 w-4 shrink-0" /> : null}
               <span className="min-w-0 flex-1 truncate pr-2">{item.label}</span>
               {hasDot && (
-                <span
-                  className="pointer-events-none absolute right-[10px] top-[6px] h-[7px] w-[7px] shrink-0 rounded-full bg-[color:var(--accent)]"
-                  title="Є нове"
-                  aria-hidden
-                />
+                <span className="nav-badge-dot shrink-0" title="Є нове" aria-hidden />
               )}
             </a>
           );

@@ -1,6 +1,22 @@
 export type BrandTheme = 'light' | 'dark';
 export type BrandVibe = 'bold' | 'refined';
 
+/** Inline accent rendering for carousel text `{…}` (matches Pillow / Brand DNA). */
+export type BrandAccentStyle = 'bold' | 'italic' | 'pill' | 'rectangle' | 'marker';
+
+export function normalizeAccentStyle(value: unknown): BrandAccentStyle {
+  if (
+    value === 'bold' ||
+    value === 'italic' ||
+    value === 'pill' ||
+    value === 'rectangle' ||
+    value === 'marker'
+  ) {
+    return value;
+  }
+  return 'marker';
+}
+
 export interface BrandPalette {
   lightBg: string;
   darkBg: string;
@@ -20,8 +36,9 @@ export interface BrandSettings {
   vibe: BrandVibe;
   favColorHex: string;
   colors: BrandPalette;
-  titleFont: string;
-  bodyFont: string;
+  fontId: string;
+  /** How `{accent}` spans are styled in editors and renders. */
+  accentStyle: BrandAccentStyle;
 }
 
 function clamp(num: number, min: number, max: number): number {
@@ -133,11 +150,137 @@ function luminance(hex: string): number {
   return 0.2126 * rl + 0.7152 * gl + 0.0722 * bl;
 }
 
-function contrastRatio(fg: string, bg: string): number {
+export function contrastRatio(fg: string, bg: string): number {
   const l1 = luminance(fg);
   const l2 = luminance(bg);
   const [hi, lo] = l1 > l2 ? [l1, l2] : [l2, l1];
   return (hi + 0.05) / (lo + 0.05);
+}
+
+/** WCAG AA against both page backgrounds (carousel / Brand preview use light + dark). */
+export function ensureContrastAgainstBothBackgrounds(
+  fg: string,
+  lightBg: string,
+  darkBg: string,
+  target = 4.5,
+): string {
+  const [h0, s0] = hexToHsl(normalizeHex(fg));
+  let bestHex = normalizeHex(fg);
+  let bestMin = Math.min(contrastRatio(bestHex, lightBg), contrastRatio(bestHex, darkBg));
+
+  const consider = (hex: string) => {
+    const m = Math.min(contrastRatio(hex, lightBg), contrastRatio(hex, darkBg));
+    if (m > bestMin) {
+      bestMin = m;
+      bestHex = normalizeHex(hex);
+    }
+  };
+
+  for (let s = Math.max(5, s0 - 30); s <= Math.min(100, s0 + 30); s += 2) {
+    for (let l = 6; l <= 94; l += 1) {
+      consider(hslToHex(h0, s, l));
+    }
+  }
+  if (bestMin >= target) {
+    return bestHex;
+  }
+
+  for (let dh = -24; dh <= 24; dh += 6) {
+    const h = (h0 + dh + 360) % 360;
+    for (let s = 15; s <= 100; s += 5) {
+      for (let l = 6; l <= 94; l += 2) {
+        consider(hslToHex(h, s, l));
+      }
+    }
+  }
+
+  return bestHex;
+}
+
+export function minContrastOnBothBackgrounds(fg: string, lightBg: string, darkBg: string): number {
+  const hex = normalizeHex(fg);
+  return Math.min(contrastRatio(hex, lightBg), contrastRatio(hex, darkBg));
+}
+
+/** Number of harmonic accent2 recipes (secondary brand color, not the favorite / accent1). */
+export const ACCENT2_VARIANT_COUNT = 6;
+
+/**
+ * Secondary accent (accent2) relative to the first accent (accent1).
+ * - refined: complementary harmony — split/true complements, softer chroma (elegant pairs).
+ * - bold: strong opposites — hue opposition + triadic punch (modern / high contrast).
+ */
+export function getAccent2VariantRawHex(
+  accent1HexInput: string,
+  vibe: BrandVibe,
+  variantIndex: number,
+): string {
+  const accent1 = normalizeHex(accent1HexInput);
+  const [h, s] = hexToHsl(accent1);
+  const i = ((variantIndex % ACCENT2_VARIANT_COUNT) + ACCENT2_VARIANT_COUNT) % ACCENT2_VARIANT_COUNT;
+
+  if (vibe === 'refined') {
+    switch (i) {
+      case 0:
+        return hslToHex((h + 180) % 360, Math.max(s - 14, 28), 48);
+      case 1:
+        return hslToHex((h + 150) % 360, Math.max(s - 10, 34), 46);
+      case 2:
+        return hslToHex((h + 210) % 360, Math.max(s - 10, 34), 47);
+      case 3:
+        return hslToHex((h + 165) % 360, Math.max(s - 12, 32), 49);
+      case 4:
+        return hslToHex((h + 195) % 360, Math.max(s - 12, 32), 49);
+      case 5:
+        return hslToHex((h + 180) % 360, Math.max(s - 18, 26), 44);
+      default:
+        return hslToHex((h + 180) % 360, Math.max(s - 14, 28), 48);
+    }
+  }
+
+  switch (i) {
+    case 0:
+      return hslToHex((h + 180) % 360, Math.min(s + 20, 100), 43);
+    case 1:
+      return hslToHex((h + 175) % 360, Math.min(s + 18, 98), 42);
+    case 2:
+      return hslToHex((h + 185) % 360, Math.min(s + 18, 98), 42);
+    case 3:
+      return hslToHex((h + 120) % 360, Math.min(s + 14, 96), 46);
+    case 4:
+      return hslToHex((h + 240) % 360, Math.min(s + 14, 96), 46);
+    case 5:
+      return hslToHex((h + 180) % 360, Math.min(s + 24, 100), 38);
+    default:
+      return hslToHex((h + 180) % 360, Math.min(s + 20, 100), 43);
+  }
+}
+
+/**
+ * Cycles accent2 variants; skips recipes that cannot meet AA on both backgrounds after adjustment.
+ */
+export function pickNextAccent2Variant(
+  accent1Hex: string,
+  vibe: BrandVibe,
+  lightBg: string,
+  darkBg: string,
+  previousVariantIndex: number,
+): { accent2: string; variantIndex: number } {
+  const start = (previousVariantIndex + 1) % ACCENT2_VARIANT_COUNT;
+
+  for (let t = 0; t < ACCENT2_VARIANT_COUNT; t++) {
+    const variantIndex = (start + t) % ACCENT2_VARIANT_COUNT;
+    const raw = getAccent2VariantRawHex(accent1Hex, vibe, variantIndex);
+    const adjusted = ensureContrastAgainstBothBackgrounds(raw, lightBg, darkBg, 4.5);
+    if (minContrastOnBothBackgrounds(adjusted, lightBg, darkBg) >= 4.5) {
+      return { accent2: adjusted, variantIndex };
+    }
+  }
+
+  const fallbackIdx = start;
+  const raw = getAccent2VariantRawHex(accent1Hex, vibe, fallbackIdx);
+  const adjusted = ensureContrastAgainstBothBackgrounds(raw, lightBg, darkBg, 4.5);
+  return { accent2: adjusted, variantIndex: fallbackIdx };
 }
 
 export function ensureContrast(fg: string, bg: string, target: number): string {
@@ -162,10 +305,9 @@ export function computeBrandPalette(
   const [h, s] = hexToHsl(favHex);
   const lightBg = overrides?.lightBg ?? hslToHex(h, 18, 97);
   const darkBg = overrides?.darkBg ?? hslToHex(h, 30, 8);
-  const accent1 = overrides?.accent1 ?? favHex;
-  const h2 = vibe === 'bold' ? (h + 165) % 360 : (h + 30) % 360;
-  const s2 = vibe === 'bold' ? Math.min(s + 10, 95) : Math.max(s - 15, 40);
-  const accent2 = overrides?.accent2 ?? hslToHex(h2, s2, 45);
+  const accent1 = normalizeHex(overrides?.accent1 ?? favHex);
+  const accent2 =
+    overrides?.accent2 ?? getAccent2VariantRawHex(accent1, vibe, 0);
 
   const bg = theme === 'light' ? lightBg : darkBg;
   const mainText = theme === 'light' ? darkBg : lightBg;
@@ -184,9 +326,3 @@ export function computeBrandPalette(
   };
 }
 
-export function getFontsByVibe(vibe: BrandVibe): { titleFont: string; bodyFont: string } {
-  return {
-    titleFont: vibe === 'bold' ? 'Manrope' : 'Cormorant Garamond',
-    bodyFont: 'Manrope',
-  };
-}

@@ -8,6 +8,7 @@ const MAX_ATTEMPTS = 8;
 
 type StatusJson = {
   phase?: string | null;
+  status?: string | null;
   phaseEndsAt?: string | null;
 };
 
@@ -41,7 +42,7 @@ export default function TrialSuccessClient() {
       try {
         const res = await fetch('/api/payments/status', { credentials: 'include' });
         const json = (await res.json()) as StatusJson;
-        if (res.ok && json.phase === 'trial') {
+        if (res.ok && (json.phase === 'trial' || json.status === 'trialing')) {
           setTrialReady(true);
           setPhaseEndsLabel(formatDateDdMmYyyy(json.phaseEndsAt ?? null));
           if (intervalRef.current) {
@@ -111,7 +112,14 @@ export default function TrialSuccessClient() {
       <div className="mt-6">
         <button
           type="button"
-          onClick={() => router.push('/dashboard')}
+          onClick={() => {
+            try {
+              sessionStorage.setItem('ruta_show_welcome', '1');
+            } catch {
+              // ignore
+            }
+            router.push('/dashboard?welcome=1');
+          }}
           className="inline-flex items-center justify-center rounded-xl bg-[color:var(--accent)] px-6 py-3 text-sm font-semibold text-white transition-[background,transform] hover:brightness-110"
         >
           Відкрити Ruta →

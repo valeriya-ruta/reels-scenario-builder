@@ -1,12 +1,15 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
-import { subscriptionAllowsAppAccess } from '@/lib/subscriptionAccess';
+import {
+  subscriptionAllowsAppAccess,
+  subscriptionNeedsCardVerify,
+} from '@/lib/subscriptionAccess';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-const SUBSCRIPTION_SELECT = 'has_access, access_expires_at, phase';
+const SUBSCRIPTION_SELECT = 'has_access, access_expires_at, phase, status';
 
 function isPublicPath(pathname: string): boolean {
   if (pathname === '/' || pathname === '/signup') return true;
@@ -77,6 +80,7 @@ export async function middleware(request: NextRequest) {
       pathname.startsWith('/competitor-analysis') ||
       pathname.startsWith('/storytellings') ||
       pathname.startsWith('/storytelling') ||
+      pathname.startsWith('/stories') ||
       pathname.startsWith('/project')
     ) {
       const url = request.nextUrl.clone();
@@ -94,7 +98,7 @@ export async function middleware(request: NextRequest) {
         .eq('user_id', user.id)
         .maybeSingle();
 
-      if (subscriptionAllowsAppAccess(sub)) {
+      if (!subscriptionNeedsCardVerify(sub) || subscriptionAllowsAppAccess(sub)) {
         const url = request.nextUrl.clone();
         url.pathname = '/dashboard';
         return NextResponse.redirect(url);

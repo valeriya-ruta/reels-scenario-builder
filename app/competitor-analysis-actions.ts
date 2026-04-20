@@ -13,7 +13,12 @@ import {
   getActorRun,
   startCompetitorActorRun,
 } from '@/lib/ai/competitorReelsApify';
-import type { IdeaScanRow, IdeaScanSummary, IdeaTopReelsPayload } from '@/lib/ideaScanTypes';
+import {
+  parseIdeaScanReelStringMap,
+  type IdeaScanRow,
+  type IdeaScanSummary,
+  type IdeaTopReelsPayload,
+} from '@/lib/ideaScanTypes';
 import { transcribeMediaFromUrl } from '@/lib/ai/sttProvider';
 
 const APIFY_BASE = 'https://api.apify.com/v2';
@@ -303,9 +308,48 @@ export type TranscribeReelVideoResult =
   | { ok: true; transcript: string }
   | { ok: false; error: string };
 
-/** Full spoken transcript from the reel’s video file (not scene-split). */
+async function mergeIdeaScanReelTranscript(
+  scanId: string,
+  shortCode: string,
+  transcript: string
+): Promise<void> {
+  const user = await requireAuth();
+  if (!user) return;
+  const supabase = await createServerSupabaseClient();
+  const { data: row, error: fetchErr } = await supabase
+    .from('idea_scans')
+    .select('reel_transcripts')
+    .eq('id', scanId)
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  if (fetchErr) {
+    console.error('mergeIdeaScanReelTranscript fetch', fetchErr);
+    return;
+  }
+
+  const merged = {
+    ...parseIdeaScanReelStringMap(row?.reel_transcripts),
+    [shortCode]: transcript,
+  };
+
+  const { error: updateErr } = await supabase
+    .from('idea_scans')
+    .update({ reel_transcripts: merged })
+    .eq('id', scanId)
+    .eq('user_id', user.id);
+
+  if (updateErr) {
+    console.error('mergeIdeaScanReelTranscript update', updateErr);
+  }
+}
+
+export type TranscribeCompetitorContext = { scanId: string; shortCode: string };
+
+/** Full spoken transcript from the reel’s video file (not scene-split). Persists when `ctx` is set. */
 export async function transcribeCompetitorReelVideo(
-  videoUrl: string
+  videoUrl: string,
+  ctx?: TranscribeCompetitorContext
 ): Promise<TranscribeReelVideoResult> {
   try {
     const user = await requireAuth();
@@ -313,6 +357,9 @@ export async function transcribeCompetitorReelVideo(
     const url = videoUrl.trim();
     if (!url) return { ok: false, error: 'Немає посилання на відео.' };
     const result = await transcribeMediaFromUrl(url);
+    if (ctx) {
+      await mergeIdeaScanReelTranscript(ctx.scanId, ctx.shortCode, result.transcript);
+    }
     return { ok: true, transcript: result.transcript };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };

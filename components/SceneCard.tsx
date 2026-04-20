@@ -253,13 +253,12 @@ export default function SceneCard({
     locationSummaryLabel,
     formatLabel(scene.scene_transition_action || 'no_action'),
   ].join(' · ');
-  const editorNoteIsDurationHint = scene.editor_note?.trim().startsWith('~');
-  const aiDurationHint = editorNoteIsDurationHint
-    ? scene.editor_note!.trim()
-    : null;
+  /** Legacy: AI used to store "~3с" in editor_note; ignore for «Примітки» summary. */
+  const editorNoteIsLegacyAiDurationHint =
+    scene.editor_note?.trim()?.startsWith('~') ?? false;
   const hasCrewNotes = Boolean(
     scene.actor_note?.trim() ||
-      (scene.editor_note?.trim() && !editorNoteIsDurationHint)
+      (scene.editor_note?.trim() && !editorNoteIsLegacyAiDurationHint)
   );
   const dialogueSeconds = estimateDialogueSeconds(scene.lines);
 
@@ -398,14 +397,7 @@ export default function SceneCard({
           </div>
           <div className="flex shrink-0 items-center gap-2 self-start pt-0.5">
             {!isExpanded && hasDialogue && (
-              <div className="flex items-center gap-1.5">
-                <DialogueDurationBadge seconds={dialogueSeconds} />
-                {aiDurationHint && (
-                  <span className="text-xs tabular-nums text-zinc-500" title="Орієнтовний час з AI">
-                    {aiDurationHint}
-                  </span>
-                )}
-              </div>
+              <DialogueDurationBadge seconds={dialogueSeconds} />
             )}
             <button
               onClick={(e) => {
@@ -499,11 +491,8 @@ export default function SceneCard({
                   </div>
                 )}
                 {hasDialogue && (
-                  <div className="absolute bottom-2 right-2 z-10 flex items-center gap-1.5">
+                  <div className="absolute bottom-2 right-2 z-10">
                     <DialogueDurationBadge seconds={dialogueSeconds} />
-                    {aiDurationHint && (
-                      <span className="text-xs tabular-nums text-zinc-400">{aiDurationHint}</span>
-                    )}
                   </div>
                 )}
               </div>

@@ -3,6 +3,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { createClient } from '@/lib/supabaseClient';
 import type { BrandSettings, BrandTheme, BrandVibe } from '@/lib/brand';
+import { normalizeAccentStyle } from '@/lib/brand';
+import { loadBrandFontsCatalog, loadGoogleFont } from '@/lib/loadGoogleFont';
+import { resolveBrandFont } from '@/lib/brandFonts';
 
 interface BrandSettingsRow {
   theme: BrandTheme;
@@ -12,8 +15,7 @@ interface BrandSettingsRow {
   color_dark_bg: string;
   color_accent1: string;
   color_accent2: string;
-  title_font: string;
-  body_font: string;
+  font_id: string;
 }
 
 interface BrandStore {
@@ -25,7 +27,7 @@ interface BrandStore {
 
 const BrandContext = createContext<BrandStore | null>(null);
 
-function mapRow(row: BrandSettingsRow): BrandSettings {
+function mapRow(row: BrandSettingsRow, accentFromProfile: string | null | undefined): BrandSettings {
   return {
     theme: row.theme,
     vibe: row.vibe,
@@ -36,8 +38,8 @@ function mapRow(row: BrandSettingsRow): BrandSettings {
       accent1: row.color_accent1,
       accent2: row.color_accent2,
     },
-    titleFont: row.title_font,
-    bodyFont: row.body_font,
+    fontId: row.font_id,
+    accentStyle: normalizeAccentStyle(accentFromProfile),
   };
 }
 
@@ -47,20 +49,37 @@ export function BrandProvider({ children }: { children: ReactNode }) {
 
   const refetchBrand = useCallback(async () => {
     const supabase = createClient();
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('brand_settings')
-      .select(
-        'theme,vibe,fav_color_hex,color_light_bg,color_dark_bg,color_accent1,color_accent2,title_font,body_font',
-      )
-      .maybeSingle<BrandSettingsRow>();
-    if (error) {
-      console.error('Failed to load brand settings:', error);
+    // Do not set loading=true here: when the user has no brand row yet, CarouselPageClient
+    // shows BrandDNASetup only while !loading — toggling loading would unmount the wizard
+    // and discard theme/color choices mid-flow.
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const uid = user?.id;
+
+    const [brandRes, profileRes] = await Promise.all([
+      supabase
+        .from('brand_settings')
+        .select(
+          'theme,vibe,fav_color_hex,color_light_bg,color_dark_bg,color_accent1,color_accent2,font_id',
+        )
+        .maybeSingle<BrandSettingsRow>(),
+      uid
+        ? supabase.from('profiles').select('accent_style').eq('id', uid).maybeSingle<{ accent_style: string | null }>()
+        : Promise.resolve({ data: null as { accent_style: string | null } | null, error: null }),
+    ]);
+
+    if (brandRes.error) {
+      console.error('Failed to load brand settings:', brandRes.error);
       setBrandSettings(null);
       setLoading(false);
       return;
     }
-    setBrandSettings(data ? mapRow(data) : null);
+    if (profileRes.error) {
+      console.error('Failed to load profile accent_style:', profileRes.error);
+    }
+    const accentFromProfile = profileRes.data?.accent_style;
+    setBrandSettings(brandRes.data ? mapRow(brandRes.data, accentFromProfile) : null);
     setLoading(false);
   }, []);
 
@@ -70,6 +89,12 @@ export function BrandProvider({ children }: { children: ReactNode }) {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [refetchBrand]);
+
+  useEffect(() => {
+    if (!brandSettings) return;
+    loadBrandFontsCatalog();
+    loadGoogleFont(resolveBrandFont(brandSettings.fontId));
+  }, [brandSettings]);
 
   const value = useMemo(
     () => ({ brandSettings, loading, refetchBrand, setBrandSettings }),

@@ -14,7 +14,6 @@ interface RantResponse {
     id?: number;
     label?: string;
     text?: string;
-    duration_hint?: string;
   }>;
 }
 
@@ -70,15 +69,12 @@ const SYSTEM_PROMPT = `Ти — досвідчений сценарист кор
     {
       "id": 1,
       "label": "Проблема",
-      "text": "Текст сцени",
-      "duration_hint": "~5с"
+      "text": "Текст сцени"
     },
     ...
   ],
   "cta": "Текст CTA"
-}
-
-Поле duration_hint — приблизний час озвучення (орієнтуйся на темп звичайної розмовної мови).`;
+}`;
 
 function buildUserContent(rant: string): string {
   return `Ось рент автора:
@@ -102,11 +98,10 @@ function flattenToSceneDrafts(parsed: RantResponse): RantSceneDraft[] {
     const text = (s.text ?? '').trim();
     if (!text) continue;
     const label = (s.label ?? '').trim();
-    const durationHint = (s.duration_hint ?? '').trim();
     rows.push({
       text,
       name: label || null,
-      editor_note: durationHint || null,
+      editor_note: null,
     });
   }
 

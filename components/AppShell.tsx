@@ -2,7 +2,9 @@
 
 import { useState, useRef, useCallback } from 'react';
 import Sidebar from './Sidebar';
+import MobileTabBar from './MobileTabBar';
 import { NavBadgeProvider, NavBadgePathSync } from './NavBadgeContext';
+import { RantResultsProvider } from './RantResultsContext';
 import { ToastProvider } from './ToastProvider';
 import { BrandProvider } from './BrandProvider';
 
@@ -59,76 +61,81 @@ export default function AppShell({ children, userName, userEmail }: AppShellProp
 
   return (
     <NavBadgeProvider>
-      <NavBadgePathSync />
-      <ToastProvider>
-        <BrandProvider>
-          <div className="flex h-screen flex-col overflow-hidden">
-            {/* Top bar */}
-            <header className="flex shrink-0 items-center gap-3 border-b border-[color:var(--border)] bg-white px-4 py-3">
-              <button
-                type="button"
-                onClick={toggleSidebar}
-                className="rounded-lg p-2 text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
-                aria-label="Меню"
-                aria-expanded={sidebarOpen}
-              >
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 18 18"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
+      <RantResultsProvider>
+        <NavBadgePathSync />
+        <ToastProvider>
+          <BrandProvider>
+            <div className="flex h-screen flex-col overflow-hidden">
+              {/* Top bar */}
+              <header className="flex shrink-0 items-center gap-3 border-b border-[color:var(--border)] bg-white px-4 py-3">
+                <button
+                  type="button"
+                  onClick={toggleSidebar}
+                  className="hidden rounded-lg p-2 text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 md:block"
+                  aria-label="Меню"
+                  aria-expanded={sidebarOpen}
                 >
-                  <path
-                    d="M2 4h14M2 9h14M2 14h14"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                  />
-                </svg>
-              </button>
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 18 18"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      d="M2 4h14M2 9h14M2 14h14"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </button>
 
-              <a href="/dashboard" className="group flex flex-col leading-none">
-                <span className="font-display text-lg font-bold tracking-wide text-zinc-900 group-hover:text-black">
-                  Ruta
-                </span>
-                <span className="mt-0.5 text-[0.8rem] font-normal leading-normal tracking-wide text-zinc-600 group-hover:text-zinc-800">
-                  Твоя контент-подружка
-                </span>
-              </a>
-            </header>
+                <a href="/dashboard" className="group flex flex-col leading-none">
+                  <span className="font-display text-lg font-bold tracking-wide text-zinc-900 group-hover:text-black">
+                    Ruta
+                  </span>
+                  <span className="mt-0.5 text-[0.8rem] font-normal leading-normal tracking-wide text-zinc-600 group-hover:text-zinc-800">
+                    Твоя контент-подружка
+                  </span>
+                </a>
+              </header>
 
-            {/* Body: sidebar + content */}
-            <div className="flex flex-1 overflow-hidden">
-              {/* Always rendered so the slide transition plays; width collapses to 0 when closed */}
-              <div
-                className={`relative flex shrink-0 overflow-hidden ${sidebarOpen ? '' : 'pointer-events-none'}`}
-                style={{
-                  width: sidebarOpen ? sidebarWidth : 0,
-                  transition: isResizing ? 'none' : 'width 0.25s ease',
-                }}
-              >
+              {/* Body: sidebar + content */}
+              <div className="flex flex-1 overflow-hidden">
+                {/* Always rendered so the slide transition plays; width collapses to 0 when closed */}
                 <div
-                  style={{ width: sidebarWidth, minWidth: sidebarWidth }}
-                  className="flex h-full"
-                  inert={!sidebarOpen ? true : undefined}
+                  className={`relative hidden shrink-0 overflow-hidden md:flex ${sidebarOpen ? '' : 'pointer-events-none'}`}
+                  style={{
+                    width: sidebarOpen ? sidebarWidth : 0,
+                    transition: isResizing ? 'none' : 'width 0.25s ease',
+                  }}
                 >
-                  <Sidebar userName={userName} userEmail={userEmail} />
-                </div>
-                {/* Drag-to-resize handle */}
-                {sidebarOpen && (
                   <div
-                    onMouseDown={startResize}
-                    className="absolute right-0 top-0 z-10 h-full w-1.5 cursor-col-resize transition-colors hover:bg-zinc-400/50"
-                  />
-                )}
-              </div>
+                    style={{ width: sidebarWidth, minWidth: sidebarWidth }}
+                    className="flex h-full"
+                    inert={!sidebarOpen ? true : undefined}
+                  >
+                    <Sidebar userName={userName} userEmail={userEmail} />
+                  </div>
+                  {/* Drag-to-resize handle */}
+                  {sidebarOpen && (
+                    <div
+                      onMouseDown={startResize}
+                      className="absolute right-0 top-0 z-10 h-full w-1.5 cursor-col-resize transition-colors hover:bg-zinc-400/50"
+                    />
+                  )}
+                </div>
 
-              <main className="page-enter flex-1 overflow-y-auto bg-white px-8 py-8">{children}</main>
+                <main className="page-enter flex-1 overflow-y-auto bg-white px-8 pt-8 pb-20 md:py-8">
+                  {children}
+                </main>
+              </div>
+              <MobileTabBar />
             </div>
-          </div>
-        </BrandProvider>
-      </ToastProvider>
+          </BrandProvider>
+        </ToastProvider>
+      </RantResultsProvider>
     </NavBadgeProvider>
   );
 }

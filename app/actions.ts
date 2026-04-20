@@ -4,10 +4,14 @@ import { requireAuth } from '@/lib/auth';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import { nanoid } from 'nanoid';
 import { Project, Scene, Transition, SnapshotData, Location } from '@/lib/domain';
+import {
+  type IdeaScanReelStringMap,
+  parseIdeaScanReelStringMap,
+} from '@/lib/ideaScanTypes';
 import { DEFAULT_SCENE_VALUES } from '@/lib/sceneDefaults';
 import { headers } from 'next/headers';
 import { resolveReferenceMediaUrl } from '@/lib/ai/referenceMedia';
-import { transcribeMediaFromUrl } from '@/lib/ai/sttProvider';
+import { transcribeMediaFromUrl, type TranscriptSegment } from '@/lib/ai/sttProvider';
 import { splitTranscriptIntoScenes } from '@/lib/ai/sceneSegmentation';
 import { transformRantToScript } from '@/lib/ai/rantToScript';
 import { templatizeTranscriptToScenes } from '@/lib/ai/transcriptToTemplate';
@@ -573,8 +577,15 @@ export async function generateReelFromRant(
 }
 
 export type SaveCompetitorReelToScenarioResult =
-  | { ok: true; projectId: string }
+  | {
+      ok: true;
+      projectId: string;
+      user_note: IdeaScanReelStringMap;
+      reference_url: IdeaScanReelStringMap;
+    }
   | { ok: false; error: string };
+
+const MAX_COMPETITOR_REEL_NOTE = 500;
 
 /**
  * Transcribes the reel video, generalizes the transcript into a reusable template (placeholders in [brackets]),
@@ -582,7 +593,7 @@ export type SaveCompetitorReelToScenarioResult =
  */
 export async function saveCompetitorReelToScenario(
   scanId: string,
-  reel: { shortCode: string; videoUrl: string; url: string }
+  reel: { shortCode: string; videoUrl: string; url: string; userNote?: string }
 ): Promise<SaveCompetitorReelToScenarioResult> {
   try {
     const user = await requireAuth();
@@ -596,11 +607,14 @@ export async function saveCompetitorReelToScenario(
       return { ok: false, error: 'Немає відео для транскрипції.' };
     }
 
+    const refUrlRaw = reel.url.trim();
+    const refNoteRaw = (reel.userNote ?? '').trim().slice(0, MAX_COMPETITOR_REEL_NOTE);
+
     const supabase = await createServerSupabaseClient();
 
     const { data: scanRow, error: scanErr } = await supabase
       .from('idea_scans')
-      .select('id, saved_reel_ids')
+      .select('id, saved_reel_ids, user_note, reference_url')
       .eq('id', scanId)
       .eq('user_id', user.id)
       .maybeSingle();
@@ -614,10 +628,47 @@ export async function saveCompetitorReelToScenario(
       return { ok: false, error: 'Цей рілс уже збережено.' };
     }
 
-    const transcriptResult = await transcribeMediaFromUrl(videoUrl);
-    const { title, scenes } = await templatizeTranscriptToScenes(
-      transcriptResult.transcript
-    );
+    let transcript = '';
+    let segments: TranscriptSegment[] = [];
+
+    try {
+      const transcriptResult = await transcribeMediaFromUrl(videoUrl);
+      transcript = transcriptResult.transcript;
+      segments = transcriptResult.segments;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const canBrief = refNoteRaw.length > 0 || refUrlRaw.length > 0;
+      if (canBrief && msg.includes('empty')) {
+        transcript = '';
+        segments = [];
+      } else {
+        throw e;
+      }
+    }
+
+    const tplContext = {
+      referenceUrl: refUrlRaw || null,
+      referenceNote: refNoteRaw || null,
+    };
+
+    let title = 'Рілс з конкурента';
+    let scenes: Array<{ text: string }> = [];
+
+    try {
+      const templated = await templatizeTranscriptToScenes(transcript, tplContext);
+      title = templated.title;
+      scenes = templated.scenes;
+    } catch (templateError) {
+      if (!transcript.trim()) {
+        throw templateError;
+      }
+      console.warn('Template generation failed, using deterministic scene split.', templateError);
+      const fallbackDrafts = await splitTranscriptIntoScenes(transcript, segments);
+      scenes = fallbackDrafts.map((draft) => ({ text: draft.text.trim() })).filter((s) => s.text);
+      if (scenes.length === 0) {
+        throw templateError;
+      }
+    }
 
     const projectInsert: Record<string, unknown> = {
       name: title,
@@ -625,6 +676,8 @@ export async function saveCompetitorReelToScenario(
       user_id: user.id,
       project_type: 'reels',
       scenario_unseen: true,
+      reference_url: refUrlRaw || null,
+      reference_note: refNoteRaw || null,
     };
 
     const { data: project, error: projectError } = await supabase
@@ -640,6 +693,13 @@ export async function saveCompetitorReelToScenario(
           ok: false,
           error:
             'Потрібна міграція БД (колонки scenario_unseen / project_type). Запусти migration_projects_scenario_unseen.sql у Supabase.',
+        };
+      }
+      if (msg.includes('reference_')) {
+        return {
+          ok: false,
+          error:
+            'Потрібна міграція БД (колонки reference_url / reference_note на projects). Запусти migration_idea_scans_reel_notes_and_projects_reference.sql у Supabase.',
         };
       }
       return {
@@ -665,18 +725,32 @@ export async function saveCompetitorReelToScenario(
       };
     }
 
+    const existingNotes = parseIdeaScanReelStringMap(scanRow.user_note);
+    const existingUrls = parseIdeaScanReelStringMap(scanRow.reference_url);
+    existingNotes[shortCode] = refNoteRaw;
+    existingUrls[shortCode] = refUrlRaw;
+
     const nextSaved = [...saved, shortCode];
     const { error: updateErr } = await supabase
       .from('idea_scans')
-      .update({ saved_reel_ids: nextSaved })
+      .update({
+        saved_reel_ids: nextSaved,
+        user_note: existingNotes,
+        reference_url: existingUrls,
+      })
       .eq('id', scanId)
       .eq('user_id', user.id);
 
     if (updateErr) {
-      console.error('idea_scans saved_reel_ids update', updateErr);
+      console.error('idea_scans saved reels + notes update', updateErr);
     }
 
-    return { ok: true, projectId: project.id as string };
+    return {
+      ok: true,
+      projectId: project.id as string,
+      user_note: existingNotes,
+      reference_url: existingUrls,
+    };
   } catch (error) {
     const message =
       error instanceof Error && error.message.trim().length > 0

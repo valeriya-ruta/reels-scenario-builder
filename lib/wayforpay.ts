@@ -71,11 +71,13 @@ export function buildVerifyFormParams(opts: {
     );
   }
 
-  const amount = '0';
+  const amount = '1';
   const currency = 'UAH';
+  const transactionType = 'VERIFY';
   const sig = hmacMd5([ma, dom, opts.orderReference, amount, currency].join(';'), sk);
 
   return {
+    transactionType,
     merchantAccount: ma,
     merchantAuthType: 'SimpleSignature',
     merchantDomainName: dom,

@@ -1,6 +1,14 @@
 import { join } from 'path';
 import { createCanvas, GlobalFonts, loadImage, type SKRSContext2D } from '@napi-rs/canvas';
 import sharp from 'sharp';
+import type { BrandAccentStyle } from '@/lib/brand';
+import { normalizeAccentStyle } from '@/lib/brand';
+import { parseAccentSpans } from '@/lib/carousel/accentSpans';
+import {
+  drawSegmentedLine,
+  layoutWords,
+  segmentsToWords,
+} from '@/lib/carousel/canvasSegmentedText';
 
 const CANVAS = 1080;
 const MARGIN_X = 100;
@@ -18,6 +26,7 @@ function ensureFonts() {
   try {
     GlobalFonts.registerFromPath(join(fontDir, 'NotoSans-Bold.ttf'), 'NotoSansBold');
     GlobalFonts.registerFromPath(join(fontDir, 'NotoSans-Regular.ttf'), 'NotoSans');
+    GlobalFonts.registerFromPath(join(fontDir, 'NotoSans-Italic.ttf'), 'NotoSansItalic');
     fontsRegistered = true;
   } catch (e) {
     console.warn('[carousel] Failed to register Noto fonts:', e);
@@ -37,37 +46,100 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } {
   return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
 }
 
-function wrapLines(
+function fontSpec(fontSize: number, plainBaseIsBold: boolean): string {
+  return plainBaseIsBold ? `${fontSize}px NotoSansBold` : `${fontSize}px NotoSans`;
+}
+
+/** Alphabetic baseline Y for the first line when the line box top is `topY` (matches former textBaseline: top layout). */
+function firstAlphabeticBaseline(
+  ctx: SKRSContext2D,
+  fontSize: number,
+  plainBaseIsBold: boolean,
+  topY: number,
+): number {
+  ctx.font = fontSpec(fontSize, plainBaseIsBold);
+  const m = ctx.measureText('Mg');
+  const ascent =
+    typeof m.actualBoundingBoxAscent === 'number' && m.actualBoundingBoxAscent > 0
+      ? m.actualBoundingBoxAscent
+      : fontSize * 0.72;
+  return topY + ascent;
+}
+
+function segmentedBlockHeight(
   ctx: SKRSContext2D,
   text: string,
   maxWidth: number,
-  lineHeight: number
-): { lines: string[]; height: number } {
+  fontSize: number,
+  lineHeight: number,
+  plainBaseIsBold: boolean,
+): number {
   const trimmed = text.trim();
-  if (!trimmed) {
-    return { lines: [], height: 0 };
+  if (!trimmed) return 0;
+  const segments = parseAccentSpans(text);
+  const words = segmentsToWords(segments);
+  const measure = (t: string) => {
+    ctx.font = fontSpec(fontSize, plainBaseIsBold);
+    return ctx.measureText(t).width;
+  };
+  const lines = layoutWords(measure, words, maxWidth);
+  return Math.max(lines.length, 1) * lineHeight;
+}
+
+function drawSegmentedBlock(
+  ctx: SKRSContext2D,
+  text: string,
+  x: number,
+  /** Y of the top of the first line (same as legacy `textBaseline: 'top'`). */
+  firstLineTopY: number,
+  maxWidth: number,
+  fontSize: number,
+  lineHeight: number,
+  baseColor: string,
+  accentColor: string,
+  accentStyle: BrandAccentStyle,
+  align: 'left' | 'center' | 'right',
+  plainBaseIsBold: boolean,
+  seed: number,
+): number {
+  const trimmed = text.trim();
+  if (!trimmed) return firstLineTopY;
+  const segments = parseAccentSpans(text);
+  const words = segmentsToWords(segments);
+  const measure = (t: string) => {
+    ctx.font = fontSpec(fontSize, plainBaseIsBold);
+    return ctx.measureText(t).width;
+  };
+  const lines = layoutWords(measure, words, maxWidth);
+  let baselineY = firstAlphabeticBaseline(ctx, fontSize, plainBaseIsBold, firstLineTopY);
+  let i = 0;
+  for (const line of lines) {
+    drawSegmentedLine(
+      ctx,
+      line,
+      x,
+      baselineY,
+      fontSize,
+      baseColor,
+      accentColor,
+      accentStyle,
+      align,
+      maxWidth,
+      false,
+      seed + i * 31,
+      plainBaseIsBold,
+    );
+    baselineY += lineHeight;
+    i++;
   }
-  const words = trimmed.split(/\s+/).filter(Boolean);
-  const lines: string[] = [];
-  let line = '';
-  for (const word of words) {
-    const test = line ? `${line} ${word}` : word;
-    if (ctx.measureText(test).width > maxWidth && line) {
-      lines.push(line);
-      line = word;
-    } else {
-      line = test;
-    }
-  }
-  if (line) lines.push(line);
-  const height = Math.max(lines.length, 1) * lineHeight;
-  return { lines, height };
+  return firstLineTopY + Math.max(lines.length, 1) * lineHeight;
 }
 
 export type GenerateSlideInput = {
   title: string;
   body: string;
   placement: 'top' | 'center' | 'bottom';
+  text_align: 'left' | 'center' | 'right';
   background_type: 'color' | 'image';
   background_color: string;
   background_image_url: string | null;
@@ -77,12 +149,18 @@ export type GenerateSlideInput = {
   body_color: string;
   slide_index: number;
   total_slides: number;
+  /** Brand DNA accent for `{…}` spans (legacy renderer). */
+  accent_color?: string;
+  accent_style?: BrandAccentStyle;
 };
 
 export async function renderSlideImagePng(input: GenerateSlideInput): Promise<Buffer> {
   ensureFonts();
   const canvas = createCanvas(CANVAS, CANVAS);
   const ctx = canvas.getContext('2d');
+
+  const accentColor = input.accent_color?.trim() || '#e05c40';
+  const accentStyle = normalizeAccentStyle(input.accent_style);
 
   if (input.background_type === 'color') {
     const { r, g, b } = hexToRgb(input.background_color || '#1A1A2E');
@@ -122,23 +200,31 @@ export async function renderSlideImagePng(input: GenerateSlideInput): Promise<Bu
     ctx.fillRect(0, 0, CANVAS, CANVAS);
   }
 
-  const titleFont = fontsRegistered ? `${TITLE_SIZE}px NotoSansBold` : `bold ${TITLE_SIZE}px sans-serif`;
-  const bodyFont = fontsRegistered ? `${BODY_SIZE}px NotoSans` : `${BODY_SIZE}px sans-serif`;
   const titleLineHeight = Math.round(TITLE_SIZE * 1.25);
   const bodyLineHeight = Math.round(BODY_SIZE * 1.25);
 
-  ctx.font = titleFont;
   const tc = hexToRgb(input.title_color || '#FFFFFF');
-  ctx.fillStyle = `rgb(${tc.r},${tc.g},${tc.b})`;
-  const titleWrap = wrapLines(ctx, input.title || '', MAX_TEXT_WIDTH, titleLineHeight);
-
-  ctx.font = bodyFont;
   const bc = hexToRgb(input.body_color || '#FFFFFF');
-  ctx.fillStyle = `rgb(${bc.r},${bc.g},${bc.b})`;
-  const bodyWrap = wrapLines(ctx, input.body || '', MAX_TEXT_WIDTH, bodyLineHeight);
+  const titleColorCss = `rgb(${tc.r},${tc.g},${tc.b})`;
+  const bodyColorCss = `rgb(${bc.r},${bc.g},${bc.b})`;
 
-  const titleBlockH = titleWrap.lines.length ? titleWrap.height : 0;
-  const bodyBlockH = bodyWrap.lines.length ? bodyWrap.height : 0;
+  const titleBlockH = segmentedBlockHeight(
+    ctx,
+    input.title || '',
+    MAX_TEXT_WIDTH,
+    TITLE_SIZE,
+    titleLineHeight,
+    true,
+  );
+  const bodyBlockH = segmentedBlockHeight(
+    ctx,
+    input.body || '',
+    MAX_TEXT_WIDTH,
+    BODY_SIZE,
+    bodyLineHeight,
+    false,
+  );
+
   const betweenGap = titleBlockH && bodyBlockH ? TITLE_BODY_GAP : 0;
   const textBlockHeight = titleBlockH + betweenGap + bodyBlockH;
 
@@ -151,23 +237,42 @@ export async function renderSlideImagePng(input: GenerateSlideInput): Promise<Bu
     textBlockY = CANVAS - textBlockHeight - 100;
   }
 
-  ctx.textBaseline = 'top';
-  let y = textBlockY;
-  ctx.font = titleFont;
-  ctx.fillStyle = `rgb(${tc.r},${tc.g},${tc.b})`;
-  for (const line of titleWrap.lines) {
-    ctx.fillText(line, MARGIN_X, y);
-    y += titleLineHeight;
+  const align = input.text_align ?? 'left';
+
+  let nextTopY = textBlockY;
+  nextTopY = drawSegmentedBlock(
+    ctx,
+    input.title || '',
+    MARGIN_X,
+    nextTopY,
+    MAX_TEXT_WIDTH,
+    TITLE_SIZE,
+    titleLineHeight,
+    titleColorCss,
+    accentColor,
+    accentStyle,
+    align,
+    true,
+    100,
+  );
+  if (titleBlockH && bodyBlockH) {
+    nextTopY += TITLE_BODY_GAP;
   }
-  if (titleWrap.lines.length && bodyWrap.lines.length) {
-    y += TITLE_BODY_GAP;
-  }
-  ctx.font = bodyFont;
-  ctx.fillStyle = `rgb(${bc.r},${bc.g},${bc.b})`;
-  for (const line of bodyWrap.lines) {
-    ctx.fillText(line, MARGIN_X, y);
-    y += bodyLineHeight;
-  }
+  drawSegmentedBlock(
+    ctx,
+    input.body || '',
+    MARGIN_X,
+    nextTopY,
+    MAX_TEXT_WIDTH,
+    BODY_SIZE,
+    bodyLineHeight,
+    bodyColorCss,
+    accentColor,
+    accentStyle,
+    align,
+    false,
+    300,
+  );
 
   const slideLabel = `${input.slide_index} / ${input.total_slides}`;
   ctx.textBaseline = 'alphabetic';

@@ -1,38 +1,26 @@
 'use client';
 
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { DragEndEvent } from '@dnd-kit/core';
+import { arrayMove } from '@dnd-kit/sortable';
+import { Check, Circle, Loader2 } from 'lucide-react';
+import type { CarouselRantOutput, Slide } from '@/lib/carouselTypes';
+import { CAROUSEL_DEFAULT_BG, resolveSlideKind } from '@/lib/carouselTypes';
+import { createEmptySlide, normalizeSlidesFromDb } from '@/lib/carouselSlides';
 import {
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-} from 'react';
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from '@dnd-kit/core';
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import { nanoid } from 'nanoid';
-import { GripVertical, Trash2, Loader2, Check, Circle, ChevronDown, ChevronRight } from 'lucide-react';
-import type { Slide, SlidePlacement } from '@/lib/carouselTypes';
-import { CAROUSEL_DEFAULT_BG } from '@/lib/carouselTypes';
+  saveCarouselSlides,
+  updateCarouselProjectName,
+  updateCarouselWatermarkHandle,
+} from '@/app/carousel-actions';
+import { createClient } from '@/lib/supabaseClient';
 import { useNavBadges } from '@/components/NavBadgeContext';
+import { readPendingCarouselFromStorage, useRantResults } from '@/components/RantResultsContext';
 import { useBrandStore } from '@/components/BrandProvider';
-import { normalizeHex } from '@/lib/brand';
+import type { BrandAccentStyle } from '@/lib/brand';
+import { normalizeAccentStyle, normalizeHex } from '@/lib/brand';
+import Link from 'next/link';
+import { resolveBrandFont } from '@/lib/brandFonts';
+import CarouselEditorLayout from '@/components/carousel/CarouselEditorLayout';
 
 const MAX_SLIDES = 20;
 const AA_CONTRAST_MIN = 4.5;
@@ -57,25 +45,8 @@ function getContrastRatio(foreground: string, background: string): number {
   return (hi + 0.05) / (lo + 0.05);
 }
 
-function createSlide(): Slide {
-  return {
-    id: nanoid(),
-    title: '',
-    body: '',
-    placement: 'center',
-    backgroundType: 'color',
-    backgroundColor: CAROUSEL_DEFAULT_BG,
-    backgroundImageUrl: null,
-    backgroundImageBase64: null,
-    titleColor: '#FFFFFF',
-    bodyColor: '#FFFFFF',
-    generatedImageBase64: null,
-  };
-}
-
-function stripDataUrlBase64(data: string): string {
-  const m = data.match(/^data:[^;]+;base64,(.+)$/);
-  return m ? m[1] : data;
+function isCarouselEmpty(slides: Slide[]): boolean {
+  return slides.every((s) => !s.title.trim() && !s.body.trim() && !s.generatedImageBase64);
 }
 
 type UnsplashHit = { id: string; regular: string; thumb: string };
@@ -96,39 +67,34 @@ function UnsplashModal({
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const load = useCallback(
-    async (q: string, p: number, append: boolean) => {
-      setLoading(true);
-      setErr(null);
-      try {
-        const res = await fetch(
-          `/api/unsplash/search?${new URLSearchParams({ query: q, page: String(p) })}`
-        );
-        const data = (await res.json()) as {
-          configured?: boolean;
-          results?: UnsplashHit[];
-          error?: string;
-        };
-        if (data.configured === false) {
-          setConfigured(false);
-          setHits([]);
-          return;
-        }
-        setConfigured(true);
-        if (!res.ok) {
-          setErr(data.error ?? 'Помилка');
-          return;
-        }
-        const next = data.results ?? [];
-        setHits((prev) => (append ? [...prev, ...next] : next));
-      } catch {
-        setErr('Не вдалося завантажити');
-      } finally {
-        setLoading(false);
+  const load = useCallback(async (q: string, p: number, append: boolean) => {
+    setLoading(true);
+    setErr(null);
+    try {
+      const res = await fetch(`/api/unsplash/search?${new URLSearchParams({ query: q, page: String(p) })}`);
+      const data = (await res.json()) as {
+        configured?: boolean;
+        results?: UnsplashHit[];
+        error?: string;
+      };
+      if (data.configured === false) {
+        setConfigured(false);
+        setHits([]);
+        return;
       }
-    },
-    []
-  );
+      setConfigured(true);
+      if (!res.ok) {
+        setErr(data.error ?? 'Помилка');
+        return;
+      }
+      const next = data.results ?? [];
+      setHits((prev) => (append ? [...prev, ...next] : next));
+    } catch {
+      setErr('Не вдалося завантажити');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -142,11 +108,7 @@ function UnsplashModal({
   if (!open) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4"
-      role="dialog"
-      aria-modal
-    >
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal>
       <button type="button" className="absolute inset-0 cursor-default" aria-label="Закрити" onClick={onClose} />
       <div
         className="relative z-[201] max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-[color:var(--border)] bg-white p-5 shadow-xl"
@@ -164,9 +126,7 @@ function UnsplashModal({
           </button>
         </div>
         {!configured ? (
-          <p className="text-sm leading-relaxed text-zinc-600">
-            Unsplash не налаштовано. Завантажте зображення вручну.
-          </p>
+          <p className="text-sm leading-relaxed text-zinc-600">Unsplash не налаштовано. Завантажте зображення вручну.</p>
         ) : (
           <>
             <div className="flex gap-2">
@@ -232,444 +192,29 @@ function UnsplashModal({
   );
 }
 
-function PlacementToggle({
-  value,
-  onChange,
-}: {
-  value: SlidePlacement;
-  onChange: (p: SlidePlacement) => void;
-}) {
-  const opts: { id: SlidePlacement; label: string }[] = [
-    { id: 'top', label: 'Зверху' },
-    { id: 'center', label: 'По центру' },
-    { id: 'bottom', label: 'Знизу' },
-  ];
-  return (
-    <div className="flex flex-wrap gap-2">
-      {opts.map((o) => (
-        <button
-          key={o.id}
-          type="button"
-          onClick={() => onChange(o.id)}
-          className={[
-            'rounded-lg border px-3 py-1.5 text-xs font-medium transition',
-            value === o.id
-              ? 'border-[color:var(--accent)] bg-[color:var(--accent-soft)] text-[color:var(--accent)]'
-              : 'border-[color:var(--border)] bg-white text-zinc-700 hover:bg-[color:var(--surface)]',
-          ].join(' ')}
-        >
-          {o.label}
-        </button>
-      ))}
-    </div>
-  );
+export interface CarouselBuilderProps {
+  projectId: string;
+  initialProjectName: string;
+  initialSlides: Slide[];
+  initialWatermarkHandle: string;
 }
 
-function SortableSlideCard({
-  slide,
-  index,
-  onChange,
-  onRemove,
-  onFocus,
-  setUnsplashForId,
-  brandColorOptions,
-  getAutoTextColors,
-  isCollapsed,
-  onToggleCollapse,
-}: {
-  slide: Slide;
-  index: number;
-  onChange: (id: string, patch: Partial<Slide>) => void;
-  onRemove: (id: string) => void;
-  onFocus: (id: string) => void;
-  setUnsplashForId: (id: string | null) => void;
-  brandColorOptions: string[];
-  getAutoTextColors: (backgroundColor: string) => { titleColor: string; bodyColor: string };
-  isCollapsed: boolean;
-  onToggleCollapse: () => void;
-}) {
-  const [confirmDel, setConfirmDel] = useState(false);
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: slide.id,
+export default function CarouselBuilder({
+  projectId,
+  initialProjectName,
+  initialSlides,
+  initialWatermarkHandle,
+}: CarouselBuilderProps) {
+  const { brandSettings, refetchBrand } = useBrandStore();
+  const brandFont = useMemo(() => resolveBrandFont(brandSettings?.fontId), [brandSettings?.fontId]);
+
+  const [projectName, setProjectName] = useState(initialProjectName);
+  const [editingProjectName, setEditingProjectName] = useState(false);
+  const [projectNameDraft, setProjectNameDraft] = useState(initialProjectName);
+  const [slides, setSlides] = useState<Slide[]>(() => {
+    const fromDb = normalizeSlidesFromDb(initialSlides);
+    return fromDb.length > 0 ? fromDb : [createEmptySlide()];
   });
-  const style: CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.85 : 1,
-  };
-  const fileInputId = useId();
-  const availableTextColors = brandColorOptions.filter(
-    (color) => normalizeHex(color) !== normalizeHex(slide.backgroundColor),
-  );
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className="rounded-2xl border border-[color:var(--border)] bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.12)]"
-      onFocus={() => onFocus(slide.id)}
-      onClick={() => onFocus(slide.id)}
-    >
-      <div className="mb-4 flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="cursor-grab text-zinc-400 hover:text-zinc-600"
-            {...attributes}
-            {...listeners}
-            aria-label="Перетягнути"
-          >
-            <GripVertical className="h-5 w-5" />
-          </button>
-          <span className="text-sm font-semibold text-zinc-900">Слайд {index + 1}</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            className="rounded-md p-1 text-zinc-500 hover:bg-[color:var(--surface)]"
-            title={isCollapsed ? 'Розгорнути' : 'Згорнути'}
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleCollapse();
-            }}
-          >
-            {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          </button>
-          {confirmDel ? (
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <span className="text-zinc-600">Видалити?</span>
-              <button
-                type="button"
-                className="font-medium text-red-600 hover:underline"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRemove(slide.id);
-                }}
-              >
-                Так
-              </button>
-              <button
-                type="button"
-                className="font-medium text-zinc-600 hover:underline"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setConfirmDel(false);
-                }}
-              >
-                Ні
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              className="text-zinc-400 hover:text-red-500"
-              title="Видалити"
-              onClick={(e) => {
-                e.stopPropagation();
-                setConfirmDel(true);
-              }}
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {!isCollapsed && (
-        <>
-      <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500">Заголовок</label>
-      <input
-        value={slide.title}
-        onChange={(e) => onChange(slide.id, { title: e.target.value })}
-        className="mb-3 w-full rounded-xl border border-[color:var(--border)] px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2"
-        onClick={(e) => e.stopPropagation()}
-      />
-
-      <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500">Текст</label>
-      <textarea
-        value={slide.body}
-        onChange={(e) => onChange(slide.id, { body: e.target.value })}
-        rows={4}
-        className="mb-4 w-full rounded-xl border border-[color:var(--border)] px-3 py-2 text-sm leading-relaxed outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2"
-        onClick={(e) => e.stopPropagation()}
-      />
-
-      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-400">Вигляд</p>
-      <p className="mb-1 text-xs text-zinc-600">Розташування тексту</p>
-      <div className="mb-4">
-        <PlacementToggle value={slide.placement} onChange={(p) => onChange(slide.id, { placement: p })} />
-      </div>
-
-      <p className="mb-1 text-xs text-zinc-600">Фон</p>
-      <div className="mb-3 flex flex-wrap gap-4 text-sm">
-        <label className="flex cursor-pointer items-center gap-2">
-          <input
-            type="radio"
-            checked={slide.backgroundType === 'color'}
-            onChange={() => {
-              const auto = getAutoTextColors(slide.backgroundColor);
-              onChange(slide.id, {
-                backgroundType: 'color',
-                backgroundImageUrl: null,
-                backgroundImageBase64: null,
-                ...auto,
-              });
-            }}
-          />
-          Колір
-        </label>
-        <label className="flex cursor-pointer items-center gap-2">
-          <input
-            type="radio"
-            checked={slide.backgroundType === 'image'}
-            onChange={() => onChange(slide.id, { backgroundType: 'image' })}
-          />
-          Зображення
-        </label>
-      </div>
-
-      {slide.backgroundType === 'color' ? (
-        <div className="mb-4 flex items-center gap-2">
-          <span className="text-xs text-zinc-600">Фон:</span>
-          <div className="flex flex-wrap gap-2">
-            {brandColorOptions.map((color) => (
-              <button
-                key={color}
-                type="button"
-                aria-label={`Фон ${color}`}
-                onClick={() => {
-                  const auto = getAutoTextColors(color);
-                  onChange(slide.id, { backgroundColor: color, ...auto });
-                }}
-                className={[
-                  'h-8 w-8 rounded border',
-                  normalizeHex(slide.backgroundColor) === normalizeHex(color)
-                    ? 'border-zinc-900 ring-2 ring-zinc-300'
-                    : 'border-[color:var(--border)]',
-                ].join(' ')}
-                style={{ backgroundColor: color }}
-              />
-            ))}
-          </div>
-        </div>
-      ) : (
-        <div className="mb-4 space-y-2">
-          <div className="flex flex-wrap gap-2">
-            <label className="btn-secondary inline-flex cursor-pointer rounded-xl border border-[color:var(--border)] px-3 py-2 text-xs font-medium hover:bg-[color:var(--surface)]">
-              Завантажити файл
-              <input
-                id={fileInputId}
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (!f) return;
-                  const r = new FileReader();
-                  r.onload = () => {
-                    const data = String(r.result ?? '');
-                    onChange(slide.id, {
-                      backgroundImageBase64: stripDataUrlBase64(data),
-                      backgroundImageUrl: null,
-                    });
-                  };
-                  r.readAsDataURL(f);
-                }}
-              />
-            </label>
-            <button
-              type="button"
-              onClick={() => setUnsplashForId(slide.id)}
-              className="rounded-xl border border-[color:var(--border)] px-3 py-2 text-xs font-medium hover:bg-[color:var(--surface)]"
-            >
-              Unsplash →
-            </button>
-          </div>
-          {(slide.backgroundImageUrl || slide.backgroundImageBase64) && (
-            <div className="flex items-center gap-2">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={
-                  slide.backgroundImageBase64
-                    ? `data:image/png;base64,${slide.backgroundImageBase64}`
-                    : slide.backgroundImageUrl || ''
-                }
-                alt=""
-                className="h-[60px] w-[60px] rounded-lg object-cover"
-              />
-              <button
-                type="button"
-                className="text-sm text-red-600 hover:underline"
-                onClick={() =>
-                  onChange(slide.id, { backgroundImageUrl: null, backgroundImageBase64: null })
-                }
-              >
-                ×
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="mb-1 block text-xs text-zinc-600">Колір заголовку</label>
-          {slide.backgroundType === 'color' ? (
-            <div className="flex flex-wrap gap-2">
-              {availableTextColors.map((color) => (
-                <button
-                  key={`title-${color}`}
-                  type="button"
-                  aria-label={`Колір заголовку ${color}`}
-                  onClick={() => onChange(slide.id, { titleColor: color })}
-                  className={[
-                    'h-8 w-8 rounded border',
-                    normalizeHex(slide.titleColor) === normalizeHex(color)
-                      ? 'border-zinc-900 ring-2 ring-zinc-300'
-                      : 'border-[color:var(--border)]',
-                  ].join(' ')}
-                  style={{ backgroundColor: color }}
-                />
-              ))}
-            </div>
-          ) : (
-            <input
-              type="color"
-              value={slide.titleColor}
-              onChange={(e) => onChange(slide.id, { titleColor: e.target.value })}
-              className="h-9 w-full max-w-[120px] cursor-pointer rounded border border-[color:var(--border)]"
-            />
-          )}
-        </div>
-        <div>
-          <label className="mb-1 block text-xs text-zinc-600">Колір тексту</label>
-          {slide.backgroundType === 'color' ? (
-            <div className="flex flex-wrap gap-2">
-              {availableTextColors.map((color) => (
-                <button
-                  key={`body-${color}`}
-                  type="button"
-                  aria-label={`Колір тексту ${color}`}
-                  onClick={() => onChange(slide.id, { bodyColor: color })}
-                  className={[
-                    'h-8 w-8 rounded border',
-                    normalizeHex(slide.bodyColor) === normalizeHex(color)
-                      ? 'border-zinc-900 ring-2 ring-zinc-300'
-                      : 'border-[color:var(--border)]',
-                  ].join(' ')}
-                  style={{ backgroundColor: color }}
-                />
-              ))}
-            </div>
-          ) : (
-            <input
-              type="color"
-              value={slide.bodyColor}
-              onChange={(e) => onChange(slide.id, { bodyColor: e.target.value })}
-              className="h-9 w-full max-w-[120px] cursor-pointer rounded border border-[color:var(--border)]"
-            />
-          )}
-        </div>
-      </div>
-        </>
-      )}
-
-    </div>
-  );
-}
-
-function SlidePreview({
-  slide,
-  index,
-  active,
-  onActivate,
-  previewRef,
-}: {
-  slide: Slide;
-  index: number;
-  active: boolean;
-  onActivate: () => void;
-  previewRef: (el: HTMLButtonElement | null) => void;
-}) {
-  const isLongContent = (slide.title.trim().length + slide.body.trim().length) > 95;
-  const justify = isLongContent
-    ? 'flex-start'
-    : slide.placement === 'top'
-      ? 'flex-start'
-      : slide.placement === 'bottom'
-        ? 'flex-end'
-        : 'center';
-
-  const bg: CSSProperties =
-    slide.generatedImageBase64
-      ? {}
-      : slide.backgroundType === 'color'
-        ? { backgroundColor: slide.backgroundColor }
-        : {
-            backgroundImage: slide.backgroundImageBase64
-              ? `url(data:image/png;base64,${slide.backgroundImageBase64})`
-              : slide.backgroundImageUrl
-                ? `url(${slide.backgroundImageUrl})`
-                : undefined,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-          };
-
-  return (
-    <button
-      type="button"
-      ref={previewRef}
-      onClick={onActivate}
-      className={[
-        'relative mb-4 w-[300px] shrink-0 overflow-hidden rounded-[12px] text-left shadow-[0_1px_3px_rgba(0,0,0,0.12)] outline-none transition focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2',
-        active ? 'ring-2 ring-[color:var(--accent)] ring-offset-2' : '',
-      ].join(' ')}
-      style={{ width: 300, height: 300 }}
-    >
-      {slide.generatedImageBase64 ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={`data:image/png;base64,${slide.generatedImageBase64}`}
-          alt=""
-          className="absolute inset-0 h-full w-full object-cover"
-        />
-      ) : (
-        <>
-          <div className="absolute inset-0" style={bg} />
-          {slide.backgroundType === 'image' && (slide.backgroundImageUrl || slide.backgroundImageBase64) && (
-            <div className="absolute inset-0 bg-black/[0.55]" />
-          )}
-          <div
-            className="relative flex h-full flex-col overflow-hidden px-4 py-4"
-            style={{ justifyContent: justify }}
-          >
-            <div>
-              <p
-                className="text-[34px] font-bold leading-none"
-                style={{ color: slide.titleColor }}
-              >
-                {slide.title || 'Заголовок'}
-              </p>
-              <p
-                className="mt-4 text-[20px] leading-snug"
-                style={{ color: slide.bodyColor }}
-              >
-                {slide.body || 'Текст'}
-              </p>
-            </div>
-          </div>
-        </>
-      )}
-      <span className="absolute bottom-2 right-2 rounded-full bg-black/55 px-2 py-0.5 text-[10px] font-medium text-white">
-        {index + 1}
-      </span>
-    </button>
-  );
-}
-
-export default function CarouselBuilder() {
-  const { brandSettings } = useBrandStore();
-  const [slides, setSlides] = useState<Slide[]>(() => [createSlide()]);
   const [activeSlideId, setActiveSlideId] = useState<string | null>(() => null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatingIndex, setGeneratingIndex] = useState(0);
@@ -679,15 +224,80 @@ export default function CarouselBuilder() {
   const [validationError, setValidationError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [unsplashForId, setUnsplashForId] = useState<string | null>(null);
-  const [collapsedSlideIds, setCollapsedSlideIds] = useState<string[]>([]);
-  const previewRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-  const generateBlockRef = useRef<HTMLDivElement | null>(null);
-  const { setBadge, clearBadge } = useNavBadges();
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  const [pendingRantOutput, setPendingRantOutput] = useState<CarouselRantOutput | null>(null);
+  const [watermarkDraft, setWatermarkDraft] = useState(initialWatermarkHandle);
+  const [accentDraft, setAccentDraft] = useState<BrandAccentStyle>(() =>
+    normalizeAccentStyle(brandSettings?.accentStyle),
   );
+
+  const slideListTopRef = useRef<HTMLDivElement | null>(null);
+  const slidesRef = useRef<Slide[]>(slides);
+  slidesRef.current = slides;
+  const { setBadge, clearBadge } = useNavBadges();
+  const { state: rantResultsState, clearResult: clearRantResult } = useRantResults();
+  const skipPersistRef = useRef(true);
+  const watermarkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const accentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setAccentDraft(normalizeAccentStyle(brandSettings?.accentStyle));
+  }, [brandSettings?.accentStyle]);
+
+  useEffect(() => {
+    if (!slides.length) return;
+    if (activeSlideId && slides.some((s) => s.id === activeSlideId)) return;
+    setActiveSlideId(slides[0].id);
+  }, [slides, activeSlideId]);
+
+  const handleProjectNameSave = useCallback(async () => {
+    setEditingProjectName(false);
+    const trimmed = projectNameDraft.trim();
+    if (trimmed && trimmed !== projectName) {
+      setProjectName(trimmed);
+      await updateCarouselProjectName(projectId, trimmed);
+    } else {
+      setProjectNameDraft(projectName);
+    }
+  }, [projectNameDraft, projectName, projectId]);
+
+  useEffect(() => {
+    if (skipPersistRef.current) {
+      skipPersistRef.current = false;
+      return;
+    }
+    const t = window.setTimeout(() => {
+      void saveCarouselSlides(projectId, slides);
+    }, 1400);
+    return () => window.clearTimeout(t);
+  }, [projectId, slides]);
+
+  useEffect(() => {
+    if (watermarkTimerRef.current) clearTimeout(watermarkTimerRef.current);
+    watermarkTimerRef.current = setTimeout(() => {
+      void updateCarouselWatermarkHandle(projectId, watermarkDraft);
+    }, 800);
+    return () => {
+      if (watermarkTimerRef.current) clearTimeout(watermarkTimerRef.current);
+    };
+  }, [projectId, watermarkDraft]);
+
+  useEffect(() => {
+    if (accentTimerRef.current) clearTimeout(accentTimerRef.current);
+    accentTimerRef.current = setTimeout(() => {
+      void (async () => {
+        const supabase = createClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) return;
+        await supabase.from('brand_settings').update({ accent_style: accentDraft }).eq('user_id', user.id);
+        void refetchBrand();
+      })();
+    }, 800);
+    return () => {
+      if (accentTimerRef.current) clearTimeout(accentTimerRef.current);
+    };
+  }, [accentDraft, refetchBrand]);
 
   useEffect(() => {
     if (hasGenerated && !hasDownloaded) {
@@ -698,11 +308,6 @@ export default function CarouselBuilder() {
   const showToast = useCallback((msg: string) => {
     setToast(msg);
     window.setTimeout(() => setToast(null), 3000);
-  }, []);
-
-  const scrollPreviewTo = useCallback((id: string) => {
-    const el = previewRefs.current[id];
-    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, []);
 
   const brandColorOptions = useMemo(() => {
@@ -719,6 +324,9 @@ export default function CarouselBuilder() {
     return unique.slice(0, 4);
   }, [brandSettings]);
 
+  const accentStyle = normalizeAccentStyle(brandSettings?.accentStyle);
+  const accentColor = brandSettings?.colors.accent1 ?? '#FF6B6B';
+
   const getAutoTextColors = useCallback(
     (backgroundColor: string) => {
       const background = normalizeHex(backgroundColor);
@@ -732,7 +340,9 @@ export default function CarouselBuilder() {
         ordered[0] ??
         '#FFFFFF';
       const body =
-        usable.find((c) => normalizeHex(c) !== normalizeHex(title) && getContrastRatio(c, background) >= AA_CONTRAST_MIN) ??
+        usable.find(
+          (c) => normalizeHex(c) !== normalizeHex(title) && getContrastRatio(c, background) >= AA_CONTRAST_MIN,
+        ) ??
         usable.find((c) => normalizeHex(c) !== normalizeHex(title)) ??
         title;
       return {
@@ -772,18 +382,18 @@ export default function CarouselBuilder() {
     });
   };
 
+  const overlayDefault = brandSettings?.colors.darkBg ?? CAROUSEL_DEFAULT_BG;
+
   const addSlide = () => {
     if (slides.length >= MAX_SLIDES) return;
-    const s = createSlide();
+    const s = createEmptySlide({ overlayColor: overlayDefault });
     const defaultBg = brandColorOptions[0] ?? CAROUSEL_DEFAULT_BG;
     const auto = getAutoTextColors(defaultBg);
     s.backgroundColor = defaultBg;
     s.titleColor = auto.titleColor;
     s.bodyColor = auto.bodyColor;
     setSlides((prev) => [...prev, s]);
-    setCollapsedSlideIds((prev) => Array.from(new Set([...prev, s.id])));
     setActiveSlideId(s.id);
-    setTimeout(() => scrollPreviewTo(s.id), 50);
   };
 
   const removeSlide = (id: string) => {
@@ -791,14 +401,17 @@ export default function CarouselBuilder() {
       if (prev.length <= 1) return prev;
       return prev.filter((s) => s.id !== id);
     });
-    setCollapsedSlideIds((prev) => prev.filter((slideId) => slideId !== id));
-    setActiveSlideId((cur) => (cur === id ? null : cur));
+    setActiveSlideId((cur) => {
+      if (cur !== id) return cur;
+      const next = slidesRef.current.filter((s) => s.id !== id);
+      return next[0]?.id ?? null;
+    });
   };
 
   const runGeneration = async () => {
-    const valid = slides.some((s) => s.title.trim().length > 0);
+    const valid = slides.some((s) => s.title.trim().length > 0 || s.body.trim().length > 0);
     if (!valid) {
-      setValidationError('Додай заголовок хоча б на одному слайді.');
+      setValidationError('Додай заголовок або текст хоча б на одному слайді.');
       return;
     }
     setValidationError(null);
@@ -817,6 +430,7 @@ export default function CarouselBuilder() {
           title: s.title,
           body: s.body,
           placement: s.placement,
+          text_align: s.textAlign,
           background_type: s.backgroundType,
           background_color: s.backgroundColor,
           background_image_url: s.backgroundType === 'image' ? s.backgroundImageUrl : null,
@@ -824,6 +438,14 @@ export default function CarouselBuilder() {
           body_color: s.bodyColor,
           slide_index: i + 1,
           total_slides: total,
+          slide_kind: resolveSlideKind(s, i, total),
+          label: s.label ?? null,
+          items: s.items ?? null,
+          icon: s.icon ?? null,
+          design_note: s.design_note ?? null,
+          overlay_type: s.backgroundType === 'image' ? s.overlayType : null,
+          overlay_color: s.overlayColor,
+          overlay_opacity: s.overlayOpacity,
         };
         if (s.backgroundType === 'image' && s.backgroundImageBase64) {
           body.background_image_base64 = s.backgroundImageBase64;
@@ -839,9 +461,7 @@ export default function CarouselBuilder() {
           throw new Error(data.error ?? 'Помилка генерації');
         }
         setSlides((prev) =>
-          prev.map((row, j) =>
-            j === i ? { ...row, generatedImageBase64: data.image_base64! } : row
-          )
+          prev.map((row, j) => (j === i ? { ...row, generatedImageBase64: data.image_base64! } : row)),
         );
         setDoneMask((prev) => {
           const next = [...prev];
@@ -895,149 +515,205 @@ export default function CarouselBuilder() {
     setHasGenerated(false);
   };
 
+  const mapRantOutputToSlides = useCallback(
+    (output: CarouselRantOutput): Slide[] => {
+      const defaultBg = brandColorOptions[0] ?? CAROUSEL_DEFAULT_BG;
+      const auto = getAutoTextColors(defaultBg);
+      const oc = brandSettings?.colors.darkBg ?? CAROUSEL_DEFAULT_BG;
+      return output.slides.map((s, index) => {
+        const slide = createEmptySlide({ overlayColor: oc });
+        slide.title = (s.title ?? '').trim();
+        slide.body = (s.body ?? '').trim();
+        slide.layout = s.layout === 'text_only' ? 'text_only' : 'title_and_text';
+        slide.design_note = s.design_note ?? null;
+        slide.label = s.label != null ? String(s.label).trim() || null : null;
+        slide.items = Array.isArray(s.items) ? s.items.map(String) : null;
+        slide.icon = s.icon != null ? String(s.icon).trim() || null : null;
+        slide.slideKind = s.type ?? resolveSlideKind(slide, index, output.slides.length);
+        slide.backgroundColor = defaultBg;
+        slide.titleColor = auto.titleColor;
+        slide.bodyColor = auto.bodyColor;
+        return slide;
+      });
+    },
+    [brandColorOptions, getAutoTextColors, brandSettings?.colors.darkBg],
+  );
+
+  const applyRantSlides = useCallback(
+    (output: CarouselRantOutput) => {
+      const next = mapRantOutputToSlides(output);
+      setSlides(next);
+      setActiveSlideId(next[0]?.id ?? null);
+      setHasGenerated(false);
+      setDoneMask([]);
+      setPendingRantOutput(null);
+      requestAnimationFrame(() => {
+        slideListTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    },
+    [mapRantOutputToSlides],
+  );
+
+  useEffect(() => {
+    const pending = rantResultsState.carousel ?? readPendingCarouselFromStorage();
+    if (!pending?.slides?.length) return;
+    if (isCarouselEmpty(slidesRef.current)) {
+      applyRantSlides(pending);
+    } else {
+      setPendingRantOutput(pending);
+    }
+    clearRantResult('carousel');
+  }, [rantResultsState.carousel, applyRantSlides, clearRantResult]);
+
+  const handleConfirmReplaceSlides = () => {
+    if (!pendingRantOutput) return;
+    applyRantSlides(pendingRantOutput);
+  };
+
+  if (!brandSettings) {
+    return null;
+  }
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-6">
-      <div className="flex min-h-[min(720px,calc(100vh-8rem))] flex-col gap-6 lg:flex-row">
-        <div className="flex w-full shrink-0 flex-col border-[color:var(--border)] lg:w-[420px] lg:border-r lg:pr-4">
-          <div className="mb-4 flex flex-wrap items-center gap-2">
-            <h1 className="font-display text-xl font-semibold text-zinc-900">Карусель</h1>
-            <button
-              type="button"
-              disabled={slides.length >= MAX_SLIDES}
-              title={slides.length >= MAX_SLIDES ? 'Максимум 20 слайдів' : undefined}
-              onClick={addSlide}
-              className="rounded-xl border border-[color:var(--border)] px-3 py-1.5 text-sm font-medium text-zinc-800 transition hover:bg-[color:var(--surface)] disabled:cursor-not-allowed disabled:opacity-40"
+    <div ref={slideListTopRef} className="flex min-h-0 flex-1 flex-col gap-4">
+      <div className="hidden px-4 pt-4 md:block">
+        <Link
+          href="/carousel"
+          className="mb-2 inline-flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-700"
+        >
+          ← До всіх каруселей
+        </Link>
+        <div className="mb-3 flex flex-wrap items-center gap-3">
+          {editingProjectName ? (
+            <input
+              autoFocus
+              value={projectNameDraft}
+              onChange={(e) => setProjectNameDraft(e.target.value)}
+              onBlur={() => void handleProjectNameSave()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void handleProjectNameSave();
+                if (e.key === 'Escape') {
+                  setProjectNameDraft(projectName);
+                  setEditingProjectName(false);
+                }
+              }}
+              className="font-display min-w-0 max-w-md rounded-lg border border-[color:var(--border)] bg-white px-2 py-1 text-xl font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
+            />
+          ) : (
+            <h1
+              className="font-display cursor-pointer text-xl font-semibold text-zinc-900 hover:text-zinc-700"
+              onClick={() => setEditingProjectName(true)}
             >
-              + Додати слайд
-            </button>
-            <span className="text-sm text-zinc-500">
-              {slides.length} / {MAX_SLIDES}
-            </span>
-          </div>
-          {validationError && (
-            <p className="mb-3 text-sm text-red-600" role="alert">
-              {validationError}
-            </p>
+              {projectName}
+            </h1>
           )}
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={slides.map((s) => s.id)} strategy={verticalListSortingStrategy}>
-              <div className="flex flex-col gap-4 pb-8">
-                {slides.map((slide, index) => (
-                  <SortableSlideCard
-                    key={slide.id}
-                    slide={slide}
-                    index={index}
-                    onChange={updateSlide}
-                    onRemove={removeSlide}
-                    brandColorOptions={brandColorOptions}
-                    getAutoTextColors={getAutoTextColors}
-                    isCollapsed={collapsedSlideIds.includes(slide.id)}
-                    onToggleCollapse={() =>
-                      setCollapsedSlideIds((prev) =>
-                        prev.includes(slide.id) ? prev.filter((id) => id !== slide.id) : [...prev, slide.id],
-                      )
-                    }
-                    onFocus={(id) => {
-                      setActiveSlideId(id);
-                      scrollPreviewTo(id);
-                    }}
-                    setUnsplashForId={setUnsplashForId}
-                  />
-                ))}
-              </div>
-            </SortableContext>
-          </DndContext>
-        </div>
-
-        <div className="relative min-w-0 flex-1 overflow-y-auto">
-          <div ref={generateBlockRef} className="sticky top-0 z-10 mb-3 w-full max-w-[300px] mx-auto bg-white/95 px-2 py-3 backdrop-blur-sm">
-            {isGenerating && (
-              <div className="mb-4 rounded-2xl border border-[color:var(--border)] bg-white p-4 shadow-sm">
-                <p className="mb-3 text-sm font-medium text-zinc-900">Генеруємо слайди…</p>
-                <ul className="space-y-2 text-sm">
-                  {slides.map((_, i) => (
-                    <li key={i} className="flex items-center gap-2">
-                      {doneMask[i] ? (
-                        <Check className="h-4 w-4 text-[color:var(--accent)]" />
-                      ) : generatingIndex === i ? (
-                        <Loader2 className="h-4 w-4 animate-spin text-[color:var(--accent)]" />
-                      ) : (
-                        <Circle className="h-4 w-4 text-zinc-300" />
-                      )}
-                      <span className="text-zinc-700">Слайд {i + 1}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {!hasGenerated ? (
-              <button
-                type="button"
-                disabled={isGenerating}
-                onClick={() => void runGeneration()}
-                className="w-full rounded-xl bg-[color:var(--accent)] py-3 text-sm font-semibold text-white shadow-sm transition hover:brightness-110 active:scale-[0.97] disabled:opacity-50"
-              >
-                Згенерувати карусель
-              </button>
-            ) : (
-              <div className="space-y-4">
-                <p className="text-center text-sm font-medium text-zinc-900">Готово! 🎉</p>
-                <button
-                  type="button"
-                  onClick={() => void downloadAll()}
-                  className="w-full rounded-xl bg-[color:var(--accent)] py-3 text-sm font-semibold text-white transition hover:brightness-110 active:scale-[0.97]"
-                >
-                  ⬇ Завантажити всі
-                </button>
-                <div className="flex flex-wrap gap-2">
-                  {slides.map((s, i) =>
-                    s.generatedImageBase64 ? (
-                      <button
-                        key={s.id}
-                        type="button"
-                        onClick={() => downloadOne(i)}
-                        className="btn-secondary rounded-lg border border-[color:var(--border)] px-2 py-1 text-xs font-medium text-zinc-800 hover:bg-[color:var(--surface)]"
-                      >
-                        ⬇ Слайд {i + 1}
-                      </button>
-                    ) : null
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={editMore}
-                  className="w-full rounded-xl border border-[color:var(--border)] py-2.5 text-sm font-medium text-zinc-800 transition hover:bg-[color:var(--surface)]"
-                >
-                  ✏ Редагувати далі
-                </button>
-              </div>
-            )}
-          </div>
-
-          <div className="flex flex-col items-center px-2 pb-8">
-            {slides.map((slide, index) => (
-              <SlidePreview
-                key={slide.id}
-                slide={slide}
-                index={index}
-                active={activeSlideId === slide.id}
-                onActivate={() => {
-                  setActiveSlideId(slide.id);
-                  scrollPreviewTo(slide.id);
-                }}
-                previewRef={(el) => {
-                  previewRefs.current[slide.id] = el;
-                }}
-              />
-            ))}
-          </div>
-
-          {isGenerating && (
-            <div className="pointer-events-none absolute inset-0 z-[5] rounded-2xl bg-white/40" />
-          )}
+          <span className="text-sm text-zinc-500">
+            {slides.length} / {MAX_SLIDES}
+          </span>
         </div>
       </div>
+
+      {validationError && (
+        <p className="hidden px-4 text-sm text-red-600 md:block" role="alert">
+          {validationError}
+        </p>
+      )}
+
+      {pendingRantOutput && (
+        <div className="mx-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-zinc-800">
+          <p className="mb-3">Є нові слайди з дашборду. Замінити {slides.length} поточних слайдів?</p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleConfirmReplaceSlides}
+              className="rounded-xl bg-[color:var(--accent)] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
+            >
+              Замінити
+            </button>
+            <button
+              type="button"
+              onClick={() => setPendingRantOutput(null)}
+              className="rounded-xl border border-[color:var(--border)] px-4 py-2 text-sm font-medium text-zinc-800 transition hover:bg-[color:var(--surface)]"
+            >
+              Скасувати
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isGenerating && (
+        <div className="mx-4 rounded-2xl border border-[color:var(--border)] bg-white p-4 shadow-sm">
+          <p className="mb-3 text-sm font-medium text-zinc-900">Генеруємо слайди…</p>
+          <ul className="space-y-2 text-sm">
+            {slides.map((_, i) => (
+              <li key={i} className="flex items-center gap-2">
+                {doneMask[i] ? (
+                  <Check className="h-4 w-4 text-[color:var(--accent)]" />
+                ) : generatingIndex === i ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-[color:var(--accent)]" />
+                ) : (
+                  <Circle className="h-4 w-4 text-zinc-300" />
+                )}
+                <span className="text-zinc-700">Слайд {i + 1}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {hasGenerated && (
+        <div className="mx-4 space-y-3 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)]/40 px-4 py-4">
+          <p className="text-sm font-medium text-zinc-900">Готово! 🎉</p>
+          <div className="flex flex-wrap gap-2">
+            {slides.map((s, i) =>
+              s.generatedImageBase64 ? (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => downloadOne(i)}
+                  className="btn-secondary rounded-lg border border-[color:var(--border)] bg-white px-2 py-1 text-xs font-medium text-zinc-800 hover:bg-[color:var(--surface)]"
+                >
+                  ⬇ Слайд {i + 1}
+                </button>
+              ) : null,
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={editMore}
+            className="rounded-xl border border-[color:var(--border)] bg-white px-4 py-2 text-sm font-medium text-zinc-800 transition hover:bg-[color:var(--surface)]"
+          >
+            ✏ Редагувати далі
+          </button>
+        </div>
+      )}
+
+      <CarouselEditorLayout
+        slides={slides}
+        activeSlideId={activeSlideId}
+        setActiveSlideId={setActiveSlideId}
+        brandSettings={brandSettings}
+        brandFont={brandFont}
+        accentStyle={accentStyle}
+        accentColor={accentColor}
+        updateSlide={updateSlide}
+        addSlide={addSlide}
+        removeSlide={removeSlide}
+        onDragEnd={handleDragEnd}
+        onUnsplash={() => activeSlideId && setUnsplashForId(activeSlideId)}
+        brandColorOptions={brandColorOptions}
+        getAutoTextColors={getAutoTextColors}
+        accentDraft={accentDraft}
+        onAccentDraft={setAccentDraft}
+        watermarkDraft={watermarkDraft}
+        onWatermarkDraft={setWatermarkDraft}
+        hasGenerated={hasGenerated}
+        isGenerating={isGenerating}
+        onGenerate={() => void runGeneration()}
+        onDownloadAll={() => void downloadAll()}
+        onSharePlaceholder={() => showToast('Скоро')}
+        validationError={validationError}
+      />
 
       {toast && (
         <div className="fixed bottom-6 right-6 z-[300] rounded-xl border border-[color:var(--border)] bg-white px-4 py-3 text-sm shadow-lg">
@@ -1050,7 +726,11 @@ export default function CarouselBuilder() {
         onClose={() => setUnsplashForId(null)}
         onPick={(url) => {
           if (unsplashForId) {
-            updateSlide(unsplashForId, { backgroundImageUrl: url, backgroundImageBase64: null });
+            updateSlide(unsplashForId, {
+              backgroundImageUrl: url,
+              backgroundImageBase64: null,
+              overlayType: 'full',
+            });
           }
           setUnsplashForId(null);
         }}

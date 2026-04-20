@@ -7,7 +7,11 @@ import {
   useRef,
   useState,
 } from 'react';
-import type { IdeaScanRow, IdeaTopReelItem } from '@/lib/ideaScanTypes';
+import {
+  parseIdeaScanReelStringMap,
+  type IdeaScanRow,
+  type IdeaTopReelItem,
+} from '@/lib/ideaScanTypes';
 import {
   getIdeaScanById,
   listIdeaScansForUser,
@@ -58,6 +62,7 @@ const SCAN_STEP_MESSAGES = [
 
 const POLL_INTERVAL_MS = 2500;
 const MAX_POLL_ATTEMPTS = 100;
+const MAX_REEL_NOTE_CHARS = 500;
 
 function mapTopItemsToDisplayReels(items: IdeaTopReelItem[]): DisplayReel[] {
   return items.map((item) => ({
@@ -202,6 +207,7 @@ export default function CompetitorAnalysisView() {
   const [transcriptLoading, setTranscriptLoading] = useState(false);
   const [transcriptError, setTranscriptError] = useState<string | null>(null);
   const [transcriptText, setTranscriptText] = useState<string | null>(null);
+  const [reelPanelNote, setReelPanelNote] = useState('');
   const scanCancelledRef = useRef(false);
 
   const viralThresholdCount = currentScan?.top_reels.summary.qualifiedCount ?? 0;
@@ -257,6 +263,7 @@ export default function CompetitorAnalysisView() {
   }, [loadRecents]);
 
   const applyScanAndShowResults = useCallback((scan: IdeaScanRow) => {
+    transcriptCacheRef.current = {};
     setCurrentScan(scan);
     setCurrentHandle(scan.handle);
     setReelItems(mapTopItemsToDisplayReels(scan.top_reels.items));
@@ -395,6 +402,24 @@ export default function CompetitorAnalysisView() {
   const selectedReel =
     activeIdx !== null ? (reelItems[activeIdx] ?? null) : null;
 
+  const savedNotesByShortCode = useMemo(
+    () => parseIdeaScanReelStringMap(currentScan?.user_note),
+    [currentScan?.user_note]
+  );
+
+  const savedTranscriptsByShortCode = useMemo(
+    () => parseIdeaScanReelStringMap(currentScan?.reel_transcripts),
+    [currentScan?.reel_transcripts]
+  );
+
+  useEffect(() => {
+    if (!selectedReel) {
+      setReelPanelNote('');
+      return;
+    }
+    setReelPanelNote(savedNotesByShortCode[selectedReel.shortCode] ?? '');
+  }, [selectedReel?.shortCode, savedNotesByShortCode]);
+
   useEffect(() => {
     if (!selectedReel) {
       setTranscriptText(null);
@@ -402,6 +427,25 @@ export default function CompetitorAnalysisView() {
       setTranscriptLoading(false);
       return;
     }
+
+    const code = selectedReel.shortCode;
+    const stored = savedTranscriptsByShortCode[code]?.trim();
+    if (stored) {
+      setTranscriptText(stored);
+      setTranscriptError(null);
+      setTranscriptLoading(false);
+      transcriptCacheRef.current[code] = stored;
+      return;
+    }
+
+    const mem = transcriptCacheRef.current[code];
+    if (mem !== undefined) {
+      setTranscriptText(mem);
+      setTranscriptError(null);
+      setTranscriptLoading(false);
+      return;
+    }
+
     const url = selectedReel.videoUrl.trim();
     if (!url) {
       setTranscriptText(null);
@@ -409,24 +453,33 @@ export default function CompetitorAnalysisView() {
       setTranscriptLoading(false);
       return;
     }
-    const cacheKey = `${selectedReel.shortCode}|${url}`;
-    const cached = transcriptCacheRef.current[cacheKey];
-    if (cached !== undefined) {
-      setTranscriptText(cached);
-      setTranscriptError(null);
-      setTranscriptLoading(false);
-      return;
-    }
+
+    const scanId = currentScan?.id;
     let cancelled = false;
     setTranscriptLoading(true);
     setTranscriptError(null);
     setTranscriptText(null);
-    void transcribeCompetitorReelVideo(url).then((res) => {
+    void transcribeCompetitorReelVideo(
+      url,
+      scanId ? { scanId, shortCode: code } : undefined
+    ).then((res) => {
       if (cancelled) return;
       if (res.ok) {
-        transcriptCacheRef.current[cacheKey] = res.transcript;
+        transcriptCacheRef.current[code] = res.transcript;
         setTranscriptText(res.transcript);
         setTranscriptError(null);
+        if (scanId) {
+          setCurrentScan((prev) => {
+            if (!prev || prev.id !== scanId) return prev;
+            return {
+              ...prev,
+              reel_transcripts: {
+                ...parseIdeaScanReelStringMap(prev.reel_transcripts),
+                [code]: res.transcript,
+              },
+            };
+          });
+        }
       } else {
         setTranscriptError(res.error);
         setTranscriptText(null);
@@ -436,7 +489,13 @@ export default function CompetitorAnalysisView() {
     return () => {
       cancelled = true;
     };
-  }, [selectedReel?.shortCode, selectedReel?.videoUrl]);
+  }, [
+    selectedReel,
+    selectedReel?.shortCode,
+    selectedReel?.videoUrl,
+    savedTranscriptsByShortCode,
+    currentScan?.id,
+  ]);
 
   const onSaveTemplate = useCallback(
     async (reel: DisplayReel) => {
@@ -449,6 +508,7 @@ export default function CompetitorAnalysisView() {
           shortCode: reel.shortCode,
           videoUrl: reel.videoUrl,
           url: reel.url,
+          userNote: reelPanelNote,
         });
         if (!res.ok) {
           setSaveError(res.error);
@@ -456,13 +516,22 @@ export default function CompetitorAnalysisView() {
         }
         const next = [...savedShortCodes, reel.shortCode];
         setSavedShortCodes(next);
-        setCurrentScan((prev) => (prev ? { ...prev, saved_reel_ids: next } : prev));
+        setCurrentScan((prev) =>
+          prev
+            ? {
+                ...prev,
+                saved_reel_ids: next,
+                user_note: res.user_note,
+                reference_url: res.reference_url,
+              }
+            : prev
+        );
         void loadRecents();
       } finally {
         setSaveBusy(false);
       }
     },
-    [currentScan?.id, savedShortCodes, loadRecents]
+    [currentScan?.id, savedShortCodes, loadRecents, reelPanelNote]
   );
 
   const resultsUpdatedLabel = useMemo(() => {
@@ -979,8 +1048,28 @@ export default function CompetitorAnalysisView() {
                         className="shrink-0 border-t border-[var(--color-border-primary)] bg-white"
                         style={{ padding: '12px 20px 20px' }}
                       >
+                        <label
+                          htmlFor="competitor-reel-note"
+                          className="block text-[10px] font-medium uppercase tracking-wider text-[var(--color-text-muted)]"
+                        >
+                          Моя нотатка
+                        </label>
+                        <textarea
+                          id="competitor-reel-note"
+                          rows={3}
+                          value={reelPanelNote}
+                          onChange={(e) =>
+                            setReelPanelNote(
+                              e.target.value.slice(0, MAX_REEL_NOTE_CHARS)
+                            )
+                          }
+                          readOnly={savedShortCodes.includes(selectedReel.shortCode)}
+                          maxLength={MAX_REEL_NOTE_CHARS}
+                          placeholder="Моя нотатка до цього рілсу…"
+                          className="mt-1.5 w-full min-h-[4.5rem] resize-y rounded-[var(--border-radius-md)] border border-[var(--color-border-primary)] bg-white px-3 py-2 text-[13px] leading-relaxed text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-link)] focus:outline-none focus:ring-2 focus:ring-[var(--color-link-soft)] read-only:bg-[var(--color-background-secondary)] read-only:text-[var(--color-text-secondary)]"
+                        />
                         {saveError && (
-                          <p className="mb-2 text-center text-xs text-red-600">{saveError}</p>
+                          <p className="mb-2 mt-2 text-center text-xs text-red-600">{saveError}</p>
                         )}
                         {savedShortCodes.includes(selectedReel.shortCode) ? (
                           <button

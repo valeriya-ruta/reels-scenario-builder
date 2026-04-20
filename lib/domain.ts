@@ -55,6 +55,10 @@ export interface Project {
   user_id: string;
   /** True until the user opens this project from «Мої проєкти» (competitor import). */
   scenario_unseen?: boolean;
+  /** Instagram reel URL when this scenario was created from Copyref / competitor analysis. */
+  reference_url?: string | null;
+  /** User creative brief / note from competitor flow. */
+  reference_note?: string | null;
 }
 
 export interface Location {
@@ -239,5 +243,13 @@ export interface StorytellingStory {
   visual: VisualType | null;
   engagement: EngagementType | null;
   created_at: string;
+}
+
+export interface CarouselProject {
+  id: string;
+  user_id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
 }
 

@@ -5,8 +5,17 @@ import CarouselBuilder from '@/components/CarouselBuilder';
 import BrandDNASetup from '@/components/BrandDNASetup';
 import { useBrandStore } from '@/components/BrandProvider';
 import type { BrandSettings } from '@/lib/brand';
+import type { Slide } from '@/lib/carouselTypes';
 
-export default function CarouselPageClient({ initialBrandSettings }: { initialBrandSettings: BrandSettings | null }) {
+export default function CarouselPageClient({
+  initialBrandSettings,
+  carouselProject,
+  initialWatermarkHandle,
+}: {
+  initialBrandSettings: BrandSettings | null;
+  carouselProject: { id: string; name: string; slides: Slide[] };
+  initialWatermarkHandle: string;
+}) {
   const { brandSettings, loading, refetchBrand, setBrandSettings } = useBrandStore();
   const effectiveBrandSettings = brandSettings ?? initialBrandSettings;
 
@@ -25,8 +34,20 @@ export default function CarouselPageClient({ initialBrandSettings }: { initialBr
   }
 
   if (!effectiveBrandSettings) {
-    return <BrandDNASetup onComplete={() => void refetchBrand()} />;
+    return (
+      <BrandDNASetup
+        onComplete={() => void refetchBrand()}
+        onBrandUpdated={() => void refetchBrand()}
+      />
+    );
   }
 
-  return <CarouselBuilder />;
+  return (
+    <CarouselBuilder
+      projectId={carouselProject.id}
+      initialProjectName={carouselProject.name}
+      initialSlides={carouselProject.slides}
+      initialWatermarkHandle={initialWatermarkHandle}
+    />
+  );
 }

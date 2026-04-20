@@ -16,6 +16,8 @@ interface SubscriptionRow {
   plan: string | null;
   next_billing_date: string | null;
   status: string | null;
+  is_founder: boolean | null;
+  plan_price: number | null;
 }
 
 export default function SettingsClient({ initialBrandSettings }: { initialBrandSettings: BrandSettings | null }) {
@@ -39,7 +41,16 @@ export default function SettingsClient({ initialBrandSettings }: { initialBrandS
   const [subscriptionLoading, setSubscriptionLoading] = useState(true);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
-  const plan = (subscription?.plan?.toLowerCase() as PlanType | undefined) ?? 'free';
+  const plan = useMemo((): PlanType => {
+    const s = subscription;
+    if (!s) return 'free';
+    if (s.is_founder || Number(s.plan_price) === 5) return 'founding';
+    if (Number(s.plan_price) >= 10) return 'standard';
+    const p = (s.plan ?? '').toLowerCase();
+    if (p === 'founding') return 'founding';
+    if (p === 'standard') return 'standard';
+    return 'free';
+  }, [subscription]);
   const effectiveBrandSettings = brandSettings ?? initialBrandSettings;
   const isPaidPlan = plan === 'founding' || plan === 'standard';
   const isNameDirty = displayName.trim() !== savedDisplayName.trim();
@@ -90,7 +101,7 @@ export default function SettingsClient({ initialBrandSettings }: { initialBrandS
         supabase.from('profiles').select('display_name').eq('id', user.id).maybeSingle<{ display_name: string | null }>(),
         supabase
           .from('subscriptions')
-          .select('plan,next_billing_date,status')
+          .select('plan,next_billing_date,status,is_founder,plan_price')
           .eq('user_id', user.id)
           .maybeSingle<SubscriptionRow>(),
       ]);
@@ -326,9 +337,14 @@ export default function SettingsClient({ initialBrandSettings }: { initialBrandS
           </div>
         ) : (
           <BrandDNASetup
-            key={effectiveBrandSettings ? `brand-${effectiveBrandSettings.favColorHex}-${effectiveBrandSettings.theme}-${effectiveBrandSettings.vibe}` : 'brand-empty'}
+            key={
+              effectiveBrandSettings
+                ? `brand-${effectiveBrandSettings.favColorHex}-${effectiveBrandSettings.theme}-${effectiveBrandSettings.vibe}-${effectiveBrandSettings.fontId}`
+                : 'brand-empty'
+            }
             initialValues={effectiveBrandSettings}
             editMode
+            onBrandUpdated={() => void refetchBrand()}
             onComplete={() => {
               void refetchBrand();
               toast?.pushToast('Бренд оновлено!', 'success');

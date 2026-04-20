@@ -41,7 +41,7 @@ export async function POST(request: Request) {
     const { data: sub } = await admin
       .from('subscriptions')
       .select(
-        'id, user_id, verify_order_ref, recurring_order_ref, rec_token, consecutive_failed_charges, phase, client_phone, client_email',
+        'id, user_id, verify_order_ref, recurring_order_ref, rec_token, consecutive_failed_charges, retry_count, phase, status, client_phone, client_email',
       )
       .or(`verify_order_ref.eq.${orderReference},recurring_order_ref.eq.${orderReference}`)
       .maybeSingle();
@@ -85,7 +85,6 @@ export async function POST(request: Request) {
     const isCharge = orderReference === sub.recurring_order_ref;
     const recTokenRaw = body.recToken != null && String(body.recToken).length > 0 ? String(body.recToken) : '';
     const phoneFromBody = body.phone != null ? String(body.phone).trim() : '';
-
     if (transactionStatus === 'Approved') {
       if (isVerify) {
         const now = Date.now();
@@ -93,13 +92,22 @@ export async function POST(request: Request) {
         const accessExpires = new Date(now + 32 * 24 * 60 * 60 * 1000).toISOString();
         const update: Record<string, unknown> = {
           client_phone: phoneFromBody || sub.client_phone,
+          status: 'trialing',
           phase: 'trial',
           phase_ends_at: phaseEnds,
+          trial_end: phaseEnds,
+          next_billing_date: phaseEnds,
+          plan_price: 5,
+          is_founder: true,
+          plan: 'founding',
+          current_amount: 5,
           has_access: true,
           access_expires_at: accessExpires,
           trial_verified_at: new Date(now).toISOString(),
           consecutive_failed_charges: 0,
-          updated_at: new Date().toISOString(),
+          retry_count: 0,
+          suspended_at: null,
+          updated_at: new Date(now).toISOString(),
         };
         if (recTokenRaw) {
           update.rec_token = recTokenRaw;
@@ -112,6 +120,7 @@ export async function POST(request: Request) {
           .from('subscriptions')
           .update({
             consecutive_failed_charges: 0,
+            retry_count: 0,
             has_access: true,
             access_expires_at: new Date(Date.now() + 35 * 24 * 60 * 60 * 1000).toISOString(),
             updated_at: new Date().toISOString(),
@@ -121,28 +130,32 @@ export async function POST(request: Request) {
         console.log(`CHARGE_APPROVED userId=${sub.user_id} amount=${amount}`);
       }
     } else if (isCharge) {
-      const prev = sub.consecutive_failed_charges ?? 0;
+      const prev = (sub as { retry_count?: number }).retry_count ?? sub.consecutive_failed_charges ?? 0;
       const newCount = prev + 1;
       if (newCount >= 3) {
         await admin
           .from('subscriptions')
           .update({
+            status: 'suspended',
+            retry_count: newCount,
             consecutive_failed_charges: newCount,
-            has_access: false,
+            suspended_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           })
           .eq('id', sub.id);
         await sendPaymentEmail(
           sub.client_email,
-          'Ruta — доступ призупинено',
+          'Ruta — підписка призупинена',
           'Не вдалося списати кошти кілька разів. Оновіть картку в підписці або зверніться до підтримки.',
         );
         // eslint-disable-next-line no-console
-        console.log(`ACCESS_REVOKED userId=${sub.user_id}`);
+        console.log(`SUBSCRIPTION_SUSPENDED userId=${sub.user_id}`);
       } else {
         await admin
           .from('subscriptions')
           .update({
+            status: 'past_due',
+            retry_count: newCount,
             consecutive_failed_charges: newCount,
             updated_at: new Date().toISOString(),
           })

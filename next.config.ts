@@ -7,7 +7,7 @@ const nextConfig: NextConfig = {
     root: path.join(__dirname),
   },
   devIndicators: false,
-  serverExternalPackages: ["sharp", "@napi-rs/canvas"],
+  serverExternalPackages: ["sharp", "@napi-rs/canvas", "ffmpeg-static"],
 };
 
 export default nextConfig;

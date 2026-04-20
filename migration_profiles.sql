@@ -38,3 +38,6 @@ CREATE TRIGGER update_profiles_updated_at
   BEFORE UPDATE ON profiles
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
+
+-- Carousel `{…}` accent style (Brand DNA). Nullable; app defaults to marker when unset.
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS accent_style TEXT;

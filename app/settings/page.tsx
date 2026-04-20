@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/auth';
 import SettingsClient from '@/components/SettingsClient';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import type { BrandSettings } from '@/lib/brand';
+import { normalizeAccentStyle } from '@/lib/brand';
 
 interface BrandSettingsRow {
   theme: 'light' | 'dark';
@@ -12,11 +13,10 @@ interface BrandSettingsRow {
   color_dark_bg: string;
   color_accent1: string;
   color_accent2: string;
-  title_font: string;
-  body_font: string;
+  font_id: string;
 }
 
-function mapRow(row: BrandSettingsRow): BrandSettings {
+function mapRow(row: BrandSettingsRow, accentFromProfile: string | null | undefined): BrandSettings {
   return {
     theme: row.theme,
     vibe: row.vibe,
@@ -27,8 +27,8 @@ function mapRow(row: BrandSettingsRow): BrandSettings {
       accent1: row.color_accent1,
       accent2: row.color_accent2,
     },
-    titleFont: row.title_font,
-    bodyFont: row.body_font,
+    fontId: row.font_id,
+    accentStyle: normalizeAccentStyle(accentFromProfile),
   };
 }
 
@@ -39,13 +39,20 @@ export default async function SettingsPage() {
   }
 
   const supabase = await createServerSupabaseClient();
-  const { data } = await supabase
-    .from('brand_settings')
-    .select(
-      'theme,vibe,fav_color_hex,color_light_bg,color_dark_bg,color_accent1,color_accent2,title_font,body_font',
-    )
-    .eq('user_id', user.id)
-    .maybeSingle<BrandSettingsRow>();
+  const [{ data: brandData }, { data: profileData }] = await Promise.all([
+    supabase
+      .from('brand_settings')
+      .select(
+        'theme,vibe,fav_color_hex,color_light_bg,color_dark_bg,color_accent1,color_accent2,font_id',
+      )
+      .eq('user_id', user.id)
+      .maybeSingle<BrandSettingsRow>(),
+    supabase.from('profiles').select('accent_style').eq('id', user.id).maybeSingle<{ accent_style: string | null }>(),
+  ]);
 
-  return <SettingsClient initialBrandSettings={data ? mapRow(data) : null} />;
+  return (
+    <SettingsClient
+      initialBrandSettings={brandData ? mapRow(brandData, profileData?.accent_style) : null}
+    />
+  );
 }

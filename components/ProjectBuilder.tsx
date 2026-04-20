@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Location, Project, Scene } from '@/lib/domain';
 import { markProjectScenarioSeen } from '@/app/actions';
+import { readPendingReelProjectIdFromStorage, useRantResults } from '@/components/RantResultsContext';
 import ProjectHeader from './ProjectHeader';
 import SceneList from './SceneList';
 import CopyReferencePanel from './CopyReferencePanel';
@@ -22,10 +23,18 @@ export default function ProjectBuilder({
   backHref,
   backLabel,
 }: ProjectBuilderProps) {
+  const { state, clearResult } = useRantResults();
   const [project, setProject] = useState(initialProject);
   const [scenes, setScenes] = useState(initialScenes);
   const [locations, setLocations] = useState(initialLocations);
   const [focusSceneId, setFocusSceneId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const pending =
+      state.reelsProjectId ?? readPendingReelProjectIdFromStorage();
+    if (!pending || pending !== initialProject.id) return;
+    clearResult('reels');
+  }, [initialProject.id, state.reelsProjectId, clearResult]);
 
   useEffect(() => {
     if (!initialProject.scenario_unseen) return;
@@ -42,6 +51,27 @@ export default function ProjectBuilder({
           backHref={backHref}
           backLabel={backLabel}
         />
+        {project.project_type === 'reels' && project.reference_url ? (
+          <div className="mb-6 rounded-lg border border-zinc-200/90 bg-zinc-50/90 px-4 py-3 text-[13px] leading-snug text-zinc-600">
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              <span aria-hidden className="text-zinc-500">
+                📎
+              </span>
+              <span className="text-zinc-500">Референс:</span>
+              <a
+                href={project.reference_url}
+                target="_blank"
+                rel="noreferrer"
+                className="font-medium text-[color:var(--accent)] underline-offset-2 hover:underline"
+              >
+                відкрити в Instagram →
+              </a>
+            </div>
+            {project.reference_note?.trim() ? (
+              <p className="mt-2 text-[13px] text-zinc-600">{project.reference_note.trim()}</p>
+            ) : null}
+          </div>
+        ) : null}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-10">
           <div className="lg:col-span-7">
             <SceneList

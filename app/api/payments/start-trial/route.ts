@@ -32,10 +32,10 @@ export async function POST(request: Request) {
       (user.user_metadata as { phone?: string } | undefined)?.phone?.trim() ||
       null;
 
-    const clientPhone = phoneRaw || phoneFromUser;
-    if (!clientPhone || clientPhone.length < 10) {
+    const clientPhone = (phoneRaw || phoneFromUser || '380000000000').replace(/\D/g, '') || '380000000000';
+    if (clientPhone.length < 10) {
       return NextResponse.json(
-        { error: 'Додай номер телефону на етапі реєстрації, щоб продовжити оплату' },
+        { error: 'Некоректний номер телефону для WayForPay' },
         { status: 400 },
       );
     }
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
 
     const { data: sub, error: subErr } = await admin
       .from('subscriptions')
-      .select('phase')
+      .select('phase, status')
       .eq('user_id', user.id)
       .maybeSingle();
 
@@ -72,8 +72,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: subErr.message }, { status: 500 });
     }
 
+    const st = (sub as { status?: string })?.status;
+    if (st != null && st !== 'pending_verify' && st !== 'canceled') {
+      return NextResponse.json({ error: 'Already subscribed' }, { status: 409 });
+    }
+
     const phase = sub?.phase;
-    if (phase != null && phase !== 'pending_verify' && phase !== 'cancelled') {
+    if (st == null && phase != null && phase !== 'pending_verify' && phase !== 'cancelled') {
       return NextResponse.json({ error: 'Already subscribed' }, { status: 409 });
     }
 

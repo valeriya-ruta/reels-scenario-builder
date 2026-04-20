@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getCurrentUser } from '@/lib/auth';
-import LoginForm from '@/components/LoginForm';
+import SignupForm from '@/components/SignupForm';
 
 export default async function SignupPage() {
   const { user } = await getCurrentUser();
@@ -10,12 +10,11 @@ export default async function SignupPage() {
   }
 
   return (
-    <div className="w-full max-w-md">
-      <div className="mb-8 text-center">
-        <h1 className="font-display text-6xl font-black tracking-tight text-zinc-900 sm:text-7xl">Ruta</h1>
-        <p className="mt-2 text-base leading-normal text-zinc-600">твоя контент-подружка</p>
-      </div>
-      <LoginForm initialFlow="sign-up" />
+    <div
+      className="flex min-h-screen w-full flex-col items-center justify-center px-4 py-12"
+      style={{ backgroundColor: '#f5f2ed' }}
+    >
+      <SignupForm />
     </div>
   );
 }

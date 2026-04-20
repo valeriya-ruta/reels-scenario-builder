@@ -2,13 +2,10 @@
 
 import { requireAuth } from '@/lib/auth';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
-import type {
-  StorytellingProject,
-  StorytellingColumn,
-  StorytellingStory,
-  VisualType,
-  EngagementType,
-} from '@/lib/domain';
+import type { StorytellingColumn, StorytellingStory, VisualType, EngagementType } from '@/lib/domain';
+import { ENGAGEMENT_OPTIONS, VISUAL_OPTIONS } from '@/lib/domain';
+import { generateStoriesFromRant } from '@/lib/ai/rantToStories';
+import type { Slide } from '@/lib/ai/rantToStories';
 
 // ── Project actions ──
 
@@ -155,4 +152,109 @@ export async function reorderStorytellingStories(columnId: string, storyIds: str
         .eq('column_id', columnId),
     ),
   );
+}
+
+function formatSlideTextForStorytelling(slide: Slide): string {
+  const lines = [slide.screen_text.trim(), '', `Озвучення: ${slide.voiceover.trim()}`];
+  if (slide.notes?.trim()) {
+    lines.push('', `Нотатка: ${slide.notes.trim()}`);
+  }
+  return lines.join('\n');
+}
+
+function mapSlideVisualToDb(visual: Slide['visual']): VisualType | null {
+  if (visual === 'Говоряча голова') return 'Говоряща голова';
+  if (VISUAL_OPTIONS.includes(visual as VisualType)) return visual as VisualType;
+  return 'Говоряща голова';
+}
+
+function mapSlideInteractiveToDb(interactive: Slide['interactive']): EngagementType | null {
+  if (interactive === null) return null;
+  if (interactive === 'Заклик в директ') return 'Заклик в дірект';
+  if (ENGAGEMENT_OPTIONS.includes(interactive as EngagementType)) return interactive as EngagementType;
+  return null;
+}
+
+export type CreateStorytellingFromRantResult =
+  | { ok: true; projectId: string }
+  | { ok: false; error: string };
+
+/**
+ * Генерує сценарій сторіс з ренту і зберігає його як новий проєкт сторітелу (колонка + картки).
+ */
+export async function createStorytellingProjectFromRant(
+  rant: string,
+): Promise<CreateStorytellingFromRantResult> {
+  const user = await requireAuth();
+  if (!user) {
+    return { ok: false, error: 'Необхідно увійти в акаунт.' };
+  }
+
+  const trimmed = rant.trim();
+  if (!trimmed) {
+    return { ok: false, error: 'Введи рент перед генерацією.' };
+  }
+
+  let output: Awaited<ReturnType<typeof generateStoriesFromRant>>;
+  try {
+    output = await generateStoriesFromRant(trimmed);
+  } catch (error) {
+    const message =
+      error instanceof Error && error.message.trim().length > 0
+        ? error.message
+        : 'Не вдалося згенерувати сценарій. Спробуй ще раз.';
+    return { ok: false, error: message };
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const projectName = output.template_name.trim() || 'Сторітел з ренту';
+
+  const { data: project, error: projectError } = await supabase
+    .from('storytelling_projects')
+    .insert({ name: projectName, user_id: user.id })
+    .select()
+    .single();
+
+  if (projectError || !project) {
+    console.error('createStorytellingProjectFromRant project', projectError);
+    return { ok: false, error: 'Не вдалося створити проєкт сторітелу.' };
+  }
+
+  const columnName = `Шаблон ${output.template_used} — ${output.template_name}`.slice(0, 120);
+
+  const { data: column, error: columnError } = await supabase
+    .from('storytelling_columns')
+    .insert({ project_id: project.id, name: columnName, order_index: 0 })
+    .select()
+    .single();
+
+  if (columnError || !column) {
+    await supabase.from('storytelling_projects').delete().eq('id', project.id);
+    console.error('createStorytellingProjectFromRant column', columnError);
+    return { ok: false, error: 'Не вдалося створити колонку сторітелу.' };
+  }
+
+  const rows = output.slides.map((slide, index) => ({
+    column_id: column.id,
+    order_index: index,
+    text: formatSlideTextForStorytelling(slide),
+    visual: mapSlideVisualToDb(slide.visual),
+    engagement: mapSlideInteractiveToDb(slide.interactive),
+  }));
+
+  const { error: storiesError } = await supabase.from('storytelling_stories').insert(rows);
+
+  if (storiesError) {
+    await supabase.from('storytelling_columns').delete().eq('id', column.id);
+    await supabase.from('storytelling_projects').delete().eq('id', project.id);
+    console.error('createStorytellingProjectFromRant stories', storiesError);
+    return { ok: false, error: 'Не вдалося зберегти сторіс. Спробуй ще раз.' };
+  }
+
+  await supabase
+    .from('storytelling_projects')
+    .update({ updated_at: new Date().toISOString() })
+    .eq('id', project.id);
+
+  return { ok: true, projectId: project.id as string };
 }
