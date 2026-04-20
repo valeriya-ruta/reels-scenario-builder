@@ -27,8 +27,12 @@ export default function SignupForm() {
         password,
       });
       if (signUpError) throw signUpError;
-      // TODO: re-enable payments (WayForPay card verification step) after temporary bypass.
-      router.push('/trial/success');
+      try {
+        sessionStorage.setItem('ruta_show_welcome', '1');
+      } catch {
+        // ignore
+      }
+      router.push('/dashboard?welcome=1');
       router.refresh();
     } catch (err: unknown) {
       const msg = localizeAuthError(err);
