@@ -3,8 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node -e \"console.log('\\n  Reels Planner → http://localhost:3001 (use this port, not 3000)\\n')\" && next dev -p 3001",
+    "clean": "node -e \"try{require('fs').rmSync(require('path').join(process.cwd(),'.next'),{recursive:true,force:true});console.log('Removed .next');}catch(e){console.log('No .next or already clean');}\"",
+    "dev": "node -e \"console.log('\\n  Reels Planner → http://localhost:3001\\n  Dev: Webpack (avoids broken Turbopack cache on Windows). Fast mode: npm run dev:turbo\\n')\" && next dev -p 3001 --webpack",
+    "dev:turbo": "next dev -p 3001 --turbopack",
     "dev:https": "next dev -p 3001 --experimental-https",
+    "dev:fresh": "npm run clean && npm run dev",
     "build": "next build",
     "start": "next start -p 3001",
     "lint": "eslint"

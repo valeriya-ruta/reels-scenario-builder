@@ -16,6 +16,7 @@ import { splitTranscriptIntoScenes } from '@/lib/ai/sceneSegmentation';
 import { transformRantToScript } from '@/lib/ai/rantToScript';
 import { templatizeTranscriptToScenes } from '@/lib/ai/transcriptToTemplate';
 import { aiLimit, transcribeLimit } from '@/lib/ratelimit';
+import { sanitizePipelineErrorForUser } from '@/lib/sanitizePipelineError';
 
 type ImportMode = 'replace' | 'append';
 type ActionResult<T = undefined> =
@@ -180,11 +181,11 @@ export async function generateReferenceFromVideoLink(
   } catch (error) {
     const fallback =
       'Не вдалося обробити посилання. Перевір, що Reel публічний і спробуй ще раз через хвилину.';
-    const message =
+    const raw =
       error instanceof Error && error.message.trim().length > 0
         ? error.message
         : fallback;
-    return { ok: false, error: message };
+    return { ok: false, error: sanitizePipelineErrorForUser(raw) };
   }
 }
 
