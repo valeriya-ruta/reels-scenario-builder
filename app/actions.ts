@@ -619,7 +619,19 @@ export async function saveCompetitorReelToScenario(
       .eq('user_id', user.id)
       .maybeSingle();
 
-    if (scanErr || !scanRow) {
+    if (scanErr) {
+      const msg = scanErr.message ?? '';
+      if (msg.includes('user_note') || msg.includes('reference_url')) {
+        return {
+          ok: false,
+          error:
+            'Потрібна міграція БД (колонки user_note / reference_url на idea_scans). Запусти migration_idea_scans_reel_notes_and_projects_reference.sql у Supabase.',
+        };
+      }
+      return { ok: false, error: `Не вдалося отримати скан: ${msg}` };
+    }
+
+    if (!scanRow) {
       return { ok: false, error: 'Скан не знайдено.' };
     }
 

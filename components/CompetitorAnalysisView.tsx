@@ -596,15 +596,15 @@ export default function CompetitorAnalysisView() {
               style={{ boxShadow: 'var(--shadow-card)' }}
             >
               <div className="overflow-x-auto">
-                <div className="min-w-[720px]">
+                <div className="min-w-[560px] sm:min-w-[720px]">
                   <div
-                    className="grid grid-cols-[40px_minmax(220px,1fr)_104px_96px_72px_36px] items-center gap-3 border-b border-[var(--color-border-primary)] bg-[var(--color-background-secondary)] px-5 py-3 text-[11px] font-medium uppercase tracking-wide text-[var(--color-text-muted)]"
+                    className="grid grid-cols-[36px_minmax(140px,1fr)_88px_84px_60px_28px] items-center gap-2 border-b border-[var(--color-border-primary)] bg-[var(--color-background-secondary)] px-3 py-3 text-[10px] font-medium uppercase tracking-wide text-[var(--color-text-muted)] sm:grid-cols-[40px_minmax(220px,1fr)_104px_96px_72px_36px] sm:gap-3 sm:px-5 sm:text-[11px]"
                   >
-                    <span aria-hidden className="block w-10" />
-                    <span>Instagram акаунт</span>
-                    <span className="text-right">Підписники</span>
-                    <span className="text-right">Сер. перегл.</span>
-                    <span className="text-right">ER</span>
+                    <span aria-hidden className="block w-9 sm:w-10" />
+                    <span className="whitespace-nowrap">Instagram акаунт</span>
+                    <span className="whitespace-nowrap text-right">Підписники</span>
+                    <span className="whitespace-nowrap text-right">Сер. перегл.</span>
+                    <span className="whitespace-nowrap text-right">ER</span>
                     <span />
                   </div>
                   {recentsLoading ? (
@@ -648,10 +648,10 @@ export default function CompetitorAnalysisView() {
                           <button
                             type="button"
                             onClick={() => void onRecentClick(entry)}
-                            className="grid w-full cursor-pointer grid-cols-[40px_minmax(220px,1fr)_104px_96px_72px_36px] items-center gap-3 px-5 py-3.5 text-left transition-colors hover:bg-[#fafbfd]"
+                            className="grid w-full cursor-pointer grid-cols-[36px_minmax(140px,1fr)_88px_84px_60px_28px] items-center gap-2 px-3 py-3.5 text-left transition-colors hover:bg-[#fafbfd] sm:grid-cols-[40px_minmax(220px,1fr)_104px_96px_72px_36px] sm:gap-3 sm:px-5"
                           >
                             <div
-                              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#eef1f8] to-[#dfe4f2] text-sm font-semibold text-[var(--color-text-primary)]"
+                              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#eef1f8] to-[#dfe4f2] text-xs font-semibold text-[var(--color-text-primary)] sm:h-10 sm:w-10 sm:text-sm"
                               style={{
                                 boxShadow:
                                   '0 0 0 2px #fff, 0 0 0 4px rgba(34, 197, 94, 0.28)',
@@ -674,13 +674,13 @@ export default function CompetitorAnalysisView() {
                                 )}
                               </div>
                             </div>
-                            <span className="text-right text-sm font-semibold tabular-nums text-[var(--color-text-primary)]">
+                            <span className="text-right text-xs font-semibold tabular-nums text-[var(--color-text-primary)] sm:text-sm">
                               {followersShortFromLabel(entry.followersLabel)}
                             </span>
-                            <span className="text-right text-sm font-semibold tabular-nums text-[var(--color-text-primary)]">
+                            <span className="text-right text-xs font-semibold tabular-nums text-[var(--color-text-primary)] sm:text-sm">
                               {entry.avgViews}
                             </span>
-                            <span className="text-right text-sm font-semibold tabular-nums text-[var(--color-text-primary)]">
+                            <span className="text-right text-xs font-semibold tabular-nums text-[var(--color-text-primary)] sm:text-sm">
                               {entry.avgEr}
                             </span>
                             <span className="flex justify-end text-[var(--color-text-muted)]">

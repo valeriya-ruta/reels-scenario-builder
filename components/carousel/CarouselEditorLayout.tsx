@@ -26,6 +26,10 @@ import {
   sortableKeyboardCoordinates,
   useSortable,
 } from '@dnd-kit/sortable';
+import {
+  restrictToHorizontalAxis,
+  restrictToVerticalAxis,
+} from '@dnd-kit/modifiers';
 import { CSS } from '@dnd-kit/utilities';
 import {
   ChevronLeft,
@@ -270,6 +274,10 @@ export default function CarouselEditorLayout({
     }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
+  const dragModifiers = useMemo(
+    () => [isDesktopLayout ? restrictToVerticalAxis : restrictToHorizontalAxis],
+    [isDesktopLayout],
+  );
 
   const tabLabel = (t: EditorTab) =>
     t === 'text' ? 'Текст' : t === 'bg' ? 'Фон' : 'Стиль';
@@ -447,7 +455,12 @@ export default function CarouselEditorLayout({
           </p>
         </div>
 
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={onDragEnd}
+          modifiers={dragModifiers}
+        >
           <SortableContext items={slides.map((s) => s.id)} strategy={rectSortingStrategy}>
             <div className="order-2 flex shrink-0 flex-row gap-2 overflow-x-auto px-3 py-2 md:order-1 md:w-[72px] md:flex-col md:overflow-y-auto md:px-1 md:py-0">
               {slides.map((slide, index) => (

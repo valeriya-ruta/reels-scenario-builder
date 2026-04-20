@@ -27,6 +27,12 @@ const TREND_ITEMS = [
   { title: 'Топ звук зараз', url: 'https://www.instagram.com/reels/' },
 ] as const;
 
+const WORKSHOP_LESSONS = [
+  { label: 'Урок 1', embedUrl: 'https://www.youtube.com/embed/DWELuEoU2OE' },
+  { label: 'Урок 2', embedUrl: 'https://www.youtube.com/embed/Um-VOIeE1m4' },
+  { label: 'Урок 3', embedUrl: 'https://www.youtube.com/embed/iL7A4mOEaE0' },
+] as const;
+
 type FormatId = 'reels' | 'stories' | 'carousel';
 
 interface FormatButtonState {
@@ -226,7 +232,7 @@ export default function DashboardHome() {
       <Suspense fallback={null}>
         <WelcomeModal />
       </Suspense>
-      <div className="mx-auto max-w-5xl space-y-6 pb-16">
+      <div className="mx-auto max-w-5xl space-y-6 pb-20">
       <div className="space-y-6 pt-2">
         <h1 className="font-display text-center text-2xl font-bold tracking-tight text-black sm:text-3xl">
           Виплесни всі свої думки
@@ -371,6 +377,29 @@ export default function DashboardHome() {
           </div>
         </section>
       )}
+
+      <section className="mt-10 space-y-4">
+        <h2 className="font-display text-lg font-semibold text-black">Воркшоп з ШІ-контенту</h2>
+        <h3 className="text-sm font-medium text-zinc-700">Модуль 1: де брати ідеї та воронка контенту</h3>
+        <div className="space-y-4">
+          {WORKSHOP_LESSONS.map((lesson) => (
+            <article
+              key={lesson.label}
+              className="card-shadow rounded-2xl border border-[color:var(--border)] bg-white p-4"
+            >
+              <p className="mb-3 text-sm font-semibold text-black">{lesson.label}</p>
+              <iframe
+                src={lesson.embedUrl}
+                title={lesson.label}
+                className="aspect-video w-full rounded-xl border border-[color:var(--border)]"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                referrerPolicy="strict-origin-when-cross-origin"
+                allowFullScreen
+              />
+            </article>
+          ))}
+        </div>
+      </section>
     </div>
     </>
   );
