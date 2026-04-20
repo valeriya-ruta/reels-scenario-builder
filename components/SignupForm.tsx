@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { createClient } from '@/lib/supabaseClient';
 import { localizeAuthError } from '@/lib/authErrorMessages';
 import { useRouter } from 'next/navigation';
@@ -12,34 +12,8 @@ export default function SignupForm() {
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [step, setStep] = useState<'form' | 'interstitial'>('form');
   const router = useRouter();
   const supabase = createClient();
-  const interstitialTimerRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (step !== 'interstitial') return;
-    interstitialTimerRef.current = window.setTimeout(() => {
-      continueToCardRef();
-    }, 2000);
-    return () => {
-      if (interstitialTimerRef.current) window.clearTimeout(interstitialTimerRef.current);
-    };
-  }, [step]);
-
-  function continueToCardRef() {
-    if (interstitialTimerRef.current) {
-      window.clearTimeout(interstitialTimerRef.current);
-      interstitialTimerRef.current = null;
-    }
-    try {
-      sessionStorage.setItem('ruta_post_signup_verify', '1');
-    } catch {
-      // ignore
-    }
-    router.push('/subscribe');
-    router.refresh();
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,7 +27,9 @@ export default function SignupForm() {
         password,
       });
       if (signUpError) throw signUpError;
-      setStep('interstitial');
+      // TODO: re-enable payments (WayForPay card verification step) after temporary bypass.
+      router.push('/trial/success');
+      router.refresh();
     } catch (err: unknown) {
       const msg = localizeAuthError(err);
       setError(msg);
@@ -67,31 +43,6 @@ export default function SignupForm() {
       setLoading(false);
     }
   };
-
-  const continueToCard = () => continueToCardRef();
-
-  if (step === 'interstitial') {
-    return (
-      <div
-        className="w-full max-w-[420px] rounded-2xl border border-[#e8e3dc] bg-white p-10 shadow-sm"
-        style={{ borderRadius: 16, padding: 40 }}
-      >
-        <h2 className="text-[22px] font-extrabold leading-tight text-[#1a1a1a]">Акаунт створено ✓</h2>
-        <p className="mt-4 text-[15px] leading-relaxed text-[#555]">
-          Останній крок — верифікація картки.
-          <br />
-          Списань не буде — лише перевірка.
-        </p>
-        <button
-          type="button"
-          onClick={continueToCard}
-          className="mt-8 flex h-12 w-full items-center justify-center rounded-[10px] bg-[#1a1a1a] text-[15px] font-bold text-white transition-opacity hover:opacity-90"
-        >
-          Продовжити →
-        </button>
-      </div>
-    );
-  }
 
   return (
     <div

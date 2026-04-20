@@ -9,6 +9,7 @@ import { useNavBadges } from '@/components/NavBadgeContext';
 import { useRantResults } from '@/components/RantResultsContext';
 import { generateReelFromRant } from '@/app/actions';
 import { createStorytellingProjectFromRant } from '@/app/storytelling-actions';
+import { createCarouselProjectFromRant } from '@/app/carousel-actions';
 import RantInput from '@/components/RantInput';
 import type { CarouselRantOutput } from '@/lib/carouselTypes';
 
@@ -55,7 +56,7 @@ function initialFormatStates(): Record<FormatId, FormatButtonState> {
 export default function DashboardHome() {
   const router = useRouter();
   const { setBadge } = useNavBadges();
-  const { setReelResult, setCarouselResult } = useRantResults();
+  const { setReelResult } = useRantResults();
   const [rant, setRant] = useState('');
   const [formatStates, setFormatStates] = useState<Record<FormatId, FormatButtonState>>(
     initialFormatStates
@@ -152,9 +153,19 @@ export default function DashboardHome() {
         }));
         return;
       }
-      setCarouselResult(data, snapshot);
+      const createResult = await createCarouselProjectFromRant(data, snapshot);
+      if (epoch !== rantEpochRef.current) return;
+      if (!createResult.ok) {
+        setFormatStates((s) => ({ ...s, carousel: { status: 'idle' } }));
+        setFormatErrors((e) => ({
+          ...e,
+          carousel: 'Не вдалося створити карусель — спробуй ще раз',
+        }));
+        return;
+      }
       setBadge('carousel', true);
       setFormatStates((s) => ({ ...s, carousel: { status: 'saved' } }));
+      router.push('/carousel');
     } catch {
       if (epoch !== rantEpochRef.current) return;
       setFormatStates((s) => ({ ...s, carousel: { status: 'idle' } }));

@@ -47,7 +47,8 @@ export default function LoginForm({ initialFlow = 'sign-in' }: LoginFormProps) {
           options: { data: { full_name: name, phone } },
         });
         if (signUpError) throw signUpError;
-        router.push('/subscribe');
+        // TODO: re-enable payments (WayForPay card verification step) after temporary bypass.
+        router.push('/trial/success');
         router.refresh();
       } else {
         const { error: signInError } = await supabase.auth.signInWithPassword({

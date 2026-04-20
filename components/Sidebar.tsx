@@ -119,7 +119,7 @@ export default function Sidebar({ userName, userEmail }: SidebarProps) {
           }
 
           const isCurrentPage = item.matchPrefixes.some((p) => pathname.startsWith(p));
-          const hasDot = item.badgeKey ? badges[item.badgeKey] : false;
+          const hasNewBadge = item.badgeKey ? badges[item.badgeKey] : false;
 
           return (
             <a
@@ -134,8 +134,14 @@ export default function Sidebar({ userName, userEmail }: SidebarProps) {
             >
               {item.icon ? <item.icon className="h-4 w-4 shrink-0" /> : null}
               <span className="min-w-0 flex-1 truncate pr-2">{item.label}</span>
-              {hasDot && (
-                <span className="nav-badge-dot shrink-0" title="Є нове" aria-hidden />
+              {hasNewBadge && (
+                <span
+                  className="ml-2 shrink-0 rounded-full bg-[color:var(--accent)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide leading-none text-white"
+                  title="Є нове"
+                  aria-hidden
+                >
+                  NEW
+                </span>
               )}
             </a>
           );

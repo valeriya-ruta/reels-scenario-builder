@@ -1,15 +1,9 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
-import {
-  subscriptionAllowsAppAccess,
-  subscriptionNeedsCardVerify,
-} from '@/lib/subscriptionAccess';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-const SUBSCRIPTION_SELECT = 'has_access, access_expires_at, phase, status';
 
 function isPublicPath(pathname: string): boolean {
   if (pathname === '/' || pathname === '/signup') return true;
@@ -91,41 +85,11 @@ export async function middleware(request: NextRequest) {
   }
 
   if (isPublicPath(pathname)) {
-    if (pathname === '/subscribe') {
-      const { data: sub } = await supabase
-        .from('subscriptions')
-        .select(SUBSCRIPTION_SELECT)
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (!subscriptionNeedsCardVerify(sub) || subscriptionAllowsAppAccess(sub)) {
-        const url = request.nextUrl.clone();
-        url.pathname = '/dashboard';
-        return NextResponse.redirect(url);
-      }
-    }
     return supabaseResponse;
   }
 
-  const { data: sub } = await supabase
-    .from('subscriptions')
-    .select(SUBSCRIPTION_SELECT)
-    .eq('user_id', user.id)
-    .maybeSingle();
-
-  const hasAccess = subscriptionAllowsAppAccess(sub);
-
-  if (hasAccess) {
-    return supabaseResponse;
-  }
-
-  if (pathname.startsWith('/api/')) {
-    return NextResponse.json({ error: 'subscription_required' }, { status: 403 });
-  }
-
-  const url = request.nextUrl.clone();
-  url.pathname = '/subscribe';
-  return NextResponse.redirect(url);
+  // TODO: re-enable subscription/WayForPay gate after temporary open-access period.
+  return supabaseResponse;
 }
 
 export const config = {

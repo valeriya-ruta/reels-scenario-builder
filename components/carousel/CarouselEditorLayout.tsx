@@ -471,7 +471,7 @@ export default function CarouselEditorLayout({
       {!isDesktopLayout ? (
         <>
           <div
-            className="fixed inset-x-0 bottom-0 z-40 max-h-[85vh]"
+            className="fixed inset-x-0 bottom-16 z-[70] max-h-[85vh]"
             style={{
               transform: sheetY,
               transition: 'transform 200ms cubic-bezier(0.32, 0.72, 0, 1)',
@@ -505,7 +505,7 @@ export default function CarouselEditorLayout({
               {downloadFooter}
             </div>
           </div>
-          <div className="h-[56px] shrink-0" aria-hidden />
+          <div className="h-[120px] shrink-0" aria-hidden />
         </>
       ) : null}
 
