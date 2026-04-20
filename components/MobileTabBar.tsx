@@ -1,7 +1,7 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import { FileText, LayoutGrid, Lightbulb } from 'lucide-react';
+import { FileText, LayoutGrid } from 'lucide-react';
 import { useNavBadges } from '@/components/NavBadgeContext';
 
 function HomeBulbIcon({ className }: { className?: string }) {
@@ -28,6 +28,17 @@ function StoriesIcon({ className }: { className?: string }) {
   );
 }
 
+function SearchIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 -960 960 960" fill="none" aria-hidden>
+      <path
+        d="M784-120 532-372q-30 24-69 38t-83 14q-109 0-184.5-75.5T120-580q0-109 75.5-184.5T380-840q109 0 184.5 75.5T640-580q0 44-14 83t-38 69l252 252-56 56ZM380-400q75 0 127.5-52.5T560-580q0-75-52.5-127.5T380-760q-75 0-127.5 52.5T200-580q0 75 52.5 127.5T380-400Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
 const tabs = [
   { label: 'Головна', href: '/dashboard', matchPrefixes: ['/dashboard'], Icon: HomeBulbIcon, badgeKey: null },
   { label: 'Рілси', href: '/projects', matchPrefixes: ['/projects', '/project/'], Icon: FileText, badgeKey: 'reels' },
@@ -43,7 +54,7 @@ const tabs = [
     label: 'Аналіз',
     href: '/competitor-analysis',
     matchPrefixes: ['/competitor-analysis'],
-    Icon: Lightbulb,
+    Icon: SearchIcon,
     badgeKey: null,
   },
 ] as const;

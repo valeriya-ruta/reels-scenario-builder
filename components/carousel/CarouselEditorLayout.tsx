@@ -255,6 +255,16 @@ export default function CarouselEditorLayout({
     return 'translateY(calc(100% - min(52vh, 70%)))';
   }, [sheetSnap]);
 
+  const mobilePreviewHeight = useMemo(() => {
+    if (sheetSnap === 'half') return '40vh';
+    if (sheetSnap === 'dismissed') return '58vh';
+    return '52vh';
+  }, [sheetSnap]);
+
+  const mobilePreviewMaxHeight = sheetSnap === 'half' ? 420 : 560;
+  const mobileScaleFactor = sheetSnap === 'half' ? 0.72 : sheetSnap === 'peek' ? 0.86 : 1;
+  const mobilePreviewScale = previewScale * mobileScaleFactor;
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -365,7 +375,11 @@ export default function CarouselEditorLayout({
         <div className="order-1 flex min-h-0 w-full flex-col items-center md:order-2 md:max-w-[min(100%,520px)]">
           <div
             className="relative flex w-full flex-col items-center justify-center md:min-h-[min(520px,70vh)]"
-            style={{ height: '55vh', maxHeight: 560 }}
+            style={
+              isDesktopLayout
+                ? undefined
+                : { height: mobilePreviewHeight, maxHeight: mobilePreviewMaxHeight, minHeight: 240 }
+            }
           >
             <div
               className="pointer-events-none absolute inset-y-8 left-0 w-10 scale-[0.92] opacity-40 md:hidden"
@@ -387,7 +401,7 @@ export default function CarouselEditorLayout({
                   slide={activeSlide}
                   brand={brandSettings}
                   brandFont={brandFont}
-                  scale={previewScale}
+                  scale={mobilePreviewScale}
                   slideIndex={activeIndex + 1}
                   totalSlides={slides.length}
                 />
@@ -480,17 +494,31 @@ export default function CarouselEditorLayout({
             <div className="flex min-h-0 max-h-[85vh] flex-col rounded-t-2xl border border-[color:var(--border)] bg-white shadow-[0_-8px_30px_rgba(0,0,0,0.12)]">
               <button
                 type="button"
-                className="flex h-8 w-full shrink-0 items-center justify-center pt-2"
+                className="flex h-8 w-full shrink-0 touch-none items-center justify-center pt-2"
                 aria-label="Перетягнути панель"
+                onClick={() => {
+                  setSheetSnap((prev) => (prev === 'half' ? 'peek' : 'half'));
+                }}
                 onTouchStart={(e) => {
                   const startY = e.touches[0]?.clientY ?? 0;
+                  let moved = false;
+                  let settled = false;
+                  const settle = (next: SheetSnap) => {
+                    if (settled) return;
+                    settled = true;
+                    setSheetSnap(next);
+                  };
                   const onMove = (ev: TouchEvent) => {
                     const y = ev.touches[0]?.clientY ?? startY;
                     const dy = y - startY;
-                    if (dy > 60) setSheetSnap('peek');
-                    if (dy < -40) setSheetSnap('half');
+                    if (Math.abs(dy) > 12) moved = true;
+                    if (dy > 40) settle('peek');
+                    if (dy < -40) settle('half');
                   };
                   const onEnd = () => {
+                    if (!settled && moved) {
+                      setSheetSnap((prev) => (prev === 'half' ? 'peek' : 'half'));
+                    }
                     window.removeEventListener('touchmove', onMove);
                     window.removeEventListener('touchend', onEnd);
                   };

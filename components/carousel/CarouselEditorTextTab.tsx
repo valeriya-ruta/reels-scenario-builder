@@ -88,14 +88,14 @@ export default function CarouselEditorTextTab({
           value={slide.title}
           onPatch={onChange}
           multiline
-          rows={3}
+          rows={1}
           autoGrow
           toolbarPlacement="corner"
           showPreviewLine={false}
           baseColor={slide.titleColor}
           accentStyle={accentStyle}
           accentColor={accentColor}
-          inputClassName="min-h-[3rem] w-full resize-none rounded-xl border border-[color:var(--border)] py-2 pl-3 pr-14 pt-10 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2"
+          inputClassName="min-h-[2.5rem] w-full resize-none rounded-xl border border-[color:var(--border)] py-2 pl-3 pr-14 pt-8 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2"
         />
       </div>
 
@@ -110,14 +110,14 @@ export default function CarouselEditorTextTab({
             value={slide.body}
             onPatch={onChange}
             multiline
-            rows={4}
+            rows={2}
             autoGrow
             toolbarPlacement="corner"
             showPreviewLine={false}
             baseColor={slide.bodyColor}
             accentStyle={accentStyle}
             accentColor={accentColor}
-            inputClassName="min-h-[5rem] w-full resize-none rounded-xl border border-[color:var(--border)] py-2 pl-3 pr-14 pt-10 text-sm leading-relaxed outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2"
+            inputClassName="min-h-[2.75rem] w-full resize-none rounded-xl border border-[color:var(--border)] py-2 pl-3 pr-14 pt-8 text-sm leading-relaxed outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2"
           />
         </div>
       )}

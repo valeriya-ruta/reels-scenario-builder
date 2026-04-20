@@ -132,7 +132,7 @@ export default function AccentRichTextField({
             {...sharedProps}
             ref={textareaRef}
             rows={rows}
-            style={autoGrow ? { overflow: 'hidden', minHeight: '3rem' } : undefined}
+            style={autoGrow ? { overflow: 'hidden' } : undefined}
           />
         ) : (
           <input {...sharedProps} ref={inputRef} />
