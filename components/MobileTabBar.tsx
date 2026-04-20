@@ -1,15 +1,46 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import { FileText, Home, LayoutGrid, Lightbulb } from 'lucide-react';
+import { FileText, LayoutGrid, Lightbulb } from 'lucide-react';
 import { useNavBadges } from '@/components/NavBadgeContext';
 
+function HomeBulbIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M9 21h6M10 18h4M12 3a6 6 0 0 1 4 10.5V17a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1v-3.5A6 6 0 0 1 12 3z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function StoriesIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="8" y="3" width="8" height="18" rx="2" stroke="currentColor" strokeWidth="1.5" />
+      <rect x="4" y="5" width="3" height="14" rx="1.5" stroke="currentColor" strokeWidth="1.5" opacity="0.5" />
+      <rect x="17" y="5" width="3" height="14" rx="1.5" stroke="currentColor" strokeWidth="1.5" opacity="0.5" />
+    </svg>
+  );
+}
+
 const tabs = [
-  { label: 'Головна', href: '/dashboard', matchPrefixes: ['/dashboard'], Icon: Home, badgeKey: null },
-  { label: 'Сценарій', href: '/projects', matchPrefixes: ['/projects', '/project/'], Icon: FileText, badgeKey: 'reels' },
+  { label: 'Головна', href: '/dashboard', matchPrefixes: ['/dashboard'], Icon: HomeBulbIcon, badgeKey: null },
+  { label: 'Рілси', href: '/projects', matchPrefixes: ['/projects', '/project/'], Icon: FileText, badgeKey: 'reels' },
   { label: 'Карусель', href: '/carousel', matchPrefixes: ['/carousel'], Icon: LayoutGrid, badgeKey: 'carousel' },
   {
-    label: 'Ідеї',
+    label: 'Сторіс',
+    href: '/storytellings',
+    matchPrefixes: ['/storytellings', '/storytelling/', '/stories'],
+    Icon: StoriesIcon,
+    badgeKey: 'storytelling',
+  },
+  {
+    label: 'Аналіз',
     href: '/competitor-analysis',
     matchPrefixes: ['/competitor-analysis'],
     Icon: Lightbulb,
