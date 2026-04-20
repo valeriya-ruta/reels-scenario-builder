@@ -107,6 +107,23 @@ export async function POST(request: Request) {
       clientPhone,
     });
 
+    // TEMP DIAGNOSTIC — remove after debugging
+    const mask = (v: string | undefined) =>
+      v ? `${v.slice(0, 4)}…${v.slice(-2)} (len=${v.length})` : '(empty)';
+    // eslint-disable-next-line no-console
+    console.log('[WFP_DIAG]', JSON.stringify({
+      action: VERIFY_ACTION,
+      merchantAccount: formParams.merchantAccount,
+      merchantDomainName: formParams.merchantDomainName,
+      orderReference: formParams.orderReference,
+      amount: formParams.amount,
+      currency: formParams.currency,
+      returnUrl: formParams.returnUrl,
+      serviceUrl: formParams.serviceUrl,
+      signature: mask(formParams.merchantSignature),
+      secretKeyFingerprint: mask(process.env.WAYFORPAY_SECRET_KEY),
+    }));
+
     return NextResponse.json({
       formParams,
       action: VERIFY_ACTION,
