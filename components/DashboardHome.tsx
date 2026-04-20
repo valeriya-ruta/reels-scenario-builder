@@ -31,6 +31,8 @@ const WORKSHOP_LESSONS = [
   { label: 'Урок 1', embedUrl: 'https://www.youtube.com/embed/DWELuEoU2OE' },
   { label: 'Урок 2', embedUrl: 'https://www.youtube.com/embed/Um-VOIeE1m4' },
   { label: 'Урок 3', embedUrl: 'https://www.youtube.com/embed/iL7A4mOEaE0' },
+  { label: 'Урок 4', embedUrl: 'https://www.youtube.com/embed/HJLP13aqbKc' },
+  { label: 'Урок 5', embedUrl: 'https://www.youtube.com/embed/E0IK9fYM3Ow' },
 ] as const;
 
 type FormatId = 'reels' | 'stories' | 'carousel';
