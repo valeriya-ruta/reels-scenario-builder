@@ -103,7 +103,7 @@ export default function LoginForm({ initialFlow = 'sign-in' }: LoginFormProps) {
           </div>
           <div>
             <label htmlFor="phone" className="block text-sm font-medium text-zinc-700">
-              Телефон для оплати
+              Номер телефону
             </label>
             <input
               id="phone"
