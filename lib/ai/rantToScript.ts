@@ -17,7 +17,22 @@ interface RantResponse {
   }>;
 }
 
-const SYSTEM_PROMPT = `Ти — досвідчений сценарист коротких відео для Instagram Reels. Ти вмієш брати сирий, неструктурований рент (голосовий або текстовий) і перетворювати його на чіткий, виконуваний сценарій із сильним сторітелінгом.
+type OutputLanguage = 'uk' | 'en';
+
+function detectOutputLanguage(rant: string): OutputLanguage {
+  const cyr = (rant.match(/[А-Яа-яІіЇїЄєҐґ]/g) ?? []).length;
+  const latin = (rant.match(/[A-Za-z]/g) ?? []).length;
+  if (latin >= 20 && latin >= cyr * 1.2) return 'en';
+  return 'uk';
+}
+
+function buildSystemPrompt(outputLanguage: OutputLanguage): string {
+  const languageRule =
+    outputLanguage === 'en'
+      ? '- Language: natural conversational English. Keep the creator voice and emotional tone.'
+      : '- Мова: українська, розмовна, жива. Як говорить автор, не як пишуть у підручниках.';
+
+  return `Ти — досвідчений сценарист коротких відео для Instagram Reels. Ти вмієш брати сирий, неструктурований рент (голосовий або текстовий) і перетворювати його на чіткий, виконуваний сценарій із сильним сторітелінгом.
 
 ТВОЄ ЗАВДАННЯ:
 Перетвори наданий рент на сценарій рілсу. Рілс — це коротке відео (30–90 секунд). Кожна сцена = одна думка, один візуальний момент, одна емоція.
@@ -52,7 +67,7 @@ const SYSTEM_PROMPT = `Ти — досвідчений сценарист кор
 ---
 
 ПРАВИЛА НАПИСАННЯ:
-- Мова: українська, розмовна, жива. Як говорить автор, не як пишуть у підручниках.
+${languageRule}
 - Довжина кожної сцени: 1–4 речення (≈ 3–8 секунд екранного часу)
 - Загальна кількість сцен: 5–8 (не більше)
 - Тон: береги голос автора. Якщо рент емоційний — сценарій теж має бути емоційним. Якщо іронічний — збережи іронію.
@@ -75,23 +90,29 @@ const SYSTEM_PROMPT = `Ти — досвідчений сценарист кор
   ],
   "cta": "Текст CTA"
 }`;
+}
 
-function buildUserContent(rant: string): string {
+function buildUserContent(rant: string, outputLanguage: OutputLanguage): string {
+  const languageHint =
+    outputLanguage === 'en'
+      ? 'Write all output fields in English.'
+      : 'Пиши всі поля відповіді українською.';
   return `Ось рент автора:
 
 """
 ${rant}
 """
 
-Перетвори це на сценарій рілсу за вказаною структурою.`;
+Перетвори це на сценарій рілсу за вказаною структурою.
+${languageHint}`;
 }
 
-function flattenToSceneDrafts(parsed: RantResponse): RantSceneDraft[] {
+function flattenToSceneDrafts(parsed: RantResponse, outputLanguage: OutputLanguage): RantSceneDraft[] {
   const rows: RantSceneDraft[] = [];
 
   const hook = (parsed.hook ?? '').trim();
   if (hook) {
-    rows.push({ text: hook, name: 'ХУК', editor_note: null });
+    rows.push({ text: hook, name: outputLanguage === 'en' ? 'HOOK' : 'ХУК', editor_note: null });
   }
 
   for (const s of parsed.scenes ?? []) {
@@ -117,6 +138,7 @@ export async function transformRantToScript(
   rant: string
 ): Promise<{ title: string; scenes: RantSceneDraft[] }> {
   const apiKey = requireServerEnv('GROQ_API_KEY');
+  const outputLanguage = detectOutputLanguage(rant);
 
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
@@ -129,8 +151,8 @@ export async function transformRantToScript(
       temperature: 0.7,
       response_format: { type: 'json_object' },
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: buildUserContent(rant) },
+        { role: 'system', content: buildSystemPrompt(outputLanguage) },
+        { role: 'user', content: buildUserContent(rant, outputLanguage) },
       ],
     }),
   });
@@ -169,13 +191,13 @@ export async function transformRantToScript(
     throw new Error('Щось пішло не так. Спробуй ще раз.');
   }
 
-  const scenes = flattenToSceneDrafts(parsed);
+  const scenes = flattenToSceneDrafts(parsed, outputLanguage);
 
   if (scenes.length === 0) {
     throw new Error('AI не зміг розбити текст на сцени. Спробуй ще раз.');
   }
 
-  const title = (parsed.title ?? '').trim() || 'Рілс з ренту';
+  const title = (parsed.title ?? '').trim() || (outputLanguage === 'en' ? 'Reel from rant' : 'Рілс з ренту');
 
   return { title, scenes };
 }

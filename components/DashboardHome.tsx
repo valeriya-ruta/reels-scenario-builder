@@ -98,7 +98,10 @@ export default function DashboardHome() {
 
     if (!result.ok) {
       setFormatStates((s) => ({ ...s, reels: { status: 'idle' } }));
-      setFormatErrors((e) => ({ ...e, reels: 'Помилка генерації — спробуй ще раз' }));
+      setFormatErrors((e) => ({
+        ...e,
+        reels: result.error || 'Помилка генерації — спробуй ще раз',
+      }));
       return;
     }
 
@@ -155,9 +158,13 @@ export default function DashboardHome() {
       if (epoch !== rantEpochRef.current) return;
       if (!res.ok || !data.slides?.length) {
         setFormatStates((s) => ({ ...s, carousel: { status: 'idle' } }));
+        const msg =
+          typeof data.error === 'string' && data.error.trim()
+            ? data.error.trim()
+            : 'Помилка генерації — спробуй ще раз';
         setFormatErrors((e) => ({
           ...e,
-          carousel: 'Помилка генерації — спробуй ще раз',
+          carousel: msg,
         }));
         return;
       }
