@@ -177,6 +177,23 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } {
   return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
 }
 
+function contrastRatio(foreground: string, background: string): number {
+  const fg = hexToRgb(foreground);
+  const bg = hexToRgb(background);
+  const toLinear = (channel: number) => {
+    const value = channel / 255;
+    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  };
+  const fgL = 0.2126 * toLinear(fg.r) + 0.7152 * toLinear(fg.g) + 0.0722 * toLinear(fg.b);
+  const bgL = 0.2126 * toLinear(bg.r) + 0.7152 * toLinear(bg.g) + 0.0722 * toLinear(bg.b);
+  const [lighter, darker] = fgL > bgL ? [fgL, bgL] : [bgL, fgL];
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function ensureReadableTextColor(preferred: string, background: string): string {
+  return contrastRatio(preferred, background) >= 4.5 ? preferred : '#FFFFFF';
+}
+
 function drawParagraphSegmented(
   ctx: SKRSContext2D,
   text: string,
@@ -639,6 +656,7 @@ async function renderStatement(
     const { r, g, b } = hexToRgb(accent);
     ctx.fillStyle = `rgb(${r},${g},${b})`;
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
+    const statementTextColor = ensureReadableTextColor('#FFFFFF', accent);
     drawWatermark(ctx, handle, domain, 'bold', true);
     const img = await rasterizePhosphorIcon(icon || 'sparkle', 120, '#ffffff');
     if (img) {
@@ -661,7 +679,7 @@ async function renderStatement(
         PADDING,
         yy,
         88,
-        '#ffffff',
+        statementTextColor,
         accent,
         brand.accentStyle,
         'center',
@@ -899,9 +917,19 @@ export async function renderCarouselTemplatePng(input: CarouselTemplateInput): P
   if (input.slideType === 'cover') {
     await renderCover(ctx, { ...input, label: null, body: '' }, refined);
   } else if (input.slideType === 'slide') {
-    if (preset === 'quote') await renderStatement(ctx, { ...input, label: null }, refined);
+    if (preset === 'quote') {
+      await renderStatement(
+        ctx,
+        { ...input, title: input.title.trim() || input.body.trim(), body: '', label: null },
+        refined,
+      );
+    }
     else if (preset === 'testimonial') {
-      await renderStatement(ctx, { ...input, label: null }, refined);
+      await renderStatement(
+        ctx,
+        { ...input, title: input.title.trim() || input.body.trim(), body: '', label: null },
+        refined,
+      );
       const y = refined ? CANVAS_HEIGHT * 0.73 : CANVAS_HEIGHT * 0.66;
       if (refined) {
         ctx.strokeStyle = 'rgba(255,255,255,0.3)';

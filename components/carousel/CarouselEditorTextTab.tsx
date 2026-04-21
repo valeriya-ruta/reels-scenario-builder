@@ -58,7 +58,7 @@ export default function CarouselEditorTextTab({
             maxLength={30}
             onChange={(e) => onChange(slide.id, { optionalLabel: e.target.value })}
             placeholder="Наприклад: Порада, Факт, Крок 1..."
-            className="w-full rounded-xl border border-[color:var(--border)] px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)]"
+            className="w-full rounded-xl border border-[color:var(--border)] px-3 py-2 text-sm placeholder:text-zinc-400 outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)]"
           />
         </div>
       ) : null}

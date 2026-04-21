@@ -448,9 +448,6 @@ export default function CarouselEditorLayout({
     setSwipeX(0);
   };
 
-  const peekLeft = slides[activeIndex - 1]?.backgroundColor ?? slides[activeIndex]?.backgroundColor ?? '#ccc';
-  const peekRight = slides[activeIndex + 1]?.backgroundColor ?? slides[activeIndex]?.backgroundColor ?? '#ccc';
-
   const mobileOpenPreviewHeightPx = Math.max(160, Math.round(viewportHeight * 0.3));
 
   const mobilePreviewScale = previewScale;
@@ -784,15 +781,6 @@ export default function CarouselEditorLayout({
                   }
             }
           >
-            <div
-              className="pointer-events-none absolute inset-y-8 left-0 w-10 scale-[0.92] opacity-40 md:hidden"
-              style={{ backgroundColor: peekLeft }}
-            />
-            <div
-              className="pointer-events-none absolute inset-y-8 right-0 w-10 scale-[0.92] opacity-40 md:hidden"
-              style={{ backgroundColor: peekRight }}
-            />
-
             <div
               ref={previewAreaRef}
               className="relative flex h-full w-full max-w-[min(100vw,520px)] items-center justify-center overflow-hidden md:hidden"

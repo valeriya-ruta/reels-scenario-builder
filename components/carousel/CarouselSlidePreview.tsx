@@ -136,6 +136,33 @@ function coverGradient(brand: BrandSettings, slide: Slide): string {
     : `radial-gradient(circle at 30% 30%, ${light} 0%, ${mid} 60%, ${dark} 100%)`;
 }
 
+function luminance(hex: string): number {
+  const normalized = normalizeHex(hex).replace('#', '');
+  const toLinear = (channelHex: string) => {
+    const value = Number.parseInt(channelHex, 16) / 255;
+    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  };
+  const r = toLinear(normalized.slice(0, 2));
+  const g = toLinear(normalized.slice(2, 4));
+  const b = toLinear(normalized.slice(4, 6));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+function contrastRatio(foreground: string, background: string): number {
+  const fg = luminance(foreground);
+  const bg = luminance(background);
+  const [lighter, darker] = fg > bg ? [fg, bg] : [bg, fg];
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function ensureReadableTextColor(preferred: string, background: string): string {
+  const safePreferred = normalizeHex(preferred);
+  const safeBackground = normalizeHex(background);
+  if (contrastRatio(safePreferred, safeBackground) >= 4.5) return safePreferred;
+  const nearWhite = '#FFF9F0';
+  return contrastRatio(nearWhite, safeBackground) >= 4.5 ? nearWhite : '#FFFFFF';
+}
+
 function ImageBackground({
   slide,
   fallbackHex,
@@ -291,10 +318,14 @@ export default function CarouselSlidePreview({
 
   const contentShell = (bg: string, inner: ReactNode) => {
     if (!hasPhoto) {
+      const backgroundStyle =
+        slide.backgroundType === 'gradient'
+          ? { backgroundImage: coverGradient(brand, slide) }
+          : { backgroundColor: slide.backgroundColor || bg };
       return (
         <div
           className="relative flex h-full w-full flex-col px-[88px] py-[72px]"
-          style={{ justifyContent: justify, backgroundColor: bg }}
+          style={{ justifyContent: justify, ...backgroundStyle }}
         >
           <div className={`w-full ${textAlignClass}`}>
             <TextPanelChrome slide={slide} darkFallback={darkBg}>
@@ -348,13 +379,8 @@ export default function CarouselSlidePreview({
           }}
         >
             <div className="absolute bottom-[100px] left-[88px] right-[88px] top-[140px] flex flex-col justify-end">
-              {slide.optionalLabel?.trim() ? (
-                <p className="mb-3 text-[13px] uppercase tracking-[1px]" style={{ color: accent, fontFamily: bodyFont }}>
-                  {slide.optionalLabel.trim()}
-                </p>
-              ) : null}
               <div className={`${textAlignClass} text-[88px] font-bold leading-[1.0] text-zinc-900 whitespace-pre-wrap`} style={{ fontFamily: titleFont, fontSize: (slide.titleSize ?? 'L') === 'M' ? 70 : 88 }}>
-                <AccentRuns text={slide.title || 'Заголовок'} accentStyle={brand.accentStyle} accentColor={accent} />
+                <AccentRuns text={slide.title} accentStyle={brand.accentStyle} accentColor={accent} />
               </div>
               {showCoverSubline ? (
                 <p className="mt-6 text-[28px] leading-snug text-zinc-500" style={{ fontFamily: bodyFont }}>
@@ -385,7 +411,7 @@ export default function CarouselSlidePreview({
             <>
               <div className="mb-5 h-1.5 w-12 rounded-sm" style={{ backgroundColor: accent }} />
               <div className="text-[88px] font-bold leading-[0.98] text-white whitespace-pre-wrap" style={{ fontFamily: titleFont, fontWeight: brandFont.titleWeight, fontSize: (slide.titleSize ?? 'L') === 'M' ? 70 : 88 }}>
-                <AccentRuns text={slide.title || 'Заголовок'} accentStyle={brand.accentStyle} accentColor={accent} />
+                <AccentRuns text={slide.title} accentStyle={brand.accentStyle} accentColor={accent} />
               </div>
               {showCoverSubline ? (
                 <p className="mt-3 text-[26px] text-white/80" style={{ fontFamily: bodyFont }}>
@@ -404,21 +430,27 @@ export default function CarouselSlidePreview({
   }
 
   if (slide.layoutPreset === 'quote' || slide.layoutPreset === 'testimonial') {
+    const quoteText = slide.title?.trim() || slide.body?.trim() || '';
+    const quoteBg = slide.backgroundType === 'color' ? normalizeHex(slide.backgroundColor || accent) : accent;
+    const quoteColor = ensureReadableTextColor(slide.titleColor || '#FFFFFF', quoteBg);
+    const quoteSize = slide.layoutPreset === 'quote'
+      ? (slide.titleSize ?? 'L') === 'M' ? 70 : 82
+      : (slide.titleSize ?? 'L') === 'M' ? 46 : 52;
     return (
       <div className="relative overflow-hidden rounded-xl shadow-lg" style={baseWrap}>
-        <div className="relative overflow-hidden rounded-xl shadow-lg" style={{ ...baseCanvas, backgroundColor: accent }}>
+        <div className="relative overflow-hidden rounded-xl shadow-lg" style={{ ...baseCanvas, backgroundColor: quoteBg }}>
           {contentShell(
-            accent,
+            quoteBg,
             <div className="flex w-full flex-col items-center justify-center py-8">
-              <div className={`w-full ${textAlignClass} text-[72px] font-bold leading-tight text-white whitespace-pre-wrap`} style={{ fontFamily: titleFont, fontSize: (slide.titleSize ?? 'L') === 'M' ? 58 : 72 }}>
-                <AccentRuns text={slide.title} accentStyle={brand.accentStyle} accentColor={lightBg} />
+              <div className={`w-full ${textAlignClass} font-bold leading-tight whitespace-pre-wrap`} style={{ fontFamily: titleFont, color: quoteColor, fontSize: quoteSize }}>
+                <AccentRuns text={quoteText} accentStyle={brand.accentStyle} accentColor={lightBg} />
               </div>
               {slide.layoutPreset === 'testimonial' ? (
-                <div className="mt-3 flex items-center gap-2 text-white/85">
+                <div className="mt-3 flex items-center gap-2" style={{ color: quoteColor }}>
                   <div className="h-8 w-8 rounded-full bg-white/20" />
                   <div className="text-left text-sm">
                     <p>{slide.testimonialAuthor?.name || 'Автор'}</p>
-                    <p className="text-white/70">{slide.testimonialAuthor?.handle || '@handle'}</p>
+                    <p style={{ opacity: 0.72 }}>{slide.testimonialAuthor?.handle || '@handle'}</p>
                   </div>
                 </div>
               ) : null}
@@ -438,7 +470,7 @@ export default function CarouselSlidePreview({
             lightBg,
             <>
               <p className="text-[56px] font-bold leading-tight whitespace-pre-wrap" style={{ fontFamily: titleFont, color: slide.titleColor, fontSize: (slide.titleSize ?? 'L') === 'M' ? 45 : 56 }}>
-                <AccentRuns text={slide.title || 'Заголовок'} accentStyle={brand.accentStyle} accentColor={accent} />
+                <AccentRuns text={slide.title} accentStyle={brand.accentStyle} accentColor={accent} />
               </p>
               <ul className={`mt-10 text-left ${refined ? 'space-y-5' : 'space-y-3'}`}>
                 {items.map((line, i) => (
@@ -484,7 +516,7 @@ export default function CarouselSlidePreview({
               ) : (
                 <>
                   <p className="mt-6 text-[72px] font-bold leading-[1.05] text-white whitespace-pre-wrap" style={{ fontFamily: titleFont, fontSize: (slide.titleSize ?? 'L') === 'M' ? 58 : 72 }}>
-                    <AccentRuns text={slide.title || 'Заголовок'} accentStyle={brand.accentStyle} accentColor={accent} />
+                    <AccentRuns text={slide.title} accentStyle={brand.accentStyle} accentColor={accent} />
                   </p>
                   <div className="mt-10 rounded-2xl px-8 py-6" style={{ backgroundColor: accent }}>
                     <p className="text-center text-[36px] font-bold text-white" style={{ fontFamily: titleFont }}>
@@ -516,10 +548,10 @@ export default function CarouselSlidePreview({
               </span>
             ) : null}
             <p className="mt-8 text-[64px] font-bold leading-[1.05] whitespace-pre-wrap" style={{ fontFamily: titleFont, color: slide.titleColor, fontSize: (slide.titleSize ?? 'L') === 'M' ? 52 : 64 }}>
-              <AccentRuns text={slide.title || 'Заголовок'} accentStyle={brand.accentStyle} accentColor={accent} />
+              <AccentRuns text={slide.title} accentStyle={brand.accentStyle} accentColor={accent} />
             </p>
             <p className="mt-6 text-[34px] leading-relaxed text-zinc-700 whitespace-pre-wrap" style={{ fontFamily: bodyFont, color: slide.bodyColor, fontSize: (slide.bodySize ?? 'M') === 'S' ? 27 : 34 }}>
-              {stripAccentMarkers(slide.body) || 'Текст'}
+              {stripAccentMarkers(slide.body)}
             </p>
           </>,
         )}
