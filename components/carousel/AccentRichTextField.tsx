@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import type { Slide } from '@/lib/carouselTypes';
 import type { BrandAccentStyle } from '@/lib/brand';
@@ -12,6 +12,8 @@ type AccentField = 'title' | 'body' | 'ctaTitle';
 
 function autoGrowTextarea(el: HTMLTextAreaElement | null) {
   if (!el) return;
+  // Collapse then measure so height tracks content only (no stale min-height).
+  el.style.minHeight = '0';
   el.style.height = '0px';
   el.style.height = `${el.scrollHeight}px`;
 }
@@ -50,7 +52,7 @@ export default function AccentRichTextField({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [sel, setSel] = useState({ start: 0, end: 0 });
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (multiline && autoGrow) {
       autoGrowTextarea(textareaRef.current);
     }
@@ -134,8 +136,8 @@ export default function AccentRichTextField({
           <textarea
             {...sharedProps}
             ref={textareaRef}
-            rows={rows}
-            style={autoGrow ? { overflow: 'hidden' } : undefined}
+            rows={autoGrow ? 1 : rows}
+            style={autoGrow ? { overflow: 'hidden', minHeight: 0 } : undefined}
           />
         ) : (
           <input {...sharedProps} ref={inputRef} />
@@ -149,7 +151,12 @@ export default function AccentRichTextField({
     <div>
       {toolbar}
       {multiline ? (
-        <textarea {...sharedProps} ref={textareaRef} rows={rows} />
+        <textarea
+          {...sharedProps}
+          ref={textareaRef}
+          rows={autoGrow ? 1 : rows}
+          style={autoGrow ? { overflow: 'hidden', minHeight: 0 } : undefined}
+        />
       ) : (
         <input {...sharedProps} ref={inputRef} />
       )}
