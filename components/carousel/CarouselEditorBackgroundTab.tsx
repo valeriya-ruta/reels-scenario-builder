@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { Check } from 'lucide-react';
 import type { Slide, SlideOverlayType } from '@/lib/carouselTypes';
 import { normalizeHex } from '@/lib/brand';
@@ -47,7 +47,6 @@ export default function CarouselEditorBackgroundTab({
   const fileInputId = useId();
   const hasPhoto = slide.backgroundType === 'image' && (slide.backgroundImageUrl || slide.backgroundImageBase64);
   const [isDesktop, setIsDesktop] = useState(false);
-  const [sourceSize, setSourceSize] = useState<{ width: number; height: number } | null>(null);
   const transform = getBgPhotoTransform(slide.bgPhotoTransform);
   const zoomPercent = Math.round(transform.scale * 100);
   const photoSrc = slide.backgroundImageBase64
@@ -76,23 +75,6 @@ export default function CarouselEditorBackgroundTab({
     mq.addEventListener('change', apply);
     return () => mq.removeEventListener('change', apply);
   }, []);
-
-  useEffect(() => {
-    if (!photoSrc) {
-      return;
-    }
-    const img = new Image();
-    img.onload = () => setSourceSize({ width: img.naturalWidth || 0, height: img.naturalHeight || 0 });
-    img.onerror = () => setSourceSize(null);
-    img.src = photoSrc;
-  }, [photoSrc]);
-
-  const isLowRes = useMemo(() => {
-    if (!photoSrc) return false;
-    if (!sourceSize) return false;
-    const shortSide = Math.min(sourceSize.width, sourceSize.height);
-    return shortSide > 0 && shortSide < 1080;
-  }, [photoSrc, sourceSize]);
 
   return (
     <div className="space-y-5 pb-4">
@@ -295,6 +277,13 @@ export default function CarouselEditorBackgroundTab({
                 </button>
               </div>
               <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => onChange(slide.id, { bgPhotoTransform: DEFAULT_BG_PHOTO_TRANSFORM })}
+                  className="inline-flex w-fit min-h-9 items-center rounded-xl border border-[color:var(--border)] px-3 py-1.5 text-xs font-medium hover:bg-[color:var(--surface)]"
+                >
+                  Центрувати
+                </button>
                 <label className="btn-secondary inline-flex w-fit cursor-pointer rounded-xl border border-[color:var(--border)] px-3 py-2 text-xs font-medium hover:bg-[color:var(--surface)]">
                   Замінити
                   <input
@@ -334,15 +323,8 @@ export default function CarouselEditorBackgroundTab({
 
           {hasPhoto && (
             <>
-              <div className="space-y-2 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)]/30 p-3">
+              <div className="space-y-2">
                 <p className="text-xs text-zinc-600">Тягни фото на слайді, щоб розташувати</p>
-                <button
-                  type="button"
-                  onClick={() => onChange(slide.id, { bgPhotoTransform: DEFAULT_BG_PHOTO_TRANSFORM })}
-                  className="inline-flex min-h-11 items-center rounded-xl border border-[color:var(--border)] px-3 py-2 text-xs font-medium hover:bg-white"
-                >
-                  Центрувати
-                </button>
                 {isDesktop ? (
                   <div>
                     <label className="mb-1 flex items-center justify-between text-xs font-medium text-zinc-600">
@@ -371,7 +353,6 @@ export default function CarouselEditorBackgroundTab({
                     />
                   </div>
                 ) : null}
-                {isLowRes ? <p className="text-xs text-amber-700">Фото може виглядати нечітко</p> : null}
               </div>
 
               <div>

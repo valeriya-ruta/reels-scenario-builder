@@ -735,31 +735,33 @@ export default function CarouselBuilder({
         </div>
       )}
 
-      <CarouselEditorLayout
-        slides={slides}
-        activeSlideId={activeSlideId}
-        setActiveSlideId={setActiveSlideId}
-        brandSettings={brandSettings}
-        brandFont={brandFont}
-        accentStyle={accentStyle}
-        accentColor={accentColor}
-        updateSlide={updateSlide}
-        addSlide={addSlide}
-        removeSlide={removeSlide}
-        onDragEnd={handleDragEnd}
-        onUnsplash={() => activeSlideId && setUnsplashForId(activeSlideId)}
-        brandColorOptions={brandColorOptions}
-        getAutoTextColors={getAutoTextColors}
-        accentDraft={accentDraft}
-        onAccentDraft={setAccentDraft}
-        watermarkDraft={watermarkDraft}
-        onWatermarkDraft={setWatermarkDraft}
-        hasGenerated={hasGenerated}
-        isGenerating={isGenerating}
-        onGenerate={() => void runGeneration()}
-        onDownloadAll={() => void downloadAll()}
-        validationError={validationError}
-      />
+      <div className="flex min-h-0 flex-1 flex-col">
+        <CarouselEditorLayout
+          slides={slides}
+          activeSlideId={activeSlideId}
+          setActiveSlideId={setActiveSlideId}
+          brandSettings={brandSettings}
+          brandFont={brandFont}
+          accentStyle={accentStyle}
+          accentColor={accentColor}
+          updateSlide={updateSlide}
+          addSlide={addSlide}
+          removeSlide={removeSlide}
+          onDragEnd={handleDragEnd}
+          onUnsplash={() => activeSlideId && setUnsplashForId(activeSlideId)}
+          brandColorOptions={brandColorOptions}
+          getAutoTextColors={getAutoTextColors}
+          accentDraft={accentDraft}
+          onAccentDraft={setAccentDraft}
+          watermarkDraft={watermarkDraft}
+          onWatermarkDraft={setWatermarkDraft}
+          hasGenerated={hasGenerated}
+          isGenerating={isGenerating}
+          onGenerate={() => void runGeneration()}
+          onDownloadAll={() => void downloadAll()}
+          validationError={validationError}
+        />
+      </div>
 
       {toast && (
         <div className="fixed bottom-6 right-6 z-[300] rounded-xl border border-[color:var(--border)] bg-white px-4 py-3 text-sm shadow-lg">

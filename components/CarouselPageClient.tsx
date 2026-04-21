@@ -43,11 +43,13 @@ export default function CarouselPageClient({
   }
 
   return (
-    <CarouselBuilder
-      projectId={carouselProject.id}
-      initialProjectName={carouselProject.name}
-      initialSlides={carouselProject.slides}
-      initialWatermarkHandle={initialWatermarkHandle}
-    />
+    <div className="flex min-h-0 flex-1 flex-col">
+      <CarouselBuilder
+        projectId={carouselProject.id}
+        initialProjectName={carouselProject.name}
+        initialSlides={carouselProject.slides}
+        initialWatermarkHandle={initialWatermarkHandle}
+      />
+    </div>
   );
 }

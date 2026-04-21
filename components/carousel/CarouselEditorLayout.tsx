@@ -61,6 +61,8 @@ import {
 
 type EditorTab = 'type' | 'text' | 'position' | 'bg' | 'style';
 const MOBILE_EDITOR_BAR_HEIGHT_PX = 72;
+/** Max slide width as a fraction of the mobile canvas content width (matches ~85vw intent). */
+const MOBILE_SLIDE_MAX_WIDTH_FRAC = 0.85;
 
 function SortableThumb({
   slide,
@@ -282,19 +284,31 @@ export default function CarouselEditorLayout({
   }, [isDesktopLayout, panelOpen]);
 
   useLayoutEffect(() => {
+    if (isDesktopLayout) return;
     const el = previewAreaRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => {
+    const update = () => {
       const w = el.clientWidth;
       const h = el.clientHeight;
-      // Skip transient 0×0 frames so we don't stick at the 0.12 floor.
-      if (w < 48 || h < 48) return;
-      const s = Math.min(w / CANVAS_WIDTH, h / CANVAS_HEIGHT);
-      setPreviewScale(Math.max(0.12, s * 0.96));
-    });
+      if (w <= 0 || h <= 0) {
+        console.error('Carousel preview area measured 0px; check flex height chain.');
+        setPreviewScale(0.28);
+        return;
+      }
+      const maxW = w * MOBILE_SLIDE_MAX_WIDTH_FRAC;
+      const maxH = Math.max(1, h - 32);
+      const s = Math.min(maxW / CANVAS_WIDTH, maxH / CANVAS_HEIGHT);
+      setPreviewScale(Math.max(0.06, Math.min(s, 1)));
+    };
+    update();
+    const ro = new ResizeObserver(() => update());
     ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+    window.addEventListener('resize', update);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', update);
+    };
+  }, [isDesktopLayout, tab, panelOpen, viewportHeight, mobileChromeHeight]);
 
   useLayoutEffect(() => {
     if (isDesktopLayout) return;
@@ -458,8 +472,6 @@ export default function CarouselEditorLayout({
     setSwipeSettling(false);
     setSwipeX(0);
   };
-
-  const mobileOpenPreviewHeightPx = Math.max(160, Math.round(viewportHeight * 0.3));
 
   const mobilePreviewScale = previewScale;
 
@@ -768,7 +780,7 @@ export default function CarouselEditorLayout({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* Mobile top bar */}
-      <header className="flex h-[52px] shrink-0 items-center justify-between border-b border-[color:var(--border)] px-3 md:hidden">
+      <header className="flex h-[52px] shrink-0 items-center justify-between border-b border-[color:var(--border)] pl-1 pr-3 md:hidden">
         <Link
           href="/carousel"
           className="inline-flex items-center gap-1 rounded-full px-2 py-1.5 text-sm font-medium text-zinc-800"
@@ -804,21 +816,12 @@ export default function CarouselEditorLayout({
       >
         <div className="flex min-h-0 flex-1 flex-col md:flex-row md:justify-center md:gap-4 md:px-4 md:pt-0 md:pb-2">
         {/* Preview column — first on mobile */}
-        <div className="order-1 flex min-h-0 w-full flex-1 flex-col items-center md:order-1 md:max-w-[min(100%,520px)]">
-          <div
-            className={[
-              'relative flex h-full w-full flex-1 flex-col items-center justify-center md:min-h-[min(520px,70vh)]',
-              !isDesktopLayout && !panelOpen
-                ? 'min-h-[max(260px,min(62vh,calc(100dvh-52px-200px)))]'
-                : '',
-              !isDesktopLayout && panelOpen ? 'min-h-[220px]' : '',
-            ]
-              .filter(Boolean)
-              .join(' ')}
-          >
+        <div className="order-1 flex min-h-0 w-full flex-1 flex-col md:order-1 md:max-w-[min(100%,520px)]">
+          <div className="relative flex min-h-0 flex-1 flex-col md:min-h-[min(520px,70vh)]">
+            {/* Mobile: direct flex canvas child (no absolute wrapper), centered in both axes */}
             <div
               ref={previewAreaRef}
-              className="relative flex h-full w-full max-w-[min(100vw,520px)] items-center justify-center overflow-hidden md:hidden"
+              className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-4 md:hidden"
               onClick={(e) => {
                 if (!mobilePositioningMode) return;
                 if (e.target === e.currentTarget) {
@@ -845,103 +848,95 @@ export default function CarouselEditorLayout({
                   onPreviewSwipeTransitionEnd();
                 }}
               >
-                {prevSlide ? (
-                  <div
-                    className="pointer-events-none absolute inset-0 flex items-center justify-center"
-                    style={{ transform: 'translate3d(-100%, 0, 0)' }}
-                    aria-hidden
-                  >
-                    <CarouselSlidePreview
-                      slide={prevSlide}
-                      brand={brandSettings}
-                      brandFont={brandFont}
-                      scale={mobilePreviewScale}
-                      slideIndex={activeIndex}
-                      totalSlides={slides.length}
-                    />
-                  </div>
-                ) : null}
-                {activeSlide ? (
-                  <div
-                    className="relative"
-                    style={
-                      !isDesktopLayout && panelOpen
-                        ? {
-                            width: `${Math.round((mobileOpenPreviewHeightPx * CANVAS_WIDTH) / CANVAS_HEIGHT)}px`,
-                            maxWidth: '70vw',
-                          }
-                        : undefined
-                    }
-                    onClick={() => {
-                      if (!isDesktopLayout && hasActivePhoto && !mobilePositioningMode) {
-                        setMobilePositioningMode(true);
-                        if (showPhotoHint) setShowPhotoHint(false);
-                      }
-                    }}
-                  >
-                    <CarouselSlidePreview
-                      slide={activeSlide}
-                      brand={brandSettings}
-                      brandFont={brandFont}
-                      scale={mobilePreviewScale}
-                      slideIndex={activeIndex + 1}
-                      totalSlides={slides.length}
-                      photoTransformOverride={effectivePhotoTransform}
-                      isInteractingPhoto={isPhotoInteracting}
-                      mobilePositioningMode={mobilePositioningMode && !isDesktopLayout}
-                    />
-                    {hasActivePhoto ? (
-                      <div
-                        className="absolute inset-0 touch-none"
-                        style={{ cursor: isDesktopLayout ? (isPhotoInteracting ? 'grabbing' : 'grab') : 'default' }}
-                        tabIndex={0}
-                        onPointerDown={onPhotoPointerDown}
-                        onPointerMove={onPhotoPointerMove}
-                        onPointerUp={onPhotoPointerUp}
-                        onPointerCancel={onPhotoPointerUp}
-                        onWheel={onPhotoWheel}
-                        onKeyDown={onPhotoLayerKeyDown}
-                        role={mobilePositioningMode && !isDesktopLayout ? 'img' : undefined}
-                        aria-label={
-                          mobilePositioningMode && !isDesktopLayout
-                            ? 'Фон слайду — перетягни щоб розташувати'
-                            : undefined
-                        }
+                  {prevSlide ? (
+                    <div
+                      className="pointer-events-none absolute inset-0 flex items-center justify-center"
+                      style={{ transform: 'translate3d(-100%, 0, 0)' }}
+                      aria-hidden
+                    >
+                      <CarouselSlidePreview
+                        slide={prevSlide}
+                        brand={brandSettings}
+                        brandFont={brandFont}
+                        scale={mobilePreviewScale}
+                        slideIndex={activeIndex}
+                        totalSlides={slides.length}
                       />
-                    ) : null}
-                    {hasActivePhoto ? (
-                      <button
-                        type="button"
-                        aria-label="Розташувати фото"
-                        className="absolute right-2 top-2 z-[4] flex h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white shadow-[0_2px_8px_rgba(0,0,0,0.28)] transition-opacity"
-                        style={{ opacity: mobilePositioningMode ? 0 : 1 }}
-                        onClick={(e) => {
-                          e.stopPropagation();
+                    </div>
+                  ) : null}
+                  {activeSlide ? (
+                    <div
+                      className="relative shrink-0"
+                      onClick={() => {
+                        if (!isDesktopLayout && hasActivePhoto && !mobilePositioningMode) {
                           setMobilePositioningMode(true);
                           if (showPhotoHint) setShowPhotoHint(false);
-                        }}
-                      >
-                        <Move className="h-3.5 w-3.5" />
-                      </button>
-                    ) : null}
-                  </div>
-                ) : null}
-                {nextSlide ? (
-                  <div
-                    className="pointer-events-none absolute inset-0 flex items-center justify-center"
-                    style={{ transform: 'translate3d(100%, 0, 0)' }}
-                    aria-hidden
-                  >
-                    <CarouselSlidePreview
-                      slide={nextSlide}
-                      brand={brandSettings}
-                      brandFont={brandFont}
-                      scale={mobilePreviewScale}
-                      slideIndex={activeIndex + 2}
-                      totalSlides={slides.length}
-                    />
-                  </div>
-                ) : null}
+                        }
+                      }}
+                    >
+                      <CarouselSlidePreview
+                        slide={activeSlide}
+                        brand={brandSettings}
+                        brandFont={brandFont}
+                        scale={mobilePreviewScale}
+                        slideIndex={activeIndex + 1}
+                        totalSlides={slides.length}
+                        photoTransformOverride={effectivePhotoTransform}
+                        isInteractingPhoto={isPhotoInteracting}
+                        mobilePositioningMode={mobilePositioningMode && !isDesktopLayout}
+                      />
+                      {hasActivePhoto ? (
+                        <div
+                          className="absolute inset-0 touch-none"
+                          style={{ cursor: isDesktopLayout ? (isPhotoInteracting ? 'grabbing' : 'grab') : 'default' }}
+                          tabIndex={0}
+                          onPointerDown={onPhotoPointerDown}
+                          onPointerMove={onPhotoPointerMove}
+                          onPointerUp={onPhotoPointerUp}
+                          onPointerCancel={onPhotoPointerUp}
+                          onWheel={onPhotoWheel}
+                          onKeyDown={onPhotoLayerKeyDown}
+                          role={mobilePositioningMode && !isDesktopLayout ? 'img' : undefined}
+                          aria-label={
+                            mobilePositioningMode && !isDesktopLayout
+                              ? 'Фон слайду — перетягни щоб розташувати'
+                              : undefined
+                          }
+                        />
+                      ) : null}
+                      {hasActivePhoto ? (
+                        <button
+                          type="button"
+                          aria-label="Розташувати фото"
+                          className="absolute z-[4] flex h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white shadow-[0_2px_8px_rgba(0,0,0,0.28)] transition-opacity"
+                          style={{ top: 8, right: 8, opacity: mobilePositioningMode ? 0 : 1 }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setMobilePositioningMode(true);
+                            if (showPhotoHint) setShowPhotoHint(false);
+                          }}
+                        >
+                          <Move className="h-3.5 w-3.5" />
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {nextSlide ? (
+                    <div
+                      className="pointer-events-none absolute inset-0 flex items-center justify-center"
+                      style={{ transform: 'translate3d(100%, 0, 0)' }}
+                      aria-hidden
+                    >
+                      <CarouselSlidePreview
+                        slide={nextSlide}
+                        brand={brandSettings}
+                        brandFont={brandFont}
+                        scale={mobilePreviewScale}
+                        slideIndex={activeIndex + 2}
+                        totalSlides={slides.length}
+                      />
+                    </div>
+                  ) : null}
               </div>
             </div>
             {showPhotoHint && hasActivePhoto && mobilePositioningMode && !isDesktopLayout ? (
@@ -1129,7 +1124,7 @@ export default function CarouselEditorLayout({
             style={{ maxHeight: panelOpen ? viewportHeight * 0.55 : 0 }}
           >
             <div
-              className="overflow-y-auto px-4 pt-5"
+              className="overflow-y-auto rounded-t-2xl border border-[color:var(--border)] border-b-0 bg-white px-4 pt-5 shadow-[0_-2px_20px_rgba(0,0,0,0.06)]"
               style={{
                 maxHeight: '55vh',
                 overscrollBehavior: 'contain',
@@ -1140,7 +1135,7 @@ export default function CarouselEditorLayout({
               {mobilePanelContent}
             </div>
           </div>
-          <div className="flex gap-1 overflow-x-auto px-2 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="grid grid-cols-5 gap-1 px-2 py-2">
             {(['type', 'text', 'position', 'bg', 'style'] as const).map((t) => (
               (() => {
                 const disabled = t === 'style' && styleTabDisabled;
@@ -1153,7 +1148,7 @@ export default function CarouselEditorLayout({
                   setTab((prev) => (prev === t ? null : t));
                 }}
                 className={[
-                  'flex min-h-11 min-w-16 shrink-0 flex-col items-center justify-center rounded-[10px] px-3 py-2',
+                  'flex min-h-11 w-full min-w-0 flex-col items-center justify-center rounded-[10px] px-2 py-2',
                   disabled ? 'cursor-not-allowed pointer-events-none opacity-40' : '',
                   tab === t ? 'bg-[#eef1ff]' : 'bg-transparent',
                 ].join(' ')}

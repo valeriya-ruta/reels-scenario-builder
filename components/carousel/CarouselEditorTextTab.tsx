@@ -66,11 +66,11 @@ export default function CarouselEditorTextTab({
         </div>
       ) : null}
 
-      <div>
-        <div className="mb-1 flex items-center justify-between gap-2">
-          <label className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+      <div className="space-y-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-600">
             {slideType === 'final' && layoutPreset === 'reaction' ? 'CTA title' : 'Заголовок'}
-          </label>
+          </h3>
         </div>
         <AccentRichTextField
           slideId={slide.id}
@@ -85,15 +85,64 @@ export default function CarouselEditorTextTab({
           baseColor={slide.titleColor}
           accentStyle={accentStyle}
           accentColor={accentColor}
-          inputClassName="min-h-0 w-full resize-none rounded-xl border border-[color:var(--border)] py-2 pl-3 pr-14 pt-2 text-sm leading-snug outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2"
+          inputClassName="min-h-0 w-full resize-none rounded-xl border border-[color:var(--border)] bg-white py-2 pl-3 pr-14 pt-2 text-sm leading-snug outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2"
         />
+        {(showTitleSize || textColorChoices.length > 0) ? (
+          <div className="grid grid-cols-2 items-start gap-3">
+            {showTitleSize ? (
+              <div>
+                <p className="mb-1 text-[11px] text-zinc-600">Розмір</p>
+                <div className="grid grid-cols-2 gap-1">
+                  {[
+                    { id: 'L', label: 'L' },
+                    { id: 'M', label: 'M' },
+                  ].map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => onChange(slide.id, { titleSize: opt.id as 'L' | 'M' })}
+                      className={[
+                        'rounded-md px-1.5 py-1 text-[10px] leading-none',
+                        (slide.titleSize ?? 'L') === opt.id
+                          ? 'border-[1.5px] border-[#4a6cf7] bg-[#eef1ff] font-medium text-[#1a1a1a]'
+                          : 'border border-[#d8d6cf] bg-white text-[#555]',
+                      ].join(' ')}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : <div />}
+            {textColorChoices.length > 0 ? (
+              <div>
+                <label className="mb-1 block text-[11px] text-zinc-600">Колір</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {textColorChoices.map((color) => (
+                    <button
+                      key={`title-${color}`}
+                      type="button"
+                      aria-label={`Заголовок ${color}`}
+                      onClick={() => onChange(slide.id, { titleColor: color })}
+                      className={[
+                        'h-7 w-7 rounded-full border-2 transition-transform duration-[120ms] ease-out',
+                        normalizeHex(slide.titleColor) === normalizeHex(color)
+                          ? 'scale-[1.06] border-zinc-900'
+                          : 'border-[color:var(--border)]',
+                      ].join(' ')}
+                      style={{ backgroundColor: color }}
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       {showBody && (
-        <div>
-          <div className="mb-1 flex items-center justify-between gap-2">
-            <label className="text-xs font-medium uppercase tracking-wide text-zinc-500">Текст</label>
-          </div>
+        <div className="space-y-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-600">Текст</h3>
           <AccentRichTextField
             slideId={slide.id}
             field="body"
@@ -107,8 +156,59 @@ export default function CarouselEditorTextTab({
             baseColor={slide.bodyColor}
             accentStyle={accentStyle}
             accentColor={accentColor}
-            inputClassName="min-h-0 w-full resize-none rounded-xl border border-[color:var(--border)] py-2 pl-3 pr-14 pt-2 text-sm leading-relaxed outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2"
+            inputClassName="min-h-0 w-full resize-none rounded-xl border border-[color:var(--border)] bg-white py-2 pl-3 pr-14 pt-2 text-sm leading-relaxed outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2"
           />
+          {(showBodySize || textColorChoices.length > 0) ? (
+            <div className="grid grid-cols-2 items-start gap-3">
+              {showBodySize ? (
+                <div>
+                  <p className="mb-1 text-[11px] text-zinc-600">Розмір</p>
+                  <div className="grid grid-cols-2 gap-1">
+                    {[
+                      { id: 'M', label: 'M' },
+                      { id: 'S', label: 'S' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => onChange(slide.id, { bodySize: opt.id as 'M' | 'S' })}
+                        className={[
+                          'rounded-md px-1.5 py-1 text-[10px] leading-none',
+                          (slide.bodySize ?? 'M') === opt.id
+                            ? 'border-[1.5px] border-[#4a6cf7] bg-[#eef1ff] font-medium text-[#1a1a1a]'
+                            : 'border border-[#d8d6cf] bg-white text-[#555]',
+                        ].join(' ')}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : <div />}
+              {textColorChoices.length > 0 ? (
+                <div>
+                  <label className="mb-1 block text-[11px] text-zinc-600">Колір</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {textColorChoices.map((color) => (
+                      <button
+                        key={`body-${color}`}
+                        type="button"
+                        aria-label={`Текст ${color}`}
+                        onClick={() => onChange(slide.id, { bodyColor: color })}
+                        className={[
+                          'h-7 w-7 rounded-full border-2 transition-transform duration-[120ms] ease-out',
+                          normalizeHex(slide.bodyColor) === normalizeHex(color)
+                            ? 'scale-[1.06] border-zinc-900'
+                            : 'border-[color:var(--border)]',
+                        ].join(' ')}
+                        style={{ backgroundColor: color }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       )}
       {slideType === 'slide' && layoutPreset === 'testimonial' ? (
@@ -168,8 +268,8 @@ export default function CarouselEditorTextTab({
       ) : null}
 
       {showBullets && (
-        <div>
-          <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-zinc-500">Пункти</label>
+        <div className="space-y-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-600">Пункти</h3>
           <ul className="space-y-2">
             {items.map((line, i) => (
               <li
@@ -234,6 +334,57 @@ export default function CarouselEditorTextTab({
               <option value="cross-check">✗ / ✓ ✓</option>
             </select>
           </div>
+          {(showBodySize || textColorChoices.length > 0) ? (
+            <div className="grid grid-cols-2 items-start gap-3">
+              {showBodySize ? (
+                <div>
+                  <p className="mb-1 text-[11px] text-zinc-600">Розмір</p>
+                  <div className="grid grid-cols-2 gap-1">
+                    {[
+                      { id: 'M', label: 'M' },
+                      { id: 'S', label: 'S' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => onChange(slide.id, { bodySize: opt.id as 'M' | 'S' })}
+                        className={[
+                          'rounded-md px-1.5 py-1 text-[10px] leading-none',
+                          (slide.bodySize ?? 'M') === opt.id
+                            ? 'border-[1.5px] border-[#4a6cf7] bg-[#eef1ff] font-medium text-[#1a1a1a]'
+                            : 'border border-[#d8d6cf] bg-white text-[#555]',
+                        ].join(' ')}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : <div />}
+              {textColorChoices.length > 0 ? (
+                <div>
+                  <label className="mb-1 block text-[11px] text-zinc-600">Колір</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {textColorChoices.map((color) => (
+                      <button
+                        key={`body-list-${color}`}
+                        type="button"
+                        aria-label={`Текст пункту ${color}`}
+                        onClick={() => onChange(slide.id, { bodyColor: color })}
+                        className={[
+                          'h-7 w-7 rounded-full border-2 transition-transform duration-[120ms] ease-out',
+                          normalizeHex(slide.bodyColor) === normalizeHex(color)
+                            ? 'scale-[1.06] border-zinc-900'
+                            : 'border-[color:var(--border)]',
+                        ].join(' ')}
+                        style={{ backgroundColor: color }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       )}
       {slideType === 'final' && layoutPreset === 'goal' ? (
@@ -263,101 +414,28 @@ export default function CarouselEditorTextTab({
           />
         </div>
       ) : null}
-      {showTitleSize ? (
-        <div>
-          <p className="mb-1 text-xs text-zinc-600">Title size</p>
-          <div className="grid grid-cols-2 gap-1.5">
-            {[
-              { id: 'L', label: 'L Великий' },
-              { id: 'M', label: 'M Середній' },
-            ].map((opt) => (
+      {slideType === 'final' && textColorChoices.length > 0 ? (
+        <div className="space-y-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-600">Колір додаткового тексту</h3>
+          <div className="flex flex-wrap gap-2">
+            {textColorChoices.map((color) => (
               <button
-                key={opt.id}
+                key={`body-orphan-${color}`}
                 type="button"
-                onClick={() => onChange(slide.id, { titleSize: opt.id as 'L' | 'M' })}
+                aria-label={`Текст ${color}`}
+                onClick={() => onChange(slide.id, { bodyColor: color })}
                 className={[
-                  'rounded-lg px-2 py-2 text-[11px]',
-                  (slide.titleSize ?? 'L') === opt.id
-                    ? 'border-[1.5px] border-[#4a6cf7] bg-[#eef1ff] font-medium text-[#1a1a1a]'
-                    : 'border border-[#d8d6cf] bg-white text-[#555]',
+                  'h-9 w-9 rounded-full border-2 transition-transform duration-[120ms] ease-out',
+                  normalizeHex(slide.bodyColor) === normalizeHex(color)
+                    ? 'scale-[1.08] border-zinc-900'
+                    : 'border-[color:var(--border)]',
                 ].join(' ')}
-              >
-                {opt.label}
-              </button>
+                style={{ backgroundColor: color }}
+              />
             ))}
           </div>
         </div>
       ) : null}
-      {showBodySize ? (
-        <div>
-          <p className="mb-1 text-xs text-zinc-600">Body size</p>
-          <div className="grid grid-cols-2 gap-1.5">
-            {[
-              { id: 'M', label: 'M Середній' },
-              { id: 'S', label: 'S Малий' },
-            ].map((opt) => (
-              <button
-                key={opt.id}
-                type="button"
-                onClick={() => onChange(slide.id, { bodySize: opt.id as 'M' | 'S' })}
-                className={[
-                  'rounded-lg px-2 py-2 text-[11px]',
-                  (slide.bodySize ?? 'M') === opt.id
-                    ? 'border-[1.5px] border-[#4a6cf7] bg-[#eef1ff] font-medium text-[#1a1a1a]'
-                    : 'border border-[#d8d6cf] bg-white text-[#555]',
-                ].join(' ')}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : null}
-      <div>
-        <p className="mb-1 text-xs text-zinc-600">Колір тексту</p>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div>
-            <label className="mb-2 block text-xs text-zinc-600">Заголовок</label>
-            <div className="flex flex-wrap gap-2">
-              {textColorChoices.map((color) => (
-                <button
-                  key={`title-${color}`}
-                  type="button"
-                  aria-label={`Заголовок ${color}`}
-                  onClick={() => onChange(slide.id, { titleColor: color })}
-                  className={[
-                    'h-9 w-9 rounded-full border-2 transition-transform duration-[120ms] ease-out',
-                    normalizeHex(slide.titleColor) === normalizeHex(color)
-                      ? 'scale-[1.08] border-zinc-900'
-                      : 'border-[color:var(--border)]',
-                  ].join(' ')}
-                  style={{ backgroundColor: color }}
-                />
-              ))}
-            </div>
-          </div>
-          <div>
-            <label className="mb-2 block text-xs text-zinc-600">Основний текст</label>
-            <div className="flex flex-wrap gap-2">
-              {textColorChoices.map((color) => (
-                <button
-                  key={`body-${color}`}
-                  type="button"
-                  aria-label={`Текст ${color}`}
-                  onClick={() => onChange(slide.id, { bodyColor: color })}
-                  className={[
-                    'h-9 w-9 rounded-full border-2 transition-transform duration-[120ms] ease-out',
-                    normalizeHex(slide.bodyColor) === normalizeHex(color)
-                      ? 'scale-[1.08] border-zinc-900'
-                      : 'border-[color:var(--border)]',
-                  ].join(' ')}
-                  style={{ backgroundColor: color }}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
 
       {showPositionControls && totalSlides > 1 && (
         <button

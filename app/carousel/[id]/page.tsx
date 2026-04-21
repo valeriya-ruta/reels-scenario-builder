@@ -87,7 +87,7 @@ export default async function CarouselStudioPage({ params }: PageProps) {
     '';
 
   return (
-    <div className="mx-auto flex max-w-[1600px] flex-col">
+    <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col">
       <CarouselPageClient
         initialBrandSettings={
           brandRow ? mapRow(brandRow, profileRow?.accent_style) : null

@@ -156,7 +156,7 @@ export async function reorderStorytellingStories(columnId: string, storyIds: str
 }
 
 function formatSlideTextForStorytelling(slide: Slide): string {
-  const lines = [slide.screen_text.trim(), '', `Озвучення: ${slide.voiceover.trim()}`];
+  const lines = [slide.screen_text.trim()];
   if (slide.notes?.trim()) {
     lines.push('', `Нотатка: ${slide.notes.trim()}`);
   }

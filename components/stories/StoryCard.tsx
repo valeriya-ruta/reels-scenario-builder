@@ -59,11 +59,6 @@ export default function StoryCard({ slide, isFirst = false, isLast = false }: St
         <p className="whitespace-pre-line text-lg font-bold leading-snug text-zinc-900">{slide.screen_text}</p>
       </div>
 
-      <div className="mt-3 border-t border-[color:var(--border)] pt-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Озвучення</p>
-        <p className="mt-1 whitespace-pre-line text-sm leading-relaxed text-zinc-700">{slide.voiceover}</p>
-      </div>
-
       {slide.interactive && (
         <div className="mt-3 border-t border-[color:var(--border)] pt-3">
           <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${interactiveStyles[slide.interactive]}`}>

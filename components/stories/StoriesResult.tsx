@@ -19,7 +19,6 @@ function buildCopyText(slides: Slide[]): string {
       [
         `Слайд ${slide.slide_number} (${slide.visual})`,
         `Екран: ${slide.screen_text}`,
-        `Озвучення: ${slide.voiceover}`,
         `Інтерактив: ${slide.interactive ?? '—'}`,
       ].join('\n'),
     )
