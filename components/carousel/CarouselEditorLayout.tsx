@@ -802,7 +802,7 @@ export default function CarouselEditorLayout({
       >
         <div className="flex min-h-0 flex-1 flex-col md:flex-row md:justify-center md:gap-4 md:px-4 md:pt-0 md:pb-2">
         {/* Preview column — first on mobile */}
-        <div className="order-1 flex min-h-0 w-full flex-1 flex-col items-center md:order-2 md:max-w-[min(100%,520px)]">
+        <div className="order-1 flex min-h-0 w-full flex-1 flex-col items-center md:order-1 md:max-w-[min(100%,520px)]">
           <div
             className="relative flex h-full w-full flex-1 flex-col items-center justify-center md:min-h-[min(520px,70vh)]"
             style={
@@ -1022,7 +1022,7 @@ export default function CarouselEditorLayout({
             modifiers={dragModifiers}
           >
             <SortableContext items={slides.map((s) => s.id)} strategy={rectSortingStrategy}>
-              <div className="order-2 flex shrink-0 flex-row items-center gap-2 overflow-x-auto px-3 py-2 md:order-1 md:w-[72px] md:flex-col md:overflow-y-auto md:px-1 md:py-0">
+              <div className="order-2 flex shrink-0 flex-row items-center gap-2 overflow-x-auto px-3 py-2 md:order-2 md:w-[72px] md:flex-col md:overflow-y-auto md:px-1 md:py-0">
                 {slides.map((slide, index) => (
                   <SortableThumb
                     key={slide.id}
