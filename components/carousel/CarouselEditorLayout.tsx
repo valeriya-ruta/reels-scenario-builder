@@ -215,6 +215,7 @@ export default function CarouselEditorLayout({
     slides.findIndex((s) => s.id === activeSlideId),
   );
   const activeSlide = slides[activeIndex] ?? slides[0];
+  const panelOpen = tab !== null;
   const hasActivePhoto =
     Boolean(activeSlide) &&
     activeSlide.backgroundType === 'image' &&
@@ -256,6 +257,18 @@ export default function CarouselEditorLayout({
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
+
+  useEffect(() => {
+    if (isDesktopLayout || !panelOpen) return;
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevBodyOverflow;
+      document.documentElement.style.overflow = prevHtmlOverflow;
+    };
+  }, [isDesktopLayout, panelOpen]);
 
   useLayoutEffect(() => {
     const el = previewAreaRef.current;
@@ -436,7 +449,7 @@ export default function CarouselEditorLayout({
   const peekLeft = slides[activeIndex - 1]?.backgroundColor ?? slides[activeIndex]?.backgroundColor ?? '#ccc';
   const peekRight = slides[activeIndex + 1]?.backgroundColor ?? slides[activeIndex]?.backgroundColor ?? '#ccc';
 
-  const panelOpen = tab !== null;
+  const mobileOpenPreviewHeightPx = Math.max(160, Math.round(viewportHeight * 0.3));
 
   const mobilePreviewScale = previewScale;
 
@@ -810,7 +823,14 @@ export default function CarouselEditorLayout({
                 {activeSlide ? (
                   <div
                     className="relative"
-                    style={!isDesktopLayout && panelOpen ? { width: 'min(60%, 280px)' } : undefined}
+                    style={
+                      !isDesktopLayout && panelOpen
+                        ? {
+                            width: `${Math.round((mobileOpenPreviewHeightPx * CANVAS_WIDTH) / CANVAS_HEIGHT)}px`,
+                            maxWidth: '70vw',
+                          }
+                        : undefined
+                    }
                     onClick={() => {
                       if (!isDesktopLayout && hasActivePhoto && !mobilePositioningMode) {
                         setMobilePositioningMode(true);
@@ -994,62 +1014,65 @@ export default function CarouselEditorLayout({
           className="fixed bottom-0 left-0 right-0 z-40 bg-white"
           style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
         >
-          <div
-            className="border-t"
-            style={{ borderTopWidth: 0.5, borderTopColor: 'rgba(0,0,0,0.06)' }}
-          >
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={onDragEnd}
-              modifiers={dragModifiers}
+          {!panelOpen ? (
+            <div
+              className="border-t"
+              style={{ borderTopWidth: 0.5, borderTopColor: 'rgba(0,0,0,0.06)' }}
             >
-              <SortableContext items={slides.map((s) => s.id)} strategy={rectSortingStrategy}>
-                <div className="flex shrink-0 flex-row items-center gap-2 overflow-x-auto px-3 py-2">
-                  {slides.map((slide, index) => (
-                    <SortableThumb
-                      key={slide.id}
-                      slide={slide}
-                      index={index}
-                      active={slide.id === activeSlideId}
-                      accentColor={accentColor}
-                      onSelect={() => {
-                        setMobilePositioningMode(false);
-                        setIsPhotoInteracting(false);
-                        setLivePhotoTransform(null);
-                        dragRef.current = null;
-                        pinchRef.current = null;
-                        activePointersRef.current.clear();
-                        setActiveSlideId(slide.id);
-                      }}
-                      size="sm"
-                      brandSettings={brandSettings}
-                      brandFont={brandFont}
-                      totalSlides={slides.length}
-                    />
-                  ))}
-                  <button
-                    type="button"
-                    onClick={addSlide}
-                    className="flex h-[58px] w-[46px] shrink-0 items-center justify-center rounded-md border border-dashed border-[color:var(--border)] text-zinc-500 hover:bg-[color:var(--surface)]"
-                    aria-label="Додати слайд"
-                  >
-                    <Plus className="h-5 w-5" />
-                  </button>
-                </div>
-              </SortableContext>
-            </DndContext>
-          </div>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={onDragEnd}
+                modifiers={dragModifiers}
+              >
+                <SortableContext items={slides.map((s) => s.id)} strategy={rectSortingStrategy}>
+                  <div className="flex shrink-0 flex-row items-center gap-2 overflow-x-auto px-3 py-2">
+                    {slides.map((slide, index) => (
+                      <SortableThumb
+                        key={slide.id}
+                        slide={slide}
+                        index={index}
+                        active={slide.id === activeSlideId}
+                        accentColor={accentColor}
+                        onSelect={() => {
+                          setMobilePositioningMode(false);
+                          setIsPhotoInteracting(false);
+                          setLivePhotoTransform(null);
+                          dragRef.current = null;
+                          pinchRef.current = null;
+                          activePointersRef.current.clear();
+                          setActiveSlideId(slide.id);
+                        }}
+                        size="sm"
+                        brandSettings={brandSettings}
+                        brandFont={brandFont}
+                        totalSlides={slides.length}
+                      />
+                    ))}
+                    <button
+                      type="button"
+                      onClick={addSlide}
+                      className="flex h-[58px] w-[46px] shrink-0 items-center justify-center rounded-md border border-dashed border-[color:var(--border)] text-zinc-500 hover:bg-[color:var(--surface)]"
+                      aria-label="Додати слайд"
+                    >
+                      <Plus className="h-5 w-5" />
+                    </button>
+                  </div>
+                </SortableContext>
+              </DndContext>
+            </div>
+          ) : null}
           <div
             className="overflow-hidden transition-[max-height] duration-250 ease-in-out"
-            style={{ maxHeight: panelOpen ? viewportHeight * 0.5 : 0 }}
+            style={{ maxHeight: panelOpen ? viewportHeight * 0.55 : 0 }}
           >
             <div
-              className="overflow-y-auto px-4 py-3"
+              className="overflow-y-auto px-4 pt-5"
               style={{
-                maxHeight: '50vh',
+                maxHeight: '55vh',
                 overscrollBehavior: 'contain',
                 WebkitOverflowScrolling: 'touch',
+                paddingBottom: 'calc(20px + env(safe-area-inset-bottom))',
               }}
             >
               {mobilePanelContent}
