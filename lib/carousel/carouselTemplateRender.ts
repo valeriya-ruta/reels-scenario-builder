@@ -568,7 +568,7 @@ async function renderContent(
       120,
     );
     y += 20;
-    ctx.strokeStyle = dark;
+    ctx.strokeStyle = input.gradientEndColor || DEFAULT_DARK;
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(PADDING, y);

@@ -94,7 +94,7 @@ export function resolveTitleAndBodyColors(
   if (bg === palette.dark) {
     const title =
       pickFirstPassing([palette.light, palette.accent2], bg, TITLE_TEXT_MIN) ??
-      pickBestContrast([palette.light, palette.accent2]);
+      pickBestContrast([palette.light, palette.accent2], bg);
     return { titleColor: title, bodyColor: palette.light };
   }
 

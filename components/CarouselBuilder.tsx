@@ -259,9 +259,9 @@ export default function CarouselBuilder({
       return;
     }
     if (saveSlidesTimerRef.current) {
-      window.clearTimeout(saveSlidesTimerRef.current);
+      clearTimeout(saveSlidesTimerRef.current);
     }
-    saveSlidesTimerRef.current = window.setTimeout(() => {
+    saveSlidesTimerRef.current = setTimeout(() => {
       const currentSlides = slidesRef.current;
       console.log('saveCarouselSlides called', currentSlides.length, Date.now());
       void (async () => {
@@ -279,7 +279,7 @@ export default function CarouselBuilder({
     }, 1400);
     return () => {
       if (saveSlidesTimerRef.current) {
-        window.clearTimeout(saveSlidesTimerRef.current);
+        clearTimeout(saveSlidesTimerRef.current);
       }
     };
   }, [projectId, slides]);
