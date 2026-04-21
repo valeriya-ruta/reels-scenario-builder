@@ -287,6 +287,8 @@ export default function CarouselEditorLayout({
     const ro = new ResizeObserver(() => {
       const w = el.clientWidth;
       const h = el.clientHeight;
+      // Skip transient 0×0 frames so we don't stick at the 0.12 floor.
+      if (w < 48 || h < 48) return;
       const s = Math.min(w / CANVAS_WIDTH, h / CANVAS_HEIGHT);
       setPreviewScale(Math.max(0.12, s * 0.96));
     });
@@ -804,14 +806,15 @@ export default function CarouselEditorLayout({
         {/* Preview column — first on mobile */}
         <div className="order-1 flex min-h-0 w-full flex-1 flex-col items-center md:order-1 md:max-w-[min(100%,520px)]">
           <div
-            className="relative flex h-full w-full flex-1 flex-col items-center justify-center md:min-h-[min(520px,70vh)]"
-            style={
-              isDesktopLayout
-                ? undefined
-                : {
-                    minHeight: 220,
-                  }
-            }
+            className={[
+              'relative flex h-full w-full flex-1 flex-col items-center justify-center md:min-h-[min(520px,70vh)]',
+              !isDesktopLayout && !panelOpen
+                ? 'min-h-[max(260px,min(62vh,calc(100dvh-52px-200px)))]'
+                : '',
+              !isDesktopLayout && panelOpen ? 'min-h-[220px]' : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
           >
             <div
               ref={previewAreaRef}
