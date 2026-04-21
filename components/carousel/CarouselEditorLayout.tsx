@@ -192,6 +192,8 @@ export default function CarouselEditorLayout({
   const [viewportHeight, setViewportHeight] = useState(() =>
     typeof window === 'undefined' ? 800 : window.innerHeight,
   );
+  const mobileChromeRef = useRef<HTMLDivElement>(null);
+  const [mobileChromeHeight, setMobileChromeHeight] = useState(MOBILE_EDITOR_BAR_HEIGHT_PX);
 
   /** Horizontal swipe state for the mobile preview.
    *  `swipeX` is the live pixel offset of the preview strip during a touch-drag.
@@ -267,6 +269,21 @@ export default function CarouselEditorLayout({
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  useLayoutEffect(() => {
+    if (isDesktopLayout) return;
+    const el = mobileChromeRef.current;
+    if (!el) return;
+    const update = () => setMobileChromeHeight(el.getBoundingClientRect().height || MOBILE_EDITOR_BAR_HEIGHT_PX);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    window.addEventListener('resize', update);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', update);
+    };
+  }, [isDesktopLayout, tab, viewportHeight, slides.length, activeSlideId]);
 
   const desktopScale = useMemo(() => Math.min(480 / CANVAS_WIDTH, 600 / CANVAS_HEIGHT), []);
 
@@ -421,11 +438,7 @@ export default function CarouselEditorLayout({
 
   const panelOpen = tab !== null;
 
-  const mobilePreviewHeightPx = panelOpen
-    ? Math.max(180, Math.min(320, viewportHeight * 0.36))
-    : Math.max(260, viewportHeight * 0.62);
   const mobilePreviewScale = previewScale;
-  const mobileBottomInset = `calc(${MOBILE_EDITOR_BAR_HEIGHT_PX}px + env(safe-area-inset-bottom))`;
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -691,10 +704,7 @@ export default function CarouselEditorLayout({
   };
 
   return (
-    <div
-      className="flex min-h-0 flex-1 flex-col"
-      style={isDesktopLayout ? undefined : { paddingBottom: mobileBottomInset }}
-    >
+    <div className="flex min-h-0 flex-1 flex-col">
       {/* Mobile top bar */}
       <header className="flex h-[52px] shrink-0 items-center justify-between border-b border-[color:var(--border)] px-3 md:hidden">
         <Link
@@ -719,19 +729,27 @@ export default function CarouselEditorLayout({
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col md:min-h-0">
+      <div
+        className="flex min-h-0 flex-1 flex-col md:min-h-0"
+        style={
+          isDesktopLayout
+            ? undefined
+            : {
+                paddingBottom: mobileChromeHeight,
+                transition: 'padding-bottom 250ms ease',
+              }
+        }
+      >
         <div className="flex min-h-0 flex-1 flex-col md:flex-row md:justify-center md:gap-4 md:px-4 md:pt-0 md:pb-2">
         {/* Preview column — first on mobile */}
-        <div className="order-1 flex min-h-0 w-full flex-col items-center md:order-2 md:max-w-[min(100%,520px)]">
+        <div className="order-1 flex min-h-0 w-full flex-1 flex-col items-center md:order-2 md:max-w-[min(100%,520px)]">
           <div
-            className="relative flex w-full flex-col items-center justify-center md:min-h-[min(520px,70vh)]"
+            className="relative flex h-full w-full flex-1 flex-col items-center justify-center md:min-h-[min(520px,70vh)]"
             style={
               isDesktopLayout
                 ? undefined
                 : {
-                    height: `${mobilePreviewHeightPx}px`,
                     minHeight: 220,
-                    transition: 'height 250ms ease',
                   }
             }
           >
@@ -917,7 +935,7 @@ export default function CarouselEditorLayout({
           </p>
         </div>
 
-        {isDesktopLayout || !panelOpen ? (
+        {isDesktopLayout ? (
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
@@ -972,9 +990,56 @@ export default function CarouselEditorLayout({
 
       {!isDesktopLayout ? (
         <div
-          className="fixed bottom-0 left-0 right-0 z-[120] border-t border-[color:var(--border)] bg-white"
+          ref={mobileChromeRef}
+          className="fixed bottom-0 left-0 right-0 z-40 bg-white"
           style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
         >
+          <div
+            className="border-t"
+            style={{ borderTopWidth: 0.5, borderTopColor: 'rgba(0,0,0,0.06)' }}
+          >
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={onDragEnd}
+              modifiers={dragModifiers}
+            >
+              <SortableContext items={slides.map((s) => s.id)} strategy={rectSortingStrategy}>
+                <div className="flex shrink-0 flex-row items-center gap-2 overflow-x-auto px-3 py-2">
+                  {slides.map((slide, index) => (
+                    <SortableThumb
+                      key={slide.id}
+                      slide={slide}
+                      index={index}
+                      active={slide.id === activeSlideId}
+                      accentColor={accentColor}
+                      onSelect={() => {
+                        setMobilePositioningMode(false);
+                        setIsPhotoInteracting(false);
+                        setLivePhotoTransform(null);
+                        dragRef.current = null;
+                        pinchRef.current = null;
+                        activePointersRef.current.clear();
+                        setActiveSlideId(slide.id);
+                      }}
+                      size="sm"
+                      brandSettings={brandSettings}
+                      brandFont={brandFont}
+                      totalSlides={slides.length}
+                    />
+                  ))}
+                  <button
+                    type="button"
+                    onClick={addSlide}
+                    className="flex h-[58px] w-[46px] shrink-0 items-center justify-center rounded-md border border-dashed border-[color:var(--border)] text-zinc-500 hover:bg-[color:var(--surface)]"
+                    aria-label="Додати слайд"
+                  >
+                    <Plus className="h-5 w-5" />
+                  </button>
+                </div>
+              </SortableContext>
+            </DndContext>
+          </div>
           <div
             className="overflow-hidden transition-[max-height] duration-250 ease-in-out"
             style={{ maxHeight: panelOpen ? viewportHeight * 0.5 : 0 }}
