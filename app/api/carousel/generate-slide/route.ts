@@ -2,6 +2,8 @@ import { renderSlideImagePng } from '@/lib/carousel/renderSlideImage';
 import { renderCarouselTemplatePng } from '@/lib/carousel/carouselTemplateRender';
 import { sanitizeBgPhotoTransform } from '@/lib/carousel/bgPhotoTransform';
 import { normalizeAccentStyle, type BrandAccentStyle } from '@/lib/brand';
+import { getCarouselBrandPalette, resolveSlideVisualColors } from '@/lib/carousel/colorSystem';
+import type { Slide } from '@/lib/carouselTypes';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import { NextResponse } from 'next/server';
 
@@ -13,6 +15,7 @@ type LegacyBody = {
   placement?: 'top' | 'center' | 'bottom';
   text_align?: 'left' | 'center' | 'right';
   background_type?: 'color' | 'gradient' | 'image';
+  has_background_override?: boolean;
   background_color?: string;
   gradient_mid_color?: string | null;
   gradient_end_color?: string | null;
@@ -96,6 +99,8 @@ export async function POST(req: Request) {
   let primaryColor = '#faf9f7';
   let accentStyle: BrandAccentStyle = 'marker';
   let fontId = 'montserrat';
+  let darkColor = '#141414';
+  let accent2Color = '#5D6B9F';
 
   if (user) {
     const { data: profile } = await supabase
@@ -113,22 +118,79 @@ export async function POST(req: Request) {
 
     const { data: brand } = await supabase
       .from('brand_settings')
-      .select('vibe,color_light_bg,color_accent1,font_id')
+      .select('vibe,color_light_bg,color_dark_bg,color_accent1,color_accent2,font_id')
       .eq('user_id', user.id)
       .maybeSingle<{
         vibe: string | null;
         color_light_bg: string | null;
+        color_dark_bg: string | null;
         color_accent1: string | null;
+        color_accent2: string | null;
         font_id: string | null;
       }>();
 
     if (brand) {
       if (brand.vibe === 'refined') vibe = 'refined';
       if (brand.color_accent1?.trim()) accentColor = brand.color_accent1.trim();
+      if (brand.color_accent2?.trim()) accent2Color = brand.color_accent2.trim();
       if (brand.color_light_bg?.trim()) primaryColor = brand.color_light_bg.trim();
+      if (brand.color_dark_bg?.trim()) darkColor = brand.color_dark_bg.trim();
       if (brand.font_id?.trim()) fontId = brand.font_id.trim();
     }
   }
+
+  const pseudoSlide: Slide = {
+    id: 'render',
+    title: json.title ?? '',
+    body: json.body ?? '',
+    placement: json.placement ?? 'center',
+    textAlign: json.text_align ?? 'left',
+    layout: 'title_and_text',
+    design_note: json.design_note ?? null,
+    slideKind: undefined,
+    label: json.label ?? null,
+    items: json.items ?? null,
+    icon: json.icon ?? null,
+    backgroundType: json.background_type ?? 'color',
+    hasBackgroundOverride: json.has_background_override === true,
+    backgroundColor: json.background_color ?? primaryColor,
+    gradientMidColor: json.gradient_mid_color ?? undefined,
+    gradientEndColor: json.gradient_end_color ?? undefined,
+    backgroundImageUrl: json.background_image_url ?? null,
+    backgroundImageBase64: json.background_image_base64 ?? null,
+    bgPhotoTransform: sanitizeBgPhotoTransform(json.bg_photo_transform) ?? undefined,
+    titleColor: json.title_color ?? accentColor,
+    bodyColor: json.body_color ?? '#000000',
+    generatedImageBase64: null,
+    overlayType: json.overlay_type ?? null,
+    overlayColor: json.overlay_color ?? darkColor,
+    overlayOpacity: typeof json.overlay_opacity === 'number' ? json.overlay_opacity : 50,
+    slideType: json.slide_type ?? (slide_index === 1 ? 'cover' : slide_index === total_slides ? 'final' : 'slide'),
+    layoutPreset: json.layout_preset ?? (slide_index === total_slides ? 'goal' : 'text'),
+    optionalLabel: json.label ?? '',
+    listItems: json.items ?? null,
+    bulletStyle: json.bullet_style ?? 'numbered-padded',
+    testimonialAuthor: json.testimonial_author ?? null,
+    ctaAction: json.cta_action ?? 'follow',
+    ctaTitle: json.cta_title ?? '',
+    ctaKeyword: json.cta_keyword ?? '',
+    titleSize: json.title_size ?? 'L',
+    bodySize: json.body_size ?? 'M',
+  };
+  const palette = getCarouselBrandPalette({
+    theme: 'light',
+    vibe,
+    favColorHex: accentColor,
+    colors: {
+      lightBg: primaryColor,
+      darkBg: darkColor,
+      accent1: accentColor,
+      accent2: accent2Color,
+    },
+    fontId,
+    accentStyle,
+  });
+  const resolvedVisual = resolveSlideVisualColors(pseudoSlide, slide_index - 1, total_slides, palette);
 
   const useLegacy =
     json.use_legacy_renderer === true ||
@@ -158,9 +220,11 @@ export async function POST(req: Request) {
         titleSize: json.title_size ?? 'L',
         bodySize: json.body_size ?? 'M',
         backgroundType: json.background_type ?? 'color',
-        backgroundColor: json.background_color ?? '#1A1A2E',
+        backgroundColor: resolvedVisual.backgroundColor,
         gradientMidColor: json.gradient_mid_color ?? undefined,
         gradientEndColor: json.gradient_end_color ?? undefined,
+        titleColor: resolvedVisual.titleColor,
+        bodyColor: resolvedVisual.bodyColor,
         designNote: json.design_note ?? null,
         slideIndex: slide_index,
         totalSlides: total_slides,
@@ -197,13 +261,13 @@ export async function POST(req: Request) {
       placement,
       text_align,
       background_type,
-      background_color: json.background_color ?? '#1A1A2E',
+      background_color: resolvedVisual.backgroundColor,
       gradient_mid_color: json.gradient_mid_color ?? null,
       gradient_end_color: json.gradient_end_color ?? null,
       background_image_url: json.background_image_url ?? null,
       background_image_base64: json.background_image_base64 ?? null,
-      title_color: json.title_color ?? '#FFFFFF',
-      body_color: json.body_color ?? '#FFFFFF',
+      title_color: resolvedVisual.titleColor,
+      body_color: resolvedVisual.bodyColor,
       slide_index,
       total_slides,
       accent_color: accentColor,

@@ -177,23 +177,6 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } {
   return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
 }
 
-function contrastRatio(foreground: string, background: string): number {
-  const fg = hexToRgb(foreground);
-  const bg = hexToRgb(background);
-  const toLinear = (channel: number) => {
-    const value = channel / 255;
-    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
-  };
-  const fgL = 0.2126 * toLinear(fg.r) + 0.7152 * toLinear(fg.g) + 0.0722 * toLinear(fg.b);
-  const bgL = 0.2126 * toLinear(bg.r) + 0.7152 * toLinear(bg.g) + 0.0722 * toLinear(bg.b);
-  const [lighter, darker] = fgL > bgL ? [fgL, bgL] : [bgL, fgL];
-  return (lighter + 0.05) / (darker + 0.05);
-}
-
-function ensureReadableTextColor(preferred: string, background: string): string {
-  return contrastRatio(preferred, background) >= 4.5 ? preferred : '#FFFFFF';
-}
-
 function drawParagraphSegmented(
   ctx: SKRSContext2D,
   text: string,
@@ -348,6 +331,8 @@ export type CarouselTemplateInput = {
   backgroundColor?: string;
   gradientMidColor?: string;
   gradientEndColor?: string;
+  titleColor?: string;
+  bodyColor?: string;
   designNote: string | null;
   slideIndex: number;
   totalSlides: number;
@@ -398,6 +383,8 @@ async function renderCover(
 ): Promise<void> {
   const { brand, title, body, label, designNote } = input;
   const accent = brand.accentColor || DEFAULT_ACCENT;
+  const titleColor = input.titleColor || '#000000';
+  const bodyColor = input.bodyColor || '#000000';
   if (refined) {
     fillCoverBackground(
       ctx,
@@ -472,7 +459,7 @@ async function renderCover(
         PADDING,
         yy,
         88,
-        '#ffffff',
+        titleColor,
         accent,
         brand.accentStyle,
         'left',
@@ -485,7 +472,7 @@ async function renderCover(
     if (sub) {
       yy += 16;
       ctx.font = '26px NotoSans';
-      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.fillStyle = bodyColor;
       ctx.textBaseline = 'alphabetic';
       ctx.fillText(sub, PADDING, yy);
     }
@@ -499,7 +486,8 @@ async function renderContent(
 ): Promise<void> {
   const { brand, title, body, label, icon, items, handle, domain } = input;
   const accent = brand.accentColor || DEFAULT_ACCENT;
-  const dark = DEFAULT_DARK;
+  const titleColor = input.titleColor || '#000000';
+  const bodyColor = input.bodyColor || '#000000';
   if (refined) {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
@@ -530,7 +518,7 @@ async function renderContent(
     y += 28;
     drawPlainParagraph(ctx, stripAccentMarkers(body), PADDING, y, CANVAS_SIZE - PADDING * 2, 32, 40, '#777777', 'left');
   } else {
-    ctx.fillStyle = DEFAULT_BG;
+    ctx.fillStyle = input.backgroundColor || DEFAULT_BG;
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
     drawWatermark(ctx, handle, domain, 'bold', false);
     const contentW = CANVAS_SIZE - PADDING * 2;
@@ -559,7 +547,7 @@ async function renderContent(
         ctx.drawImage(iconImg, tx, y + 8, 28, 28);
         tx += 28 + 8;
       }
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = titleColor;
       ctx.textBaseline = 'middle';
       ctx.fillText(inner, tx, y + pillH / 2 + 2);
       y += pillH + 16;
@@ -572,7 +560,7 @@ async function renderContent(
       contentW,
       76,
       84,
-      dark,
+      titleColor,
       accent,
       brand.accentStyle,
       'left',
@@ -587,7 +575,7 @@ async function renderContent(
     ctx.lineTo(PADDING + 32, y);
     ctx.stroke();
     y += 28;
-    y = drawPlainParagraph(ctx, stripAccentMarkers(body), PADDING, y, contentW, 34, 54, '#666666', 'left');
+    y = drawPlainParagraph(ctx, stripAccentMarkers(body), PADDING, y, contentW, 34, 54, bodyColor, 'left');
     const chipItems = items && items.length > 0 && items.length <= 4 ? items : null;
     if (chipItems) {
       y += 24;
@@ -619,6 +607,7 @@ async function renderStatement(
 ): Promise<void> {
   const { brand, title, handle, domain, icon } = input;
   const accent = brand.accentColor || DEFAULT_ACCENT;
+  const titleColor = input.titleColor || '#000000';
   if (refined) {
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
@@ -656,7 +645,7 @@ async function renderStatement(
     const { r, g, b } = hexToRgb(accent);
     ctx.fillStyle = `rgb(${r},${g},${b})`;
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
-    const statementTextColor = ensureReadableTextColor('#FFFFFF', accent);
+    const statementTextColor = titleColor;
     drawWatermark(ctx, handle, domain, 'bold', true);
     const img = await rasterizePhosphorIcon(icon || 'sparkle', 120, '#ffffff');
     if (img) {
@@ -699,6 +688,8 @@ async function renderBullets(
 ): Promise<void> {
   const { brand, title, body, items, handle, domain } = input;
   const accent = brand.accentColor || DEFAULT_ACCENT;
+  const titleColor = input.titleColor || '#000000';
+  const bodyColor = input.bodyColor || '#000000';
   const list = items?.length ? items : body.split('\n').map((s) => s.replace(/^[-•]\s*/, '').trim()).filter(Boolean);
   if (refined) {
     ctx.fillStyle = DEFAULT_CREAM;
@@ -737,7 +728,7 @@ async function renderBullets(
       n++;
     }
   } else {
-    ctx.fillStyle = DEFAULT_BG;
+    ctx.fillStyle = input.backgroundColor || DEFAULT_BG;
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
     drawWatermark(ctx, handle, domain, 'bold', false);
     let y = PADDING + 32;
@@ -749,7 +740,7 @@ async function renderBullets(
       CANVAS_SIZE - PADDING * 2,
       66,
       72,
-      DEFAULT_DARK,
+      titleColor,
       accent,
       brand.accentStyle,
       'left',
@@ -764,7 +755,7 @@ async function renderBullets(
       ctx.fillStyle = `rgb(${r},${g},${b})`;
       ctx.fill();
       if (chk) ctx.drawImage(chk, PADDING + 6, y + 6, 24, 24);
-      drawPlainParagraph(ctx, row, PADDING + 36 + 16, y + 28, CANVAS_SIZE - PADDING * 2 - 52, 34, 40, '#555555', 'left');
+      drawPlainParagraph(ctx, row, PADDING + 36 + 16, y + 28, CANVAS_SIZE - PADDING * 2 - 52, 34, 40, bodyColor, 'left');
       y += 36 + 20;
     }
   }
@@ -777,6 +768,8 @@ async function renderCta(
 ): Promise<void> {
   const { brand, title, body, label, handle, domain } = input;
   const accent = brand.accentColor || DEFAULT_ACCENT;
+  const titleColor = input.titleColor || '#000000';
+  const bodyColor = input.bodyColor || '#000000';
   if (refined) {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
@@ -838,7 +831,7 @@ async function renderCta(
     ctx.font = '18px NotoSans';
     ctx.fillText('→', CANVAS_SIZE - PADDING - 30, circleY + 6);
   } else {
-    ctx.fillStyle = DEFAULT_DARK;
+    ctx.fillStyle = input.backgroundColor || DEFAULT_DARK;
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
     drawWatermark(ctx, handle, domain, 'bold', true);
     let y = PADDING + 60;
@@ -868,7 +861,7 @@ async function renderCta(
         PADDING,
         yy,
         88,
-        '#ffffff',
+        titleColor,
         accent,
         brand.accentStyle,
         'center',
@@ -900,7 +893,7 @@ async function renderCta(
       const lineText = bl.map((w) => w.text).join('');
       ctx.font = '36px NotoSansBold';
       const tw = ctx.measureText(lineText).width;
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = bodyColor;
       ctx.textBaseline = 'alphabetic';
       ctx.fillText(lineText, (CANVAS_SIZE - tw) / 2, iy);
       iy += 42;

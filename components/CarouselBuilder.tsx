@@ -18,6 +18,11 @@ import { readPendingCarouselFromStorage, useRantResults } from '@/components/Ran
 import { useBrandStore } from '@/components/BrandProvider';
 import type { BrandAccentStyle } from '@/lib/brand';
 import { normalizeAccentStyle, normalizeHex } from '@/lib/brand';
+import {
+  getCarouselBrandPalette,
+  resolveSlideVisualColors,
+  resolveTitleAndBodyColors,
+} from '@/lib/carousel/colorSystem';
 import Link from 'next/link';
 import { resolveBrandFont } from '@/lib/brandFonts';
 import CarouselEditorLayout from '@/components/carousel/CarouselEditorLayout';
@@ -28,27 +33,6 @@ import {
 } from '@/lib/carousel/bgPhotoTransform';
 
 const MAX_SLIDES = 20;
-const AA_CONTRAST_MIN = 4.5;
-
-function linearizeChannel(channel: number): number {
-  const value = channel / 255;
-  return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
-}
-
-function getLuminance(hex: string): number {
-  const safe = normalizeHex(hex).slice(1);
-  const r = parseInt(safe.slice(0, 2), 16);
-  const g = parseInt(safe.slice(2, 4), 16);
-  const b = parseInt(safe.slice(4, 6), 16);
-  return 0.2126 * linearizeChannel(r) + 0.7152 * linearizeChannel(g) + 0.0722 * linearizeChannel(b);
-}
-
-function getContrastRatio(foreground: string, background: string): number {
-  const fgL = getLuminance(foreground);
-  const bgL = getLuminance(background);
-  const [hi, lo] = fgL > bgL ? [fgL, bgL] : [bgL, fgL];
-  return (hi + 0.05) / (lo + 0.05);
-}
 
 function isCarouselEmpty(slides: Slide[]): boolean {
   return slides.every((s) => !s.title.trim() && !s.body.trim() && !s.generatedImageBase64);
@@ -356,31 +340,13 @@ export default function CarouselBuilder({
   const accentStyle = normalizeAccentStyle(brandSettings?.accentStyle);
   const accentColor = brandSettings?.colors.accent1 ?? '#FF6B6B';
   const canDownload = useMemo(() => slides.some((s) => Boolean(s.generatedImageBase64)), [slides]);
+  const brandPalette = useMemo(() => getCarouselBrandPalette(brandSettings), [brandSettings]);
 
   const getAutoTextColors = useCallback(
     (backgroundColor: string) => {
-      const background = normalizeHex(backgroundColor);
-      const ordered = [...brandColorOptions].sort(
-        (a, b) => getContrastRatio(b, background) - getContrastRatio(a, background),
-      );
-      const usable = ordered.filter((c) => normalizeHex(c) !== background);
-      const title =
-        usable.find((c) => getContrastRatio(c, background) >= AA_CONTRAST_MIN) ??
-        usable[0] ??
-        ordered[0] ??
-        '#FFFFFF';
-      const body =
-        usable.find(
-          (c) => normalizeHex(c) !== normalizeHex(title) && getContrastRatio(c, background) >= AA_CONTRAST_MIN,
-        ) ??
-        usable.find((c) => normalizeHex(c) !== normalizeHex(title)) ??
-        title;
-      return {
-        titleColor: normalizeHex(title),
-        bodyColor: normalizeHex(body),
-      };
+      return resolveTitleAndBodyColors('color', backgroundColor, brandPalette);
     },
-    [brandColorOptions],
+    [brandPalette],
   );
 
   const updateSlide = useCallback((id: string, patch: Partial<Slide>) => {
@@ -393,24 +359,22 @@ export default function CarouselBuilder({
             getBgPhotoTransform(nextPatch.bgPhotoTransform ?? undefined),
           );
         }
-        return { ...s, ...nextPatch };
+        const next = { ...s, ...nextPatch };
+        const resolved = resolveSlideVisualColors(next, prev.findIndex((x) => x.id === s.id), prev.length, brandPalette);
+        return { ...next, ...resolved };
       }),
     );
-  }, []);
+  }, [brandPalette]);
 
   useEffect(() => {
     if (brandColorOptions.length === 0) return;
     setSlides((prev) =>
       prev.map((slide) => {
-        if (slide.backgroundType !== 'color') return slide;
-        const hasBrandBg = brandColorOptions.some(
-          (color) => normalizeHex(color) === normalizeHex(slide.backgroundColor),
-        );
-        const nextBg = hasBrandBg ? slide.backgroundColor : brandColorOptions[0];
-        return { ...slide, backgroundColor: nextBg, ...getAutoTextColors(nextBg) };
+        const index = prev.findIndex((s) => s.id === slide.id);
+        return { ...slide, ...resolveSlideVisualColors(slide, index, prev.length, brandPalette) };
       }),
     );
-  }, [brandColorOptions, getAutoTextColors]);
+  }, [brandColorOptions, brandPalette]);
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -428,12 +392,10 @@ export default function CarouselBuilder({
   const addSlide = () => {
     if (slides.length >= MAX_SLIDES) return;
     const s = createEmptySlide({ overlayColor: overlayDefault });
-    const defaultBg = brandColorOptions[0] ?? CAROUSEL_DEFAULT_BG;
-    const auto = getAutoTextColors(defaultBg);
-    s.backgroundColor = defaultBg;
-    s.titleColor = auto.titleColor;
-    s.bodyColor = auto.bodyColor;
-    setSlides((prev) => [...prev, s]);
+    setSlides((prev) => {
+      const nextSlide = { ...s, ...resolveSlideVisualColors(s, prev.length, prev.length + 1, brandPalette) };
+      return [...prev, nextSlide];
+    });
     setActiveSlideId(s.id);
   };
 
@@ -473,6 +435,7 @@ export default function CarouselBuilder({
           placement: s.placement,
           text_align: s.textAlign,
           background_type: s.backgroundType,
+          has_background_override: s.hasBackgroundOverride ?? false,
           background_color: s.backgroundColor,
           gradient_mid_color: s.gradientMidColor ?? null,
           gradient_end_color: s.gradientEndColor ?? null,
@@ -570,7 +533,6 @@ export default function CarouselBuilder({
   const mapRantOutputToSlides = useCallback(
     (output: CarouselRantOutput): Slide[] => {
       const defaultBg = brandColorOptions[0] ?? CAROUSEL_DEFAULT_BG;
-      const auto = getAutoTextColors(defaultBg);
       const oc = brandSettings?.colors.darkBg ?? CAROUSEL_DEFAULT_BG;
       return output.slides.map((s, index) => {
         const slide = createEmptySlide({ overlayColor: oc });
@@ -593,12 +555,12 @@ export default function CarouselBuilder({
                   ? 'list'
                   : 'text';
         slide.backgroundColor = defaultBg;
-        slide.titleColor = auto.titleColor;
-        slide.bodyColor = auto.bodyColor;
+        slide.hasBackgroundOverride = false;
+        Object.assign(slide, resolveSlideVisualColors(slide, index, output.slides.length, brandPalette));
         return slide;
       });
     },
-    [brandColorOptions, getAutoTextColors, brandSettings?.colors.darkBg],
+    [brandColorOptions, brandSettings?.colors.darkBg, brandPalette],
   );
 
   const applyRantSlides = useCallback(

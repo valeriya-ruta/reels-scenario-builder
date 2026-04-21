@@ -28,6 +28,7 @@ export function createEmptySlide(brandDefaults?: { overlayColor: string }): Slid
     placement: 'center',
     textAlign: 'left',
     backgroundType: 'color',
+    hasBackgroundOverride: false,
     backgroundColor: CAROUSEL_DEFAULT_BG,
     gradientMidColor: '#D6B58A',
     gradientEndColor: '#1A1A2E',
@@ -172,6 +173,7 @@ export function normalizeSlidesFromDb(raw: unknown): Slide[] {
       placement: isPlacement(o.placement) ? o.placement : base.placement,
       textAlign: isTextAlign(o.textAlign) ? o.textAlign : base.textAlign,
       backgroundType,
+      hasBackgroundOverride: o.hasBackgroundOverride === true,
       backgroundColor: typeof o.backgroundColor === 'string' ? o.backgroundColor : base.backgroundColor,
       gradientMidColor:
         typeof o.gradientMidColor === 'string' ? o.gradientMidColor : base.gradientMidColor,

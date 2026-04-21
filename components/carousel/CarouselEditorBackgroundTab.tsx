@@ -92,6 +92,7 @@ export default function CarouselEditorBackgroundTab({
                 const auto = getAutoTextColors(slide.backgroundColor);
                 onChange(slide.id, {
                   backgroundType: 'color',
+                  hasBackgroundOverride: true,
                   backgroundImageUrl: null,
                   backgroundImageBase64: null,
                   bgPhotoTransform: undefined,
@@ -110,6 +111,7 @@ export default function CarouselEditorBackgroundTab({
                 const auto = getAutoTextColors(end);
                 onChange(slide.id, {
                   backgroundType: 'gradient',
+                  hasBackgroundOverride: true,
                   backgroundColor: start,
                   gradientMidColor: mid,
                   gradientEndColor: end,
@@ -123,6 +125,7 @@ export default function CarouselEditorBackgroundTab({
               }
               onChange(slide.id, {
                 backgroundType: 'image',
+                hasBackgroundOverride: true,
                 overlayType: slide.overlayType ?? 'full',
                 bgPhotoTransform: slide.bgPhotoTransform ?? DEFAULT_BG_PHOTO_TRANSFORM,
               });
@@ -152,7 +155,7 @@ export default function CarouselEditorBackgroundTab({
                   aria-label={`Колір фону ${color}`}
                   onClick={() => {
                     const auto = getAutoTextColors(color);
-                    onChange(slide.id, { backgroundColor: color, ...auto });
+                    onChange(slide.id, { hasBackgroundOverride: true, backgroundColor: color, ...auto });
                   }}
                   className={[
                     'relative h-11 w-11 rounded-full border-2 transition-transform duration-[120ms] ease-out',
@@ -192,10 +195,10 @@ export default function CarouselEditorBackgroundTab({
                         onClick={() => {
                           const nextPatch: Partial<Slide> =
                             stop.key === 'backgroundColor'
-                              ? { backgroundColor: color }
+                              ? { hasBackgroundOverride: true, backgroundColor: color }
                               : stop.key === 'gradientMidColor'
-                                ? { gradientMidColor: color }
-                                : { gradientEndColor: color };
+                                ? { hasBackgroundOverride: true, gradientMidColor: color }
+                                : { hasBackgroundOverride: true, gradientEndColor: color };
                           const auto = getAutoTextColors(
                             stop.key === 'gradientEndColor' ? color : gradientStops[2],
                           );
@@ -235,6 +238,7 @@ export default function CarouselEditorBackgroundTab({
                     const data = String(r.result ?? '');
                     onChange(slide.id, {
                       backgroundImageBase64: stripDataUrlBase64(data),
+                      hasBackgroundOverride: true,
                       backgroundImageUrl: null,
                       overlayType: slide.overlayType ?? 'full',
                       bgPhotoTransform: DEFAULT_BG_PHOTO_TRANSFORM,
@@ -298,6 +302,7 @@ export default function CarouselEditorBackgroundTab({
                         const data = String(r.result ?? '');
                         onChange(slide.id, {
                           backgroundImageBase64: stripDataUrlBase64(data),
+                          hasBackgroundOverride: true,
                           backgroundImageUrl: null,
                           bgPhotoTransform: DEFAULT_BG_PHOTO_TRANSFORM,
                         });

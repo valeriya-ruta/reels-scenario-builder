@@ -43,6 +43,8 @@ export type Slide = {
   /** Horizontal alignment of title + body block. */
   textAlign: SlideTextAlign;
   backgroundType: 'color' | 'gradient' | 'image';
+  /** True when user explicitly picks a custom background in the editor. */
+  hasBackgroundOverride?: boolean;
   backgroundColor: string;
   /** Gradient stop at 60% (when backgroundType === 'gradient'). */
   gradientMidColor?: string;
