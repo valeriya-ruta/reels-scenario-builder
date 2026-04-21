@@ -251,11 +251,15 @@ export default function CarouselEditorLayout({
   }, []);
 
   useEffect(() => {
-    if (isDesktopLayout && tab === null) setTab('text');
+    if (!isDesktopLayout || tab !== null) return;
+    const timer = window.setTimeout(() => setTab('text'), 0);
+    return () => window.clearTimeout(timer);
   }, [isDesktopLayout, tab]);
 
   useEffect(() => {
-    if (tab === 'style' && styleTabDisabled) setTab(null);
+    if (tab !== 'style' || !styleTabDisabled) return;
+    const timer = window.setTimeout(() => setTab(null), 0);
+    return () => window.clearTimeout(timer);
   }, [tab, styleTabDisabled]);
 
   useEffect(() => {

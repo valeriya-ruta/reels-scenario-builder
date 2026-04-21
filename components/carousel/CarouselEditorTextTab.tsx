@@ -114,7 +114,7 @@ export default function CarouselEditorTextTab({
       {slideType === 'slide' && layoutPreset === 'testimonial' ? (
         <>
           <div>
-            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500">Ім'я автора</label>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500">Ім&apos;я автора</label>
             <input
               type="text"
               value={slide.testimonialAuthor?.name ?? ''}
