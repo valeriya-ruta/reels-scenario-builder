@@ -21,7 +21,11 @@ import { normalizeAccentStyle, normalizeHex } from '@/lib/brand';
 import Link from 'next/link';
 import { resolveBrandFont } from '@/lib/brandFonts';
 import CarouselEditorLayout from '@/components/carousel/CarouselEditorLayout';
-import { DEFAULT_BG_PHOTO_TRANSFORM } from '@/lib/carousel/bgPhotoTransform';
+import {
+  DEFAULT_BG_PHOTO_TRANSFORM,
+  getBgPhotoTransform,
+  normalizeBgPhotoTransform,
+} from '@/lib/carousel/bgPhotoTransform';
 
 const MAX_SLIDES = 20;
 const AA_CONTRAST_MIN = 4.5;
@@ -356,7 +360,18 @@ export default function CarouselBuilder({
   );
 
   const updateSlide = useCallback((id: string, patch: Partial<Slide>) => {
-    setSlides((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+    setSlides((prev) =>
+      prev.map((s) => {
+        if (s.id !== id) return s;
+        const nextPatch: Partial<Slide> = { ...patch };
+        if (nextPatch.bgPhotoTransform !== undefined) {
+          nextPatch.bgPhotoTransform = normalizeBgPhotoTransform(
+            getBgPhotoTransform(nextPatch.bgPhotoTransform ?? undefined),
+          );
+        }
+        return { ...s, ...nextPatch };
+      }),
+    );
   }, []);
 
   useEffect(() => {

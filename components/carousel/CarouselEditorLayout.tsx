@@ -37,6 +37,7 @@ import {
   Download,
   GripVertical,
   Loader2,
+  Move,
   Plus,
 } from 'lucide-react';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '@/lib/carousel/carouselConstants';
@@ -221,6 +222,7 @@ export default function CarouselEditorLayout({
     activeSlide.backgroundType === 'image' &&
     Boolean(activeSlide.backgroundImageUrl || activeSlide.backgroundImageBase64);
   const [mobilePositioningMode, setMobilePositioningMode] = useState(false);
+  const [showPhotoHint, setShowPhotoHint] = useState(false);
   const [isPhotoInteracting, setIsPhotoInteracting] = useState(false);
   const [livePhotoTransform, setLivePhotoTransform] = useState<BgPhotoTransform | null>(null);
   const dragRef = useRef<{
@@ -469,8 +471,23 @@ export default function CarouselEditorLayout({
 
   const onMobilePhotoUploadSuccess = useCallback(() => {
     if (isDesktopLayout) return;
+    setLivePhotoTransform(null);
+    setIsPhotoInteracting(false);
+    dragRef.current = null;
+    pinchRef.current = null;
+    activePointersRef.current.clear();
     setTab(null);
     setMobilePositioningMode(true);
+    try {
+      const seen = localStorage.getItem('ruta_photo_hint_seen');
+      if (!seen) {
+        localStorage.setItem('ruta_photo_hint_seen', '1');
+        setShowPhotoHint(true);
+        window.setTimeout(() => setShowPhotoHint(false), 3000);
+      }
+    } catch {
+      // Ignore localStorage edge cases.
+    }
   }, [isDesktopLayout]);
 
   const desktopTabButtons = (
@@ -596,6 +613,7 @@ export default function CarouselEditorLayout({
   const onPhotoPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!activeSlide || !hasActivePhoto) return;
     if (!isDesktopLayout && !mobilePositioningMode) return;
+    if (showPhotoHint) setShowPhotoHint(false);
     e.currentTarget.setPointerCapture(e.pointerId);
     activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
@@ -834,6 +852,7 @@ export default function CarouselEditorLayout({
                     onClick={() => {
                       if (!isDesktopLayout && hasActivePhoto && !mobilePositioningMode) {
                         setMobilePositioningMode(true);
+                        if (showPhotoHint) setShowPhotoHint(false);
                       }
                     }}
                   >
@@ -867,6 +886,21 @@ export default function CarouselEditorLayout({
                         }
                       />
                     ) : null}
+                    {hasActivePhoto ? (
+                      <button
+                        type="button"
+                        aria-label="Розташувати фото"
+                        className="absolute right-2 top-2 z-[4] flex h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white shadow-[0_2px_8px_rgba(0,0,0,0.28)] transition-opacity"
+                        style={{ opacity: mobilePositioningMode ? 0 : 1 }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMobilePositioningMode(true);
+                          if (showPhotoHint) setShowPhotoHint(false);
+                        }}
+                      >
+                        <Move className="h-3.5 w-3.5" />
+                      </button>
+                    ) : null}
                   </div>
                 ) : null}
                 {nextSlide ? (
@@ -887,6 +921,11 @@ export default function CarouselEditorLayout({
                 ) : null}
               </div>
             </div>
+            {showPhotoHint && hasActivePhoto && mobilePositioningMode && !isDesktopLayout ? (
+              <div className="pointer-events-none absolute top-3 left-1/2 z-[6] -translate-x-1/2 rounded-full bg-black/70 px-3 py-1 text-xs font-medium text-white">
+                Тягни фото щоб розташувати
+              </div>
+            ) : null}
             {mobilePositioningMode && !isDesktopLayout ? (
               <button
                 type="button"

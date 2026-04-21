@@ -10,7 +10,7 @@ export const DEFAULT_BG_PHOTO_TRANSFORM: BgPhotoTransform = {
   scale: 1,
 };
 
-export const MIN_BG_PHOTO_SCALE = 0.5;
+export const MIN_BG_PHOTO_SCALE = 1;
 export const MAX_BG_PHOTO_SCALE = 2.5;
 
 export function sanitizeBgPhotoTransform(value: unknown): BgPhotoTransform | undefined {
@@ -28,27 +28,38 @@ export function sanitizeBgPhotoTransform(value: unknown): BgPhotoTransform | und
 
 export function getBgPhotoTransform(value: BgPhotoTransform | null | undefined): BgPhotoTransform {
   if (!value) return DEFAULT_BG_PHOTO_TRANSFORM;
-  return {
+  return normalizeBgPhotoTransform({
     offset_x: Number.isFinite(value.offset_x) ? value.offset_x : 0,
     offset_y: Number.isFinite(value.offset_y) ? value.offset_y : 0,
-    scale: clampPhotoScale(Number.isFinite(value.scale) ? value.scale : 1),
-  };
+    scale: Number.isFinite(value.scale) ? value.scale : 1,
+  });
 }
 
 export function clampPhotoScale(scale: number): number {
   return Math.min(MAX_BG_PHOTO_SCALE, Math.max(MIN_BG_PHOTO_SCALE, scale));
 }
 
-export function clampOffsetFraction(value: number): number {
+function sanitizeOffsetFraction(value: number): number {
   if (!Number.isFinite(value)) return 0;
-  return Math.min(5, Math.max(-5, value));
+  return value;
+}
+
+export function maxPhotoOffsetForScale(scale: number): number {
+  const safeScale = clampPhotoScale(scale);
+  return Math.max(0, (safeScale - 1) / 2);
+}
+
+export function clampPhotoOffsetForScale(value: number, scale: number): number {
+  const max = maxPhotoOffsetForScale(scale);
+  return Math.min(max, Math.max(-max, sanitizeOffsetFraction(value)));
 }
 
 export function normalizeBgPhotoTransform(value: BgPhotoTransform): BgPhotoTransform {
+  const scale = clampPhotoScale(value.scale);
   return {
-    offset_x: clampOffsetFraction(value.offset_x),
-    offset_y: clampOffsetFraction(value.offset_y),
-    scale: clampPhotoScale(value.scale),
+    offset_x: clampPhotoOffsetForScale(value.offset_x, scale),
+    offset_y: clampPhotoOffsetForScale(value.offset_y, scale),
+    scale,
   };
 }
 
