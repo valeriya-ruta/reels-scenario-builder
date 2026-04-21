@@ -59,6 +59,7 @@ import {
 } from '@/lib/carousel/bgPhotoTransform';
 
 type EditorTab = 'type' | 'text' | 'position' | 'bg' | 'style';
+const MOBILE_EDITOR_BAR_HEIGHT_PX = 72;
 
 function SortableThumb({
   slide,
@@ -420,8 +421,11 @@ export default function CarouselEditorLayout({
 
   const panelOpen = tab !== null;
 
-  const mobilePreviewHeightPx = Math.max(260, viewportHeight * (panelOpen ? 0.42 : 0.62));
+  const mobilePreviewHeightPx = panelOpen
+    ? Math.max(180, Math.min(320, viewportHeight * 0.36))
+    : Math.max(260, viewportHeight * 0.62);
   const mobilePreviewScale = previewScale;
+  const mobileBottomInset = `calc(${MOBILE_EDITOR_BAR_HEIGHT_PX}px + env(safe-area-inset-bottom))`;
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -436,6 +440,12 @@ export default function CarouselEditorLayout({
 
   const tabLabel = (t: EditorTab) =>
     t === 'type' ? 'Тип' : t === 'text' ? 'Текст' : t === 'position' ? 'Позиція' : t === 'bg' ? 'Фон' : 'Стиль';
+
+  const onMobilePhotoUploadSuccess = useCallback(() => {
+    if (isDesktopLayout) return;
+    setTab(null);
+    setMobilePositioningMode(true);
+  }, [isDesktopLayout]);
 
   const desktopTabButtons = (
     <div className="flex shrink-0 border-b border-[color:var(--border)]">
@@ -480,6 +490,7 @@ export default function CarouselEditorLayout({
           getAutoTextColors={getAutoTextColors}
           onChange={updateSlide}
           onUnsplash={onUnsplash}
+          onPhotoUploadSuccess={onMobilePhotoUploadSuccess}
         />
       ) : null}
       {tab === 'style' ? (
@@ -532,6 +543,7 @@ export default function CarouselEditorLayout({
         getAutoTextColors={getAutoTextColors}
         onChange={updateSlide}
         onUnsplash={onUnsplash}
+        onPhotoUploadSuccess={onMobilePhotoUploadSuccess}
       />
     ) : tab === 'style' ? (
       activeSlide.backgroundType === 'image' ? (
@@ -679,7 +691,10 @@ export default function CarouselEditorLayout({
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div
+      className="flex min-h-0 flex-1 flex-col"
+      style={isDesktopLayout ? undefined : { paddingBottom: mobileBottomInset }}
+    >
       {/* Mobile top bar */}
       <header className="flex h-[52px] shrink-0 items-center justify-between border-b border-[color:var(--border)] px-3 md:hidden">
         <Link
@@ -777,6 +792,7 @@ export default function CarouselEditorLayout({
                 {activeSlide ? (
                   <div
                     className="relative"
+                    style={!isDesktopLayout && panelOpen ? { width: 'min(60%, 280px)' } : undefined}
                     onClick={() => {
                       if (!isDesktopLayout && hasActivePhoto && !mobilePositioningMode) {
                         setMobilePositioningMode(true);
@@ -901,47 +917,49 @@ export default function CarouselEditorLayout({
           </p>
         </div>
 
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={onDragEnd}
-          modifiers={dragModifiers}
-        >
-          <SortableContext items={slides.map((s) => s.id)} strategy={rectSortingStrategy}>
-            <div className="order-2 flex shrink-0 flex-row items-center gap-2 overflow-x-auto px-3 py-2 md:order-1 md:w-[72px] md:flex-col md:overflow-y-auto md:px-1 md:py-0">
-              {slides.map((slide, index) => (
-                <SortableThumb
-                  key={slide.id}
-                  slide={slide}
-                  index={index}
-                  active={slide.id === activeSlideId}
-                  accentColor={accentColor}
-                  onSelect={() => {
-                    setMobilePositioningMode(false);
-                    setIsPhotoInteracting(false);
-                    setLivePhotoTransform(null);
-                    dragRef.current = null;
-                    pinchRef.current = null;
-                    activePointersRef.current.clear();
-                    setActiveSlideId(slide.id);
-                  }}
-                  size={isDesktopLayout ? 'md' : 'sm'}
-                  brandSettings={brandSettings}
-                  brandFont={brandFont}
-                  totalSlides={slides.length}
-                />
-              ))}
-              <button
-                type="button"
-                onClick={addSlide}
-                className="flex h-[58px] w-[46px] shrink-0 items-center justify-center rounded-md border border-dashed border-[color:var(--border)] text-zinc-500 hover:bg-[color:var(--surface)] md:h-[78px] md:w-[62px]"
-                aria-label="Додати слайд"
-              >
-                <Plus className="h-5 w-5" />
-              </button>
-            </div>
-          </SortableContext>
-        </DndContext>
+        {isDesktopLayout || !panelOpen ? (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={onDragEnd}
+            modifiers={dragModifiers}
+          >
+            <SortableContext items={slides.map((s) => s.id)} strategy={rectSortingStrategy}>
+              <div className="order-2 flex shrink-0 flex-row items-center gap-2 overflow-x-auto px-3 py-2 md:order-1 md:w-[72px] md:flex-col md:overflow-y-auto md:px-1 md:py-0">
+                {slides.map((slide, index) => (
+                  <SortableThumb
+                    key={slide.id}
+                    slide={slide}
+                    index={index}
+                    active={slide.id === activeSlideId}
+                    accentColor={accentColor}
+                    onSelect={() => {
+                      setMobilePositioningMode(false);
+                      setIsPhotoInteracting(false);
+                      setLivePhotoTransform(null);
+                      dragRef.current = null;
+                      pinchRef.current = null;
+                      activePointersRef.current.clear();
+                      setActiveSlideId(slide.id);
+                    }}
+                    size={isDesktopLayout ? 'md' : 'sm'}
+                    brandSettings={brandSettings}
+                    brandFont={brandFont}
+                    totalSlides={slides.length}
+                  />
+                ))}
+                <button
+                  type="button"
+                  onClick={addSlide}
+                  className="flex h-[58px] w-[46px] shrink-0 items-center justify-center rounded-md border border-dashed border-[color:var(--border)] text-zinc-500 hover:bg-[color:var(--surface)] md:h-[78px] md:w-[62px]"
+                  aria-label="Додати слайд"
+                >
+                  <Plus className="h-5 w-5" />
+                </button>
+              </div>
+            </SortableContext>
+          </DndContext>
+        ) : null}
 
         {isDesktopLayout ? (
           <div className="hidden min-h-0 w-[360px] max-w-[38vw] shrink-0 overflow-hidden rounded-2xl border border-[color:var(--border)] bg-white shadow-[0_4px_24px_rgba(0,0,0,0.06)] md:flex md:flex-col">
@@ -953,12 +971,24 @@ export default function CarouselEditorLayout({
       </div>
 
       {!isDesktopLayout ? (
-        <div className="shrink-0 border-t border-[color:var(--border)] bg-white">
+        <div
+          className="fixed bottom-0 left-0 right-0 z-[120] border-t border-[color:var(--border)] bg-white"
+          style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        >
           <div
             className="overflow-hidden transition-[max-height] duration-250 ease-in-out"
-            style={{ maxHeight: panelOpen ? 260 : 0 }}
+            style={{ maxHeight: panelOpen ? viewportHeight * 0.5 : 0 }}
           >
-            <div className="max-h-[260px] overflow-y-auto px-4 py-3">{mobilePanelContent}</div>
+            <div
+              className="overflow-y-auto px-4 py-3"
+              style={{
+                maxHeight: '50vh',
+                overscrollBehavior: 'contain',
+                WebkitOverflowScrolling: 'touch',
+              }}
+            >
+              {mobilePanelContent}
+            </div>
           </div>
           <div className="flex gap-1 overflow-x-auto px-2 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {(['type', 'text', 'position', 'bg', 'style'] as const).map((t) => (

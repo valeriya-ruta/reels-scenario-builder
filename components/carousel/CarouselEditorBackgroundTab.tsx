@@ -32,6 +32,8 @@ export default function CarouselEditorBackgroundTab({
   getAutoTextColors,
   onChange,
   onUnsplash,
+  onPhotoUploadSuccess,
+  onPhotoUploadError,
 }: {
   slide: Slide;
   brandColorOptions: string[];
@@ -39,6 +41,8 @@ export default function CarouselEditorBackgroundTab({
   getAutoTextColors: (bg: string) => { titleColor: string; bodyColor: string };
   onChange: (id: string, patch: Partial<Slide>) => void;
   onUnsplash: () => void;
+  onPhotoUploadSuccess?: () => void;
+  onPhotoUploadError?: () => void;
 }) {
   const fileInputId = useId();
   const hasPhoto = slide.backgroundType === 'image' && (slide.backgroundImageUrl || slide.backgroundImageBase64);
@@ -262,6 +266,10 @@ export default function CarouselEditorBackgroundTab({
                       overlayType: slide.overlayType ?? 'full',
                       bgPhotoTransform: DEFAULT_BG_PHOTO_TRANSFORM,
                     });
+                    onPhotoUploadSuccess?.();
+                  };
+                  r.onerror = () => {
+                    onPhotoUploadError?.();
                   };
                   r.readAsDataURL(f);
                 }}
@@ -313,6 +321,10 @@ export default function CarouselEditorBackgroundTab({
                           backgroundImageUrl: null,
                           bgPhotoTransform: DEFAULT_BG_PHOTO_TRANSFORM,
                         });
+                        onPhotoUploadSuccess?.();
+                      };
+                      r.onerror = () => {
+                        onPhotoUploadError?.();
                       };
                       r.readAsDataURL(f);
                     }}
