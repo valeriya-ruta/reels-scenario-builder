@@ -261,6 +261,7 @@ export default function CarouselSlidePreview({
   const accent = normalizeHex(brand.colors.accent1 || DEFAULT_ACCENT);
   const brandPalette = getCarouselBrandPalette(brand);
   const resolvedColors = resolveSlideVisualColors(slide, slideIndex - 1, totalSlides, brandPalette);
+  const lightBrandColor = brandPalette.light;
   const darkBg = brandPalette.dark;
   const resolvedBackgroundColor = resolvedColors.backgroundColor;
   const resolvedTitleColor = resolvedColors.titleColor;
@@ -355,7 +356,7 @@ export default function CarouselSlidePreview({
           className="relative overflow-hidden rounded-xl shadow-lg"
           style={{
             ...baseCanvas,
-            backgroundColor: lightBg,
+            backgroundColor: resolvedBackgroundColor,
             backgroundImage: slide.backgroundType === 'gradient' ? coverGradient(brand, slide) : undefined,
           }}
         >
@@ -424,7 +425,7 @@ export default function CarouselSlidePreview({
             quoteBg,
             <div className="flex w-full flex-col items-center justify-center py-8">
               <div className={`w-full ${textAlignClass} font-bold leading-tight whitespace-pre-wrap`} style={{ fontFamily: titleFont, color: quoteColor, fontSize: quoteSize }}>
-                <AccentRuns text={quoteText} accentStyle={brand.accentStyle} accentColor={lightBg} />
+                <AccentRuns text={quoteText} accentStyle={brand.accentStyle} accentColor={lightBrandColor} />
               </div>
               {slide.layoutPreset === 'testimonial' ? (
                 <div className="mt-3 flex items-center gap-2" style={{ color: quoteColor }}>
@@ -448,7 +449,7 @@ export default function CarouselSlidePreview({
       <div className="relative overflow-hidden rounded-xl shadow-lg" style={baseWrap}>
         <div className="relative overflow-hidden rounded-xl shadow-lg" style={{ ...baseCanvas, backgroundColor: resolvedBackgroundColor }}>
           {contentShell(
-            lightBg,
+            resolvedBackgroundColor,
             <>
               <p className="text-[56px] font-bold leading-tight whitespace-pre-wrap" style={{ fontFamily: titleFont, color: resolvedTitleColor, fontSize: (slide.titleSize ?? 'L') === 'M' ? 45 : 56 }}>
                 <AccentRuns text={slide.title} accentStyle={brand.accentStyle} accentColor={accent} />
@@ -518,7 +519,7 @@ export default function CarouselSlidePreview({
     <div className="relative overflow-hidden rounded-xl shadow-lg" style={baseWrap}>
       <div className="relative overflow-hidden rounded-xl shadow-lg" style={{ ...baseCanvas, backgroundColor: resolvedBackgroundColor }}>
         {contentShell(
-          lightBg,
+          resolvedBackgroundColor,
           <>
             {pill ? (
               <span
