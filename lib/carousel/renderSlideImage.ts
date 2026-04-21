@@ -9,25 +9,126 @@ import {
   layoutWords,
   segmentsToWords,
 } from '@/lib/carousel/canvasSegmentedText';
+import { getBgPhotoTransform } from '@/lib/carousel/bgPhotoTransform';
 
-const CANVAS = 1080;
+const CANVAS_W = 1080;
+const CANVAS_H = 1350;
 const MARGIN_X = 100;
 const MAX_TEXT_WIDTH = 880;
 const TITLE_SIZE = 72;
 const BODY_SIZE = 44;
 const TITLE_BODY_GAP = 32;
-const SLIDE_NUM_SIZE = 32;
+const TITLE_SCALE: Record<'L' | 'M', number> = { L: 1, M: 0.8 };
+const BODY_SCALE: Record<'M' | 'S', number> = { M: 1, S: 0.8 };
 
 let fontsRegistered = false;
+let activeFontId: string | null = null;
 
-function ensureFonts() {
-  if (fontsRegistered) return;
+function ensureFonts(fontId?: string | null) {
   const fontDir = join(process.cwd(), 'public', 'fonts');
+  const requestedFontId = (fontId ?? '').trim().toLowerCase();
+  const fontsourceDir = join(process.cwd(), 'node_modules', '@fontsource');
+
+  if (fontsRegistered && activeFontId === requestedFontId) return;
   try {
     GlobalFonts.registerFromPath(join(fontDir, 'NotoSans-Bold.ttf'), 'NotoSansBold');
     GlobalFonts.registerFromPath(join(fontDir, 'NotoSans-Regular.ttf'), 'NotoSans');
     GlobalFonts.registerFromPath(join(fontDir, 'NotoSans-Italic.ttf'), 'NotoSansItalic');
+    // Override aliases with the selected Brand DNA font so downloaded PNGs match preview typography.
+    if (requestedFontId === 'google_sans') {
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'google-sans', 'files', 'google-sans-cyrillic-700-normal.woff'),
+        'NotoSansBold',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'google-sans', 'files', 'google-sans-cyrillic-400-normal.woff'),
+        'NotoSans',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'google-sans', 'files', 'google-sans-cyrillic-400-italic.woff'),
+        'NotoSansItalic',
+      );
+    } else if (requestedFontId === 'manrope') {
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'manrope', 'files', 'manrope-cyrillic-700-normal.woff'),
+        'NotoSansBold',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'manrope', 'files', 'manrope-cyrillic-400-normal.woff'),
+        'NotoSans',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'manrope', 'files', 'manrope-cyrillic-400-normal.woff'),
+        'NotoSansItalic',
+      );
+    } else if (requestedFontId === 'cormorant') {
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'cormorant-garamond', 'files', 'cormorant-garamond-cyrillic-700-normal.woff'),
+        'NotoSansBold',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'cormorant-garamond', 'files', 'cormorant-garamond-cyrillic-400-normal.woff'),
+        'NotoSans',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'cormorant-garamond', 'files', 'cormorant-garamond-cyrillic-400-italic.woff'),
+        'NotoSansItalic',
+      );
+    } else if (requestedFontId === 'days_one') {
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'days-one', 'files', 'days-one-cyrillic-400-normal.woff'),
+        'NotoSansBold',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'days-one', 'files', 'days-one-cyrillic-400-normal.woff'),
+        'NotoSans',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'days-one', 'files', 'days-one-cyrillic-400-normal.woff'),
+        'NotoSansItalic',
+      );
+    } else if (requestedFontId === 'climate_crisis') {
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'climate-crisis', 'files', 'climate-crisis-cyrillic-400-normal.woff'),
+        'NotoSansBold',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'climate-crisis', 'files', 'climate-crisis-cyrillic-400-normal.woff'),
+        'NotoSans',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'climate-crisis', 'files', 'climate-crisis-cyrillic-400-normal.woff'),
+        'NotoSansItalic',
+      );
+    } else if (requestedFontId === 'inter') {
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'inter', 'files', 'inter-cyrillic-700-normal.woff'),
+        'NotoSansBold',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'inter', 'files', 'inter-cyrillic-400-normal.woff'),
+        'NotoSans',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'inter', 'files', 'inter-cyrillic-400-italic.woff'),
+        'NotoSansItalic',
+      );
+    } else if (requestedFontId === 'montserrat') {
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'montserrat', 'files', 'montserrat-cyrillic-700-normal.woff'),
+        'NotoSansBold',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'montserrat', 'files', 'montserrat-cyrillic-400-normal.woff'),
+        'NotoSans',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'montserrat', 'files', 'montserrat-cyrillic-400-italic.woff'),
+        'NotoSansItalic',
+      );
+    }
     fontsRegistered = true;
+    activeFontId = requestedFontId;
   } catch (e) {
     console.warn('[carousel] Failed to register Noto fonts:', e);
   }
@@ -140,8 +241,10 @@ export type GenerateSlideInput = {
   body: string;
   placement: 'top' | 'center' | 'bottom';
   text_align: 'left' | 'center' | 'right';
-  background_type: 'color' | 'image';
+  background_type: 'color' | 'gradient' | 'image';
   background_color: string;
+  gradient_mid_color?: string | null;
+  gradient_end_color?: string | null;
   background_image_url: string | null;
   /** Raw base64 without data URL prefix — used when URL is not available */
   background_image_base64?: string | null;
@@ -152,20 +255,42 @@ export type GenerateSlideInput = {
   /** Brand DNA accent for `{…}` spans (legacy renderer). */
   accent_color?: string;
   accent_style?: BrandAccentStyle;
+  font_id?: string | null;
+  title_size?: 'L' | 'M';
+  body_size?: 'M' | 'S';
+  bg_photo_transform?: {
+    offset_x?: number;
+    offset_y?: number;
+    scale?: number;
+  } | null;
 };
 
+function normalizeMultiline(input: string): string {
+  return input.replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+/, '').replace(/\n+$/, '');
+}
+
 export async function renderSlideImagePng(input: GenerateSlideInput): Promise<Buffer> {
-  ensureFonts();
-  const canvas = createCanvas(CANVAS, CANVAS);
+  ensureFonts(input.font_id);
+  const canvas = createCanvas(CANVAS_W, CANVAS_H);
   const ctx = canvas.getContext('2d');
 
   const accentColor = input.accent_color?.trim() || '#e05c40';
   const accentStyle = normalizeAccentStyle(input.accent_style);
 
-  if (input.background_type === 'color') {
+  if (input.background_type === 'color' || input.background_type === 'gradient') {
     const { r, g, b } = hexToRgb(input.background_color || '#1A1A2E');
     ctx.fillStyle = `rgb(${r},${g},${b})`;
-    ctx.fillRect(0, 0, CANVAS, CANVAS);
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    if (input.background_type === 'gradient') {
+      const midColor = input.gradient_mid_color?.trim() || input.accent_color || '#D6B58A';
+      const endColor = input.gradient_end_color?.trim() || '#1A1A2E';
+      const g = ctx.createRadialGradient(CANVAS_W * 0.3, CANVAS_H * 0.3, 0, CANVAS_W * 0.3, CANVAS_H * 0.3, CANVAS_H);
+      g.addColorStop(0, input.background_color || '#F5F2ED');
+      g.addColorStop(0.6, midColor);
+      g.addColorStop(1, endColor);
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    }
   } else {
     let buf: Buffer | null = null;
     try {
@@ -186,22 +311,48 @@ export async function renderSlideImagePng(input: GenerateSlideInput): Promise<Bu
       console.warn('[carousel] Background image failed, using solid fallback:', e);
     }
     if (buf) {
-      const resized = await sharp(buf)
-        .resize(CANVAS, CANVAS, { fit: 'cover', position: 'center' })
+      const oriented = sharp(buf).rotate();
+      const meta = await oriented.metadata();
+      const srcW = meta.width ?? CANVAS_W;
+      const srcH = meta.height ?? CANVAS_H;
+      const transform = getBgPhotoTransform(input.bg_photo_transform ?? undefined);
+      const coverScale = Math.max(CANVAS_W / srcW, CANVAS_H / srcH);
+      const finalScale = Math.max(0.01, coverScale * transform.scale);
+      const nextW = Math.max(1, Math.round(srcW * finalScale));
+      const nextH = Math.max(1, Math.round(srcH * finalScale));
+      const offsetPxX = transform.offset_x * CANVAS_W;
+      const offsetPxY = transform.offset_y * CANVAS_H;
+      const left = Math.round((CANVAS_W - nextW) / 2 + offsetPxX);
+      const top = Math.round((CANVAS_H - nextH) / 2 + offsetPxY);
+
+      const resized = await oriented.resize(nextW, nextH, { fit: 'fill' }).png().toBuffer();
+      const transformed = await sharp({
+        create: {
+          width: CANVAS_W,
+          height: CANVAS_H,
+          channels: 3,
+          background: { r: 0, g: 0, b: 0 },
+        },
+      })
+        .composite([{ input: resized, left, top }])
         .png()
         .toBuffer();
-      const img = await loadImage(resized);
-      ctx.drawImage(img, 0, 0, CANVAS, CANVAS);
+      const img = await loadImage(transformed);
+      ctx.drawImage(img, 0, 0, CANVAS_W, CANVAS_H);
     } else {
       ctx.fillStyle = '#1A1A2E';
-      ctx.fillRect(0, 0, CANVAS, CANVAS);
+      ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
     }
     ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
-    ctx.fillRect(0, 0, CANVAS, CANVAS);
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
   }
 
-  const titleLineHeight = Math.round(TITLE_SIZE * 1.25);
-  const bodyLineHeight = Math.round(BODY_SIZE * 1.25);
+  const titleSizePx = Math.round(TITLE_SIZE * TITLE_SCALE[input.title_size ?? 'L']);
+  const bodySizePx = Math.round(BODY_SIZE * BODY_SCALE[input.body_size ?? 'M']);
+  const titleLineHeight = Math.round(titleSizePx * 1.25);
+  const bodyLineHeight = Math.round(bodySizePx * 1.25);
+  const normalizedTitle = normalizeMultiline(input.title || '');
+  const normalizedBody = normalizeMultiline(input.body || '');
 
   const tc = hexToRgb(input.title_color || '#FFFFFF');
   const bc = hexToRgb(input.body_color || '#FFFFFF');
@@ -210,17 +361,17 @@ export async function renderSlideImagePng(input: GenerateSlideInput): Promise<Bu
 
   const titleBlockH = segmentedBlockHeight(
     ctx,
-    input.title || '',
+    normalizedTitle,
     MAX_TEXT_WIDTH,
-    TITLE_SIZE,
+    titleSizePx,
     titleLineHeight,
     true,
   );
   const bodyBlockH = segmentedBlockHeight(
     ctx,
-    input.body || '',
+    normalizedBody,
     MAX_TEXT_WIDTH,
-    BODY_SIZE,
+    bodySizePx,
     bodyLineHeight,
     false,
   );
@@ -230,11 +381,11 @@ export async function renderSlideImagePng(input: GenerateSlideInput): Promise<Bu
 
   let textBlockY: number;
   if (input.placement === 'center') {
-    textBlockY = Math.round((CANVAS - textBlockHeight) / 2);
+    textBlockY = Math.round((CANVAS_H - textBlockHeight) / 2);
   } else if (input.placement === 'top') {
     textBlockY = 100;
   } else {
-    textBlockY = CANVAS - textBlockHeight - 100;
+    textBlockY = CANVAS_H - textBlockHeight - 100;
   }
 
   const align = input.text_align ?? 'left';
@@ -242,11 +393,11 @@ export async function renderSlideImagePng(input: GenerateSlideInput): Promise<Bu
   let nextTopY = textBlockY;
   nextTopY = drawSegmentedBlock(
     ctx,
-    input.title || '',
+    normalizedTitle,
     MARGIN_X,
     nextTopY,
     MAX_TEXT_WIDTH,
-    TITLE_SIZE,
+    titleSizePx,
     titleLineHeight,
     titleColorCss,
     accentColor,
@@ -260,11 +411,11 @@ export async function renderSlideImagePng(input: GenerateSlideInput): Promise<Bu
   }
   drawSegmentedBlock(
     ctx,
-    input.body || '',
+    normalizedBody,
     MARGIN_X,
     nextTopY,
     MAX_TEXT_WIDTH,
-    BODY_SIZE,
+    bodySizePx,
     bodyLineHeight,
     bodyColorCss,
     accentColor,
@@ -273,15 +424,6 @@ export async function renderSlideImagePng(input: GenerateSlideInput): Promise<Bu
     false,
     300,
   );
-
-  const slideLabel = `${input.slide_index} / ${input.total_slides}`;
-  ctx.textBaseline = 'alphabetic';
-  ctx.font = fontsRegistered ? `${SLIDE_NUM_SIZE}px NotoSans` : `${SLIDE_NUM_SIZE}px sans-serif`;
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-  const w = ctx.measureText(slideLabel).width;
-  const numX = 980 - w;
-  const numY = 1040;
-  ctx.fillText(slideLabel, numX, numY);
 
   return canvas.toBuffer('image/png');
 }

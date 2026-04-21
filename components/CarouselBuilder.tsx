@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEndEvent } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
-import { Check, Circle, Loader2 } from 'lucide-react';
+import { Check, Circle, Download, Loader2 } from 'lucide-react';
 import type { CarouselRantOutput, Slide } from '@/lib/carouselTypes';
-import { CAROUSEL_DEFAULT_BG, resolveSlideKind } from '@/lib/carouselTypes';
+import { CAROUSEL_DEFAULT_BG, resolveSlideType } from '@/lib/carouselTypes';
 import { createEmptySlide, normalizeSlidesFromDb } from '@/lib/carouselSlides';
 import {
   saveCarouselSlides,
@@ -21,6 +21,7 @@ import { normalizeAccentStyle, normalizeHex } from '@/lib/brand';
 import Link from 'next/link';
 import { resolveBrandFont } from '@/lib/brandFonts';
 import CarouselEditorLayout from '@/components/carousel/CarouselEditorLayout';
+import { DEFAULT_BG_PHOTO_TRANSFORM } from '@/lib/carousel/bgPhotoTransform';
 
 const MAX_SLIDES = 20;
 const AA_CONTRAST_MIN = 4.5;
@@ -326,6 +327,7 @@ export default function CarouselBuilder({
 
   const accentStyle = normalizeAccentStyle(brandSettings?.accentStyle);
   const accentColor = brandSettings?.colors.accent1 ?? '#FF6B6B';
+  const canDownload = useMemo(() => slides.some((s) => Boolean(s.generatedImageBase64)), [slides]);
 
   const getAutoTextColors = useCallback(
     (backgroundColor: string) => {
@@ -433,19 +435,30 @@ export default function CarouselBuilder({
           text_align: s.textAlign,
           background_type: s.backgroundType,
           background_color: s.backgroundColor,
+          gradient_mid_color: s.gradientMidColor ?? null,
+          gradient_end_color: s.gradientEndColor ?? null,
           background_image_url: s.backgroundType === 'image' ? s.backgroundImageUrl : null,
           title_color: s.titleColor,
           body_color: s.bodyColor,
           slide_index: i + 1,
           total_slides: total,
-          slide_kind: resolveSlideKind(s, i, total),
-          label: s.label ?? null,
-          items: s.items ?? null,
+          slide_type: resolveSlideType(s, i, total),
+          layout_preset: s.layoutPreset ?? null,
+          label: s.optionalLabel ?? null,
+          items: s.listItems ?? s.items ?? null,
           icon: s.icon ?? null,
+          bullet_style: s.bulletStyle ?? null,
+          testimonial_author: s.testimonialAuthor ?? null,
+          cta_action: s.ctaAction ?? null,
+          cta_title: s.ctaTitle ?? null,
+          cta_keyword: s.ctaKeyword ?? null,
+          title_size: s.titleSize ?? 'L',
+          body_size: s.bodySize ?? 'M',
           design_note: s.design_note ?? null,
           overlay_type: s.backgroundType === 'image' ? s.overlayType : null,
           overlay_color: s.overlayColor,
           overlay_opacity: s.overlayOpacity,
+          bg_photo_transform: s.backgroundType === 'image' ? s.bgPhotoTransform ?? DEFAULT_BG_PHOTO_TRANSFORM : null,
         };
         if (s.backgroundType === 'image' && s.backgroundImageBase64) {
           body.background_image_base64 = s.backgroundImageBase64;
@@ -526,10 +539,20 @@ export default function CarouselBuilder({
         slide.body = (s.body ?? '').trim();
         slide.layout = s.layout === 'text_only' ? 'text_only' : 'title_and_text';
         slide.design_note = s.design_note ?? null;
-        slide.label = s.label != null ? String(s.label).trim() || null : null;
-        slide.items = Array.isArray(s.items) ? s.items.map(String) : null;
+        slide.optionalLabel = s.label != null ? String(s.label).trim() || '' : '';
+        slide.listItems = Array.isArray(s.items) ? s.items.map(String) : null;
         slide.icon = s.icon != null ? String(s.icon).trim() || null : null;
-        slide.slideKind = s.type ?? resolveSlideKind(slide, index, output.slides.length);
+        slide.slideType = index === 0 ? 'cover' : index === output.slides.length - 1 ? 'final' : 'slide';
+        slide.layoutPreset =
+          slide.slideType === 'cover'
+            ? null
+            : slide.slideType === 'final'
+              ? 'goal'
+              : s.type === 'statement'
+                ? 'quote'
+                : s.type === 'bullets'
+                  ? 'list'
+                  : 'text';
         slide.backgroundColor = defaultBg;
         slide.titleColor = auto.titleColor;
         slide.bodyColor = auto.bodyColor;
@@ -610,6 +633,15 @@ export default function CarouselBuilder({
           <span className="text-sm text-zinc-500">
             {slides.length} / {MAX_SLIDES}
           </span>
+          <button
+            type="button"
+            disabled={isGenerating}
+            onClick={() => (canDownload ? void downloadAll() : void runGeneration())}
+            className="ml-auto hidden items-center justify-center gap-2 rounded-xl bg-[color:var(--accent)] px-4 py-2 text-sm font-medium text-white transition hover:brightness-110 disabled:opacity-50 md:inline-flex"
+          >
+            {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : canDownload ? <Download className="h-4 w-4" /> : null}
+            {isGenerating ? 'Генеруємо…' : canDownload ? 'Завантажити всі' : 'Згенерувати карусель'}
+          </button>
         </div>
       </div>
 
@@ -711,7 +743,6 @@ export default function CarouselBuilder({
         isGenerating={isGenerating}
         onGenerate={() => void runGeneration()}
         onDownloadAll={() => void downloadAll()}
-        onSharePlaceholder={() => showToast('Скоро')}
         validationError={validationError}
       />
 
@@ -730,6 +761,7 @@ export default function CarouselBuilder({
               backgroundImageUrl: url,
               backgroundImageBase64: null,
               overlayType: 'full',
+              bgPhotoTransform: DEFAULT_BG_PHOTO_TRANSFORM,
             });
           }
           setUnsplashForId(null);

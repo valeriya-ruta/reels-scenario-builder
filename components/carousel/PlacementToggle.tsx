@@ -9,10 +9,10 @@ export default function PlacementToggle({
   value: SlidePlacement;
   onChange: (p: SlidePlacement) => void;
 }) {
-  const opts: { id: SlidePlacement; label: string }[] = [
-    { id: 'top', label: 'Зверху' },
-    { id: 'center', label: 'По центру' },
-    { id: 'bottom', label: 'Знизу' },
+  const opts: { id: SlidePlacement; label: string; icon: string }[] = [
+    { id: 'top', label: 'Зверху', icon: '/icons/placement/top.svg' },
+    { id: 'center', label: 'По центру', icon: '/icons/placement/center.svg' },
+    { id: 'bottom', label: 'Знизу', icon: '/icons/placement/bottom.svg' },
   ];
   return (
     <div className="flex flex-wrap gap-2">
@@ -22,13 +22,15 @@ export default function PlacementToggle({
           type="button"
           onClick={() => onChange(o.id)}
           className={[
-            'rounded-lg border px-3 py-1.5 text-xs font-medium transition',
+            'inline-flex h-8 w-8 items-center justify-center rounded-lg border transition',
             value === o.id
-              ? 'border-[color:var(--accent)] bg-[color:var(--accent-soft)] text-[color:var(--accent)]'
-              : 'border-[color:var(--border)] bg-white text-zinc-700 hover:bg-[color:var(--surface)]',
+              ? 'border-[color:var(--accent)] bg-[color:var(--accent-soft)]'
+              : 'border-[color:var(--border)] bg-white hover:bg-[color:var(--surface)]',
           ].join(' ')}
+          aria-label={o.label}
+          title={o.label}
         >
-          {o.label}
+          <img src={o.icon} alt="" aria-hidden="true" className="h-5 w-5" />
         </button>
       ))}
     </div>

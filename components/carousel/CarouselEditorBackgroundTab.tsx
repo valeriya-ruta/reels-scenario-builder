@@ -1,9 +1,17 @@
 'use client';
 
-import { useId } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { Check } from 'lucide-react';
 import type { Slide, SlideOverlayType } from '@/lib/carouselTypes';
 import { normalizeHex } from '@/lib/brand';
+import {
+  DEFAULT_BG_PHOTO_TRANSFORM,
+  getBgPhotoTransform,
+  MAX_BG_PHOTO_SCALE,
+  MIN_BG_PHOTO_SCALE,
+  zoomAroundPoint,
+} from '@/lib/carousel/bgPhotoTransform';
+import { CANVAS_HEIGHT, CANVAS_WIDTH } from '@/lib/carousel/carouselConstants';
 
 function stripDataUrlBase64(data: string): string {
   const m = data.match(/^data:[^;]+;base64,(.+)$/);
@@ -20,59 +28,138 @@ const OVERLAY_CHIPS: { id: SlideOverlayType; label: string }[] = [
 export default function CarouselEditorBackgroundTab({
   slide,
   brandColorOptions,
+  brandVibe,
   getAutoTextColors,
   onChange,
   onUnsplash,
 }: {
   slide: Slide;
   brandColorOptions: string[];
+  brandVibe: 'bold' | 'refined';
   getAutoTextColors: (bg: string) => { titleColor: string; bodyColor: string };
   onChange: (id: string, patch: Partial<Slide>) => void;
   onUnsplash: () => void;
 }) {
   const fileInputId = useId();
   const hasPhoto = slide.backgroundType === 'image' && (slide.backgroundImageUrl || slide.backgroundImageBase64);
-  const availableTextColors = brandColorOptions.filter(
+  const [isDesktop, setIsDesktop] = useState(false);
+  const [sourceSize, setSourceSize] = useState<{ width: number; height: number } | null>(null);
+  const transform = getBgPhotoTransform(slide.bgPhotoTransform);
+  const zoomPercent = Math.round(transform.scale * 100);
+  const photoSrc = slide.backgroundImageBase64
+    ? `data:image/png;base64,${slide.backgroundImageBase64}`
+    : slide.backgroundImageUrl || '';
+  const availableTextColorsForSolidBg = brandColorOptions.filter(
     (color) => normalizeHex(color) !== normalizeHex(slide.backgroundColor),
   );
+  const textColorChoices =
+    slide.backgroundType === 'color'
+      ? availableTextColorsForSolidBg
+      : slide.overlayType === 'frost' || slide.overlayType === 'gradient'
+        ? brandColorOptions
+        : brandColorOptions.filter((color) => normalizeHex(color) !== normalizeHex(slide.overlayColor));
 
   const setOverlayPatch = (patch: Partial<Slide>) => {
     onChange(slide.id, patch);
   };
+  const gradientStops = [
+    slide.backgroundColor || brandColorOptions[0] || '#f5f2ed',
+    slide.gradientMidColor ||
+      brandColorOptions[Math.floor((brandColorOptions.length - 1) / 2)] ||
+      '#d6b58a',
+    slide.gradientEndColor || brandColorOptions[brandColorOptions.length - 1] || '#1a1a2e',
+  ];
+  const gradientCss =
+    brandVibe === 'refined'
+      ? `radial-gradient(ellipse at 40% 30%, ${gradientStops[0]} 0%, ${gradientStops[1]} 60%, ${gradientStops[2]} 100%)`
+      : `radial-gradient(circle at 30% 30%, ${gradientStops[0]} 0%, ${gradientStops[1]} 60%, ${gradientStops[2]} 100%)`;
+
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)');
+    const apply = () => setIsDesktop(mq.matches);
+    apply();
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
+  }, []);
+
+  useEffect(() => {
+    if (!photoSrc) {
+      return;
+    }
+    const img = new Image();
+    img.onload = () => setSourceSize({ width: img.naturalWidth || 0, height: img.naturalHeight || 0 });
+    img.onerror = () => setSourceSize(null);
+    img.src = photoSrc;
+  }, [photoSrc]);
+
+  const isLowRes = useMemo(() => {
+    if (!photoSrc) return false;
+    if (!sourceSize) return false;
+    const shortSide = Math.min(sourceSize.width, sourceSize.height);
+    return shortSide > 0 && shortSide < 1080;
+  }, [photoSrc, sourceSize]);
 
   return (
     <div className="space-y-5 pb-4">
-      <div className="flex gap-3 text-sm">
-        <label className="flex cursor-pointer items-center gap-2">
-          <input
-            type="radio"
-            checked={slide.backgroundType === 'color'}
-            onChange={() => {
-              const auto = getAutoTextColors(slide.backgroundColor);
-              onChange(slide.id, {
-                backgroundType: 'color',
-                backgroundImageUrl: null,
-                backgroundImageBase64: null,
-                overlayType: null,
-                ...auto,
-              });
-            }}
-          />
-          Колір
-        </label>
-        <label className="flex cursor-pointer items-center gap-2">
-          <input
-            type="radio"
-            checked={slide.backgroundType === 'image'}
-            onChange={() => {
+      <div className="flex gap-2 text-xs">
+        {[
+          { id: 'color', label: 'Колір' },
+          { id: 'gradient', label: 'Градієнт' },
+          { id: 'image', label: 'Фото' },
+        ].map((opt) => (
+          <button
+            key={opt.id}
+            type="button"
+            onClick={() => {
+              if (opt.id === 'color') {
+                const auto = getAutoTextColors(slide.backgroundColor);
+                onChange(slide.id, {
+                  backgroundType: 'color',
+                  backgroundImageUrl: null,
+                  backgroundImageBase64: null,
+                  bgPhotoTransform: undefined,
+                  overlayType: null,
+                  ...auto,
+                });
+                return;
+              }
+              if (opt.id === 'gradient') {
+                const start = slide.backgroundColor || brandColorOptions[0] || '#f5f2ed';
+                const mid =
+                  slide.gradientMidColor ||
+                  brandColorOptions[Math.floor((brandColorOptions.length - 1) / 2)] ||
+                  '#d6b58a';
+                const end = slide.gradientEndColor || brandColorOptions[brandColorOptions.length - 1] || '#1a1a2e';
+                const auto = getAutoTextColors(end);
+                onChange(slide.id, {
+                  backgroundType: 'gradient',
+                  backgroundColor: start,
+                  gradientMidColor: mid,
+                  gradientEndColor: end,
+                  backgroundImageUrl: null,
+                  backgroundImageBase64: null,
+                  bgPhotoTransform: undefined,
+                  overlayType: null,
+                  ...auto,
+                });
+                return;
+              }
               onChange(slide.id, {
                 backgroundType: 'image',
                 overlayType: slide.overlayType ?? 'full',
+                bgPhotoTransform: slide.bgPhotoTransform ?? DEFAULT_BG_PHOTO_TRANSFORM,
               });
             }}
-          />
-          Фото
-        </label>
+            className={[
+              'rounded-full border px-3 py-1.5 font-medium transition',
+              slide.backgroundType === opt.id
+                ? 'border-[color:var(--accent)] bg-[color:var(--accent-soft)] text-[color:var(--accent)]'
+                : 'border-[color:var(--border)] bg-white text-zinc-700',
+            ].join(' ')}
+          >
+            {opt.label}
+          </button>
+        ))}
       </div>
 
       {slide.backgroundType === 'color' ? (
@@ -106,6 +193,50 @@ export default function CarouselEditorBackgroundTab({
             })}
           </div>
         </div>
+      ) : slide.backgroundType === 'gradient' ? (
+        <div className="space-y-2">
+          <div className="w-full rounded-xl border border-[color:var(--border)]" style={{ aspectRatio: '4 / 1', background: gradientCss }} />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {[
+              { key: 'backgroundColor', label: 'Початок', value: gradientStops[0] },
+              { key: 'gradientMidColor', label: 'Середина', value: gradientStops[1] },
+              { key: 'gradientEndColor', label: 'Кінець', value: gradientStops[2] },
+            ].map((stop) => (
+              <div key={stop.key}>
+                <label className="mb-1 block text-xs font-medium text-zinc-600">{stop.label}</label>
+                <div className="flex flex-wrap gap-2">
+                  {brandColorOptions.map((color) => {
+                    const active = normalizeHex(stop.value) === normalizeHex(color);
+                    return (
+                      <button
+                        key={`${stop.key}-${color}`}
+                        type="button"
+                        aria-label={`${stop.label} ${color}`}
+                        onClick={() => {
+                          const nextPatch: Partial<Slide> =
+                            stop.key === 'backgroundColor'
+                              ? { backgroundColor: color }
+                              : stop.key === 'gradientMidColor'
+                                ? { gradientMidColor: color }
+                                : { gradientEndColor: color };
+                          const auto = getAutoTextColors(
+                            stop.key === 'gradientEndColor' ? color : gradientStops[2],
+                          );
+                          onChange(slide.id, { ...nextPatch, ...auto });
+                        }}
+                        className={[
+                          'h-8 w-8 rounded-full border-2 transition-transform duration-[120ms] ease-out',
+                          active ? 'scale-[1.08] border-zinc-900' : 'border-[color:var(--border)]',
+                        ].join(' ')}
+                        style={{ backgroundColor: color }}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       ) : (
         <div className="space-y-3">
           {!hasPhoto ? (
@@ -129,6 +260,7 @@ export default function CarouselEditorBackgroundTab({
                       backgroundImageBase64: stripDataUrlBase64(data),
                       backgroundImageUrl: null,
                       overlayType: slide.overlayType ?? 'full',
+                      bgPhotoTransform: DEFAULT_BG_PHOTO_TRANSFORM,
                     });
                   };
                   r.readAsDataURL(f);
@@ -156,6 +288,7 @@ export default function CarouselEditorBackgroundTab({
                       backgroundImageUrl: null,
                       backgroundImageBase64: null,
                       overlayType: null,
+                      bgPhotoTransform: undefined,
                     })
                   }
                 >
@@ -178,6 +311,7 @@ export default function CarouselEditorBackgroundTab({
                         onChange(slide.id, {
                           backgroundImageBase64: stripDataUrlBase64(data),
                           backgroundImageUrl: null,
+                          bgPhotoTransform: DEFAULT_BG_PHOTO_TRANSFORM,
                         });
                       };
                       r.readAsDataURL(f);
@@ -197,6 +331,46 @@ export default function CarouselEditorBackgroundTab({
 
           {hasPhoto && (
             <>
+              <div className="space-y-2 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)]/30 p-3">
+                <p className="text-xs text-zinc-600">Тягни фото на слайді, щоб розташувати</p>
+                <button
+                  type="button"
+                  onClick={() => onChange(slide.id, { bgPhotoTransform: DEFAULT_BG_PHOTO_TRANSFORM })}
+                  className="inline-flex min-h-11 items-center rounded-xl border border-[color:var(--border)] px-3 py-2 text-xs font-medium hover:bg-white"
+                >
+                  Центрувати
+                </button>
+                {isDesktop ? (
+                  <div>
+                    <label className="mb-1 flex items-center justify-between text-xs font-medium text-zinc-600">
+                      <span>Зум</span>
+                      <span>{zoomPercent}%</span>
+                    </label>
+                    <input
+                      type="range"
+                      min={Math.round(MIN_BG_PHOTO_SCALE * 100)}
+                      max={Math.round(MAX_BG_PHOTO_SCALE * 100)}
+                      step={1}
+                      value={zoomPercent}
+                      onChange={(e) => {
+                        const nextScale = Number.parseInt(e.target.value, 10) / 100;
+                        const next = zoomAroundPoint(
+                          transform,
+                          nextScale,
+                          0,
+                          0,
+                          CANVAS_WIDTH,
+                          CANVAS_HEIGHT,
+                        );
+                        onChange(slide.id, { bgPhotoTransform: next });
+                      }}
+                      className="w-full accent-[color:var(--accent)]"
+                    />
+                  </div>
+                ) : null}
+                {isLowRes ? <p className="text-xs text-amber-700">Фото може виглядати нечітко</p> : null}
+              </div>
+
               <div>
                 <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-zinc-500">Оверлей</label>
                 <div className="-mx-1 flex gap-2 overflow-x-auto pb-1">
@@ -272,61 +446,43 @@ export default function CarouselEditorBackgroundTab({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <label className="mb-2 block text-xs text-zinc-600">Колір заголовку</label>
-          {slide.backgroundType === 'color' ? (
-            <div className="flex flex-wrap gap-2">
-              {availableTextColors.map((color) => (
-                <button
-                  key={`title-${color}`}
-                  type="button"
-                  aria-label={`Заголовок ${color}`}
-                  onClick={() => onChange(slide.id, { titleColor: color })}
-                  className={[
-                    'h-9 w-9 rounded-full border-2 transition-transform duration-[120ms] ease-out',
-                    normalizeHex(slide.titleColor) === normalizeHex(color)
-                      ? 'scale-[1.08] border-zinc-900'
-                      : 'border-[color:var(--border)]',
-                  ].join(' ')}
-                  style={{ backgroundColor: color }}
-                />
-              ))}
-            </div>
-          ) : (
-            <input
-              type="color"
-              value={slide.titleColor}
-              onChange={(e) => onChange(slide.id, { titleColor: e.target.value })}
-              className="h-10 w-full max-w-[140px] cursor-pointer rounded border border-[color:var(--border)]"
-            />
-          )}
+          <div className="flex flex-wrap gap-2">
+            {textColorChoices.map((color) => (
+              <button
+                key={`title-${color}`}
+                type="button"
+                aria-label={`Заголовок ${color}`}
+                onClick={() => onChange(slide.id, { titleColor: color })}
+                className={[
+                  'h-9 w-9 rounded-full border-2 transition-transform duration-[120ms] ease-out',
+                  normalizeHex(slide.titleColor) === normalizeHex(color)
+                    ? 'scale-[1.08] border-zinc-900'
+                    : 'border-[color:var(--border)]',
+                ].join(' ')}
+                style={{ backgroundColor: color }}
+              />
+            ))}
+          </div>
         </div>
         <div>
           <label className="mb-2 block text-xs text-zinc-600">Колір тексту</label>
-          {slide.backgroundType === 'color' ? (
-            <div className="flex flex-wrap gap-2">
-              {availableTextColors.map((color) => (
-                <button
-                  key={`body-${color}`}
-                  type="button"
-                  aria-label={`Текст ${color}`}
-                  onClick={() => onChange(slide.id, { bodyColor: color })}
-                  className={[
-                    'h-9 w-9 rounded-full border-2 transition-transform duration-[120ms] ease-out',
-                    normalizeHex(slide.bodyColor) === normalizeHex(color)
-                      ? 'scale-[1.08] border-zinc-900'
-                      : 'border-[color:var(--border)]',
-                  ].join(' ')}
-                  style={{ backgroundColor: color }}
-                />
-              ))}
-            </div>
-          ) : (
-            <input
-              type="color"
-              value={slide.bodyColor}
-              onChange={(e) => onChange(slide.id, { bodyColor: e.target.value })}
-              className="h-10 w-full max-w-[140px] cursor-pointer rounded border border-[color:var(--border)]"
-            />
-          )}
+          <div className="flex flex-wrap gap-2">
+            {textColorChoices.map((color) => (
+              <button
+                key={`body-${color}`}
+                type="button"
+                aria-label={`Текст ${color}`}
+                onClick={() => onChange(slide.id, { bodyColor: color })}
+                className={[
+                  'h-9 w-9 rounded-full border-2 transition-transform duration-[120ms] ease-out',
+                  normalizeHex(slide.bodyColor) === normalizeHex(color)
+                    ? 'scale-[1.08] border-zinc-900'
+                    : 'border-[color:var(--border)]',
+                ].join(' ')}
+                style={{ backgroundColor: color }}
+              />
+            ))}
+          </div>
         </div>
       </div>
 

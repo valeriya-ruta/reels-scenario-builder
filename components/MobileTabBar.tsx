@@ -62,6 +62,9 @@ const tabs = [
 export default function MobileTabBar() {
   const pathname = usePathname();
   const { badges } = useNavBadges();
+  const isCarouselEditor = pathname.startsWith('/carousel/') && pathname !== '/carousel';
+
+  if (isCarouselEditor) return null;
 
   return (
     <nav

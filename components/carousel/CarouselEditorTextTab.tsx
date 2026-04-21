@@ -2,19 +2,9 @@
 
 import { useState } from 'react';
 import { GripVertical, Plus, X } from 'lucide-react';
-import type { Slide, SlideKind } from '@/lib/carouselTypes';
+import type { Slide } from '@/lib/carouselTypes';
 import type { BrandAccentStyle } from '@/lib/brand';
 import AccentRichTextField from '@/components/carousel/AccentRichTextField';
-import TextAlignToggle from '@/components/carousel/TextAlignToggle';
-import PlacementToggle from '@/components/carousel/PlacementToggle';
-
-const KIND_CHIPS: { id: SlideKind; label: string }[] = [
-  { id: 'cover', label: 'Обкладинка' },
-  { id: 'content', label: 'Контент' },
-  { id: 'statement', label: 'Висловлювання' },
-  { id: 'bullets', label: 'Буліти' },
-  { id: 'cta', label: 'CTA' },
-];
 
 export default function CarouselEditorTextTab({
   slide,
@@ -24,6 +14,8 @@ export default function CarouselEditorTextTab({
   accentColor,
   onChange,
   onRemoveSlide,
+  showStructureControls = true,
+  showPositionControls = true,
 }: {
   slide: Slide;
   index: number;
@@ -32,60 +24,55 @@ export default function CarouselEditorTextTab({
   accentColor: string;
   onChange: (id: string, patch: Partial<Slide>) => void;
   onRemoveSlide: (id: string) => void;
+  showStructureControls?: boolean;
+  showPositionControls?: boolean;
 }) {
-  const kind = slide.slideKind ?? 'content';
-  /** Cover uses body as the line under the title in preview/export (not only design_note). */
-  const showBody = kind !== 'statement';
-  const showLabel = kind === 'content';
-  const showBullets = kind === 'bullets';
+  const slideType = slide.slideType ?? 'slide';
+  const layoutPreset = slide.layoutPreset ?? (slideType === 'final' ? 'goal' : 'text');
+  const showBody = slideType === 'slide' && layoutPreset === 'text';
+  const showLabel = slideType === 'slide' && layoutPreset === 'text';
+  const showBullets = slideType === 'slide' && layoutPreset === 'list';
+  const showTitleSize = true;
+  const showBodySize = slideType === 'slide' && (layoutPreset === 'text' || layoutPreset === 'list');
 
   const [dragFrom, setDragFrom] = useState<number | null>(null);
-  const items = slide.items?.length ? slide.items : [''];
+  const items = slide.listItems?.length ? slide.listItems : [''];
 
   const reorderItems = (from: number, to: number) => {
     if (from === to || from < 0 || to < 0 || from >= items.length || to >= items.length) return;
     const next = [...items];
     const [row] = next.splice(from, 1);
     next.splice(to, 0, row);
-    onChange(slide.id, { items: next.filter((x) => x.trim().length > 0 || next.length === 1) });
+    onChange(slide.id, { listItems: next.filter((x) => x.trim().length > 0 || next.length === 1) });
   };
 
   return (
     <div className="space-y-5 pb-4">
-      <div>
-        <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-zinc-500">Тип слайду</label>
-        <div className="-mx-1 flex gap-2 overflow-x-auto pb-1">
-          {KIND_CHIPS.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => {
-                const patch: Partial<Slide> = { slideKind: c.id };
-                if (c.id === 'statement') patch.layout = 'text_only';
-                else patch.layout = 'title_and_text';
-                onChange(slide.id, patch);
-              }}
-              className={[
-                'shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition',
-                kind === c.id
-                  ? 'border-[color:var(--accent)] bg-[color:var(--accent-soft)] text-[color:var(--accent)]'
-                  : 'border-[color:var(--border)] bg-white text-zinc-700 hover:bg-[color:var(--surface)]',
-              ].join(' ')}
-            >
-              {c.label}
-            </button>
-          ))}
+      {showStructureControls ? null : null}
+      {showLabel ? (
+        <div>
+          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500">Мітка (опціонально)</label>
+          <input
+            type="text"
+            value={slide.optionalLabel ?? ''}
+            maxLength={30}
+            onChange={(e) => onChange(slide.id, { optionalLabel: e.target.value })}
+            placeholder="Наприклад: Порада, Факт, Крок 1..."
+            className="w-full rounded-xl border border-[color:var(--border)] px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)]"
+          />
         </div>
-      </div>
+      ) : null}
 
       <div>
         <div className="mb-1 flex items-center justify-between gap-2">
-          <label className="text-xs font-medium uppercase tracking-wide text-zinc-500">Заголовок</label>
+          <label className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+            {slideType === 'final' && layoutPreset === 'reaction' ? 'CTA title' : 'Заголовок'}
+          </label>
         </div>
         <AccentRichTextField
           slideId={slide.id}
-          field="title"
-          value={slide.title}
+          field={slideType === 'final' && layoutPreset === 'reaction' ? 'ctaTitle' : 'title'}
+          value={slideType === 'final' && layoutPreset === 'reaction' ? slide.ctaTitle ?? '' : slide.title}
           onPatch={onChange}
           multiline
           rows={1}
@@ -121,21 +108,61 @@ export default function CarouselEditorTextTab({
           />
         </div>
       )}
-
-      {showLabel && (
-        <div>
-          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500">
-            Мітка кроку
-          </label>
-          <input
-            type="text"
-            value={slide.label ?? ''}
-            onChange={(e) => onChange(slide.id, { label: e.target.value || null })}
-            placeholder="Крок 01"
-            className="w-full rounded-xl border border-[color:var(--border)] px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2"
-          />
-        </div>
-      )}
+      {slideType === 'slide' && layoutPreset === 'testimonial' ? (
+        <>
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500">Ім'я автора</label>
+            <input
+              type="text"
+              value={slide.testimonialAuthor?.name ?? ''}
+              onChange={(e) =>
+                onChange(slide.id, {
+                  testimonialAuthor: {
+                    name: e.target.value,
+                    handle: slide.testimonialAuthor?.handle ?? '',
+                    avatar_url: slide.testimonialAuthor?.avatar_url ?? null,
+                  },
+                })
+              }
+              className="w-full rounded-xl border border-[color:var(--border)] px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)]"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500">@Handle</label>
+            <input
+              type="text"
+              value={slide.testimonialAuthor?.handle ?? ''}
+              onChange={(e) =>
+                onChange(slide.id, {
+                  testimonialAuthor: {
+                    name: slide.testimonialAuthor?.name ?? '',
+                    handle: e.target.value,
+                    avatar_url: slide.testimonialAuthor?.avatar_url ?? null,
+                  },
+                })
+              }
+              className="w-full rounded-xl border border-[color:var(--border)] px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)]"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500">Avatar URL (опц.)</label>
+            <input
+              type="url"
+              value={slide.testimonialAuthor?.avatar_url ?? ''}
+              onChange={(e) =>
+                onChange(slide.id, {
+                  testimonialAuthor: {
+                    name: slide.testimonialAuthor?.name ?? '',
+                    handle: slide.testimonialAuthor?.handle ?? '',
+                    avatar_url: e.target.value.trim() || null,
+                  },
+                })
+              }
+              className="w-full rounded-xl border border-[color:var(--border)] px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)]"
+            />
+          </div>
+        </>
+      ) : null}
 
       {showBullets && (
         <div>
@@ -163,7 +190,7 @@ export default function CarouselEditorTextTab({
                   onChange={(e) => {
                     const next = [...items];
                     next[i] = e.target.value;
-                    onChange(slide.id, { items: next });
+                    onChange(slide.id, { listItems: next });
                   }}
                   className="min-w-0 flex-1 rounded-lg border border-[color:var(--border)] px-2 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)]"
                 />
@@ -173,7 +200,7 @@ export default function CarouselEditorTextTab({
                   aria-label="Видалити пункт"
                   onClick={() => {
                     const next = items.filter((_, j) => j !== i);
-                    onChange(slide.id, { items: next.length ? next : [''] });
+                    onChange(slide.id, { listItems: next.length ? next : [''] });
                   }}
                 >
                   <X className="h-4 w-4" />
@@ -183,26 +210,108 @@ export default function CarouselEditorTextTab({
           </ul>
           <button
             type="button"
-            onClick={() => onChange(slide.id, { items: [...items, ''] })}
+            onClick={() => onChange(slide.id, { listItems: [...items, ''] })}
             className="mt-2 inline-flex items-center gap-1 rounded-lg border border-dashed border-[color:var(--border)] px-3 py-2 text-xs font-medium text-zinc-700 hover:bg-[color:var(--surface)]"
           >
             <Plus className="h-4 w-4" />
             Додати пункт
           </button>
+          <div className="mt-3">
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500">Стиль маркерів</label>
+            <select
+              value={slide.bulletStyle ?? 'numbered-padded'}
+              onChange={(e) => onChange(slide.id, { bulletStyle: e.target.value as Slide['bulletStyle'] })}
+              className="w-full rounded-xl border border-[color:var(--border)] px-3 py-2 text-sm"
+            >
+              <option value="numbered-padded">01. 02. 03.</option>
+              <option value="numbered-simple">1 · 2 · 3</option>
+              <option value="dots">● ● ●</option>
+              <option value="dashes">— — —</option>
+              <option value="checks">✓ ✓ ✓</option>
+              <option value="cross-check">✗ / ✓ ✓</option>
+            </select>
+          </div>
         </div>
       )}
+      {slideType === 'final' && layoutPreset === 'goal' ? (
+        <div>
+          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500">Дія CTA</label>
+          <select
+            value={slide.ctaAction ?? 'follow'}
+            onChange={(e) => onChange(slide.id, { ctaAction: e.target.value as Slide['ctaAction'] })}
+            className="w-full rounded-xl border border-[color:var(--border)] px-3 py-2 text-sm"
+          >
+            <option value="follow">Підпишись</option>
+            <option value="save">Збережи</option>
+            <option value="share">Поділись</option>
+            <option value="comment">Коментуй</option>
+            <option value="link">Перейди</option>
+          </select>
+        </div>
+      ) : null}
+      {slideType === 'final' && layoutPreset === 'reaction' ? (
+        <div>
+          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500">CTA keyword</label>
+          <input
+            type="text"
+            value={slide.ctaKeyword ?? ''}
+            onChange={(e) => onChange(slide.id, { ctaKeyword: e.target.value })}
+            className="w-full rounded-xl border border-[color:var(--border)] px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)]"
+          />
+        </div>
+      ) : null}
+      {showTitleSize ? (
+        <div>
+          <p className="mb-1 text-xs text-zinc-600">Title size</p>
+          <div className="grid grid-cols-2 gap-1.5">
+            {[
+              { id: 'L', label: 'L Великий' },
+              { id: 'M', label: 'M Середній' },
+            ].map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => onChange(slide.id, { titleSize: opt.id as 'L' | 'M' })}
+                className={[
+                  'rounded-lg px-2 py-2 text-[11px]',
+                  (slide.titleSize ?? 'L') === opt.id
+                    ? 'border-[1.5px] border-[#4a6cf7] bg-[#eef1ff] font-medium text-[#1a1a1a]'
+                    : 'border border-[#d8d6cf] bg-white text-[#555]',
+                ].join(' ')}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {showBodySize ? (
+        <div>
+          <p className="mb-1 text-xs text-zinc-600">Body size</p>
+          <div className="grid grid-cols-2 gap-1.5">
+            {[
+              { id: 'M', label: 'M Середній' },
+              { id: 'S', label: 'S Малий' },
+            ].map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => onChange(slide.id, { bodySize: opt.id as 'M' | 'S' })}
+                className={[
+                  'rounded-lg px-2 py-2 text-[11px]',
+                  (slide.bodySize ?? 'M') === opt.id
+                    ? 'border-[1.5px] border-[#4a6cf7] bg-[#eef1ff] font-medium text-[#1a1a1a]'
+                    : 'border border-[#d8d6cf] bg-white text-[#555]',
+                ].join(' ')}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
-      <div>
-        <p className="mb-1 text-xs text-zinc-600">Розташування тексту</p>
-        <PlacementToggle value={slide.placement} onChange={(p) => onChange(slide.id, { placement: p })} />
-      </div>
-
-      <div>
-        <p className="mb-1 text-xs text-zinc-600">Вирівнювання</p>
-        <TextAlignToggle value={slide.textAlign} onChange={(a) => onChange(slide.id, { textAlign: a })} />
-      </div>
-
-      {totalSlides > 1 && (
+      {showPositionControls && totalSlides > 1 && (
         <button
           type="button"
           onClick={() => onRemoveSlide(slide.id)}

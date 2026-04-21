@@ -4,7 +4,6 @@ import { redirect } from 'next/navigation';
 import { requireAuth } from '@/lib/auth';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import type { CarouselRantOutput, Slide } from '@/lib/carouselTypes';
-import { resolveSlideKind } from '@/lib/carouselTypes';
 import { createEmptySlide } from '@/lib/carouselSlides';
 import { slidesForDatabase } from '@/lib/carouselSlides';
 
@@ -51,19 +50,28 @@ function deriveCarouselNameFromRant(output: CarouselRantOutput, rant: string): s
 }
 
 function mapRantOutputToDbSlides(output: CarouselRantOutput): Slide[] {
-  const total = output.slides.length;
   return output.slides.map((raw, index) => {
     const slide = createEmptySlide();
     slide.title = compactWhitespace(raw.title ?? '');
     slide.body = compactWhitespace(raw.body ?? '');
     slide.layout = raw.layout === 'text_only' ? 'text_only' : 'title_and_text';
     slide.design_note = raw.design_note ?? null;
-    slide.label = raw.label != null ? compactWhitespace(String(raw.label)) || null : null;
-    slide.items = Array.isArray(raw.items)
+    slide.optionalLabel = raw.label != null ? compactWhitespace(String(raw.label)) || '' : '';
+    slide.listItems = Array.isArray(raw.items)
       ? raw.items.map((item) => compactWhitespace(String(item))).filter(Boolean)
       : null;
     slide.icon = raw.icon != null ? compactWhitespace(String(raw.icon)) || null : null;
-    slide.slideKind = raw.type ?? resolveSlideKind(slide, index, total);
+    slide.slideType = index === 0 ? 'cover' : index === output.slides.length - 1 ? 'final' : 'slide';
+    slide.layoutPreset =
+      slide.slideType === 'cover'
+        ? null
+        : slide.slideType === 'final'
+          ? 'goal'
+          : raw.type === 'statement'
+            ? 'quote'
+            : raw.type === 'bullets'
+              ? 'list'
+              : 'text';
     return slide;
   });
 }

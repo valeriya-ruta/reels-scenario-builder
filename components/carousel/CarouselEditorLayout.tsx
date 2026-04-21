@@ -38,9 +38,8 @@ import {
   GripVertical,
   Loader2,
   Plus,
-  Share2,
 } from 'lucide-react';
-import { CANVAS_SIZE } from '@/lib/carousel/carouselConstants';
+import { CANVAS_WIDTH, CANVAS_HEIGHT } from '@/lib/carousel/carouselConstants';
 import type { Slide } from '@/lib/carouselTypes';
 import type { BrandSettings } from '@/lib/brand';
 import { normalizeHex } from '@/lib/brand';
@@ -49,9 +48,17 @@ import CarouselSlidePreview from '@/components/carousel/CarouselSlidePreview';
 import CarouselEditorTextTab from '@/components/carousel/CarouselEditorTextTab';
 import CarouselEditorBackgroundTab from '@/components/carousel/CarouselEditorBackgroundTab';
 import CarouselEditorStyleTab from '@/components/carousel/CarouselEditorStyleTab';
+import TextAlignToggle from '@/components/carousel/TextAlignToggle';
+import PlacementToggle from '@/components/carousel/PlacementToggle';
+import {
+  DEFAULT_BG_PHOTO_TRANSFORM,
+  getBgPhotoTransform,
+  normalizeBgPhotoTransform,
+  zoomAroundPoint,
+  type BgPhotoTransform,
+} from '@/lib/carousel/bgPhotoTransform';
 
-type EditorTab = 'text' | 'bg' | 'style';
-type SheetSnap = 'dismissed' | 'peek' | 'half';
+type EditorTab = 'type' | 'text' | 'position' | 'bg' | 'style';
 
 function SortableThumb({
   slide,
@@ -60,6 +67,9 @@ function SortableThumb({
   accentColor,
   onSelect,
   size,
+  brandSettings,
+  brandFont,
+  totalSlides,
 }: {
   slide: Slide;
   index: number;
@@ -67,6 +77,9 @@ function SortableThumb({
   accentColor: string;
   onSelect: () => void;
   size: 'sm' | 'md';
+  brandSettings: BrandSettings;
+  brandFont: BrandFont;
+  totalSlides: number;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: slide.id,
@@ -76,39 +89,36 @@ function SortableThumb({
     transition,
     opacity: isDragging ? 0.85 : 1,
   };
-  const dim = size === 'sm' ? 44 : 60;
-  const thumbBg =
-    slide.backgroundType === 'image' && (slide.backgroundImageUrl || slide.backgroundImageBase64)
-      ? {
-          backgroundImage: slide.backgroundImageBase64
-            ? `url(data:image/png;base64,${slide.backgroundImageBase64})`
-            : `url(${slide.backgroundImageUrl})`,
-          backgroundSize: 'cover' as const,
-          backgroundPosition: 'center' as const,
-        }
-      : { backgroundColor: slide.backgroundColor };
+  const thumbHeight = size === 'sm' ? 58 : 78;
+  const thumbWidth = Math.round((thumbHeight * CANVAS_WIDTH) / CANVAS_HEIGHT);
+  const thumbScale = Math.min(thumbWidth / CANVAS_WIDTH, thumbHeight / CANVAS_HEIGHT);
 
   return (
     <button
       ref={setNodeRef}
-      style={style}
+      style={{ ...style, width: thumbWidth, height: thumbHeight }}
       type="button"
       onClick={onSelect}
       className={[
         'relative shrink-0 overflow-hidden rounded-md transition-[border-color] duration-150 ease-out',
-        size === 'sm' ? 'h-11 w-11' : 'h-[60px] w-[60px]',
         active ? 'ring-2' : 'ring-1 ring-black/10',
       ].join(' ')}
       aria-label={`Слайд ${index + 1}`}
       aria-current={active ? 'true' : undefined}
     >
+      <span className="absolute inset-0 overflow-hidden rounded-md">
+        <CarouselSlidePreview
+          slide={slide}
+          brand={brandSettings}
+          brandFont={brandFont}
+          scale={thumbScale}
+          slideIndex={index + 1}
+          totalSlides={totalSlides}
+        />
+      </span>
       <span
-        className="absolute inset-0"
-        style={{
-          ...thumbBg,
-          borderRadius: 6,
-          border: active ? `2px solid ${accentColor}` : '1px solid rgba(0,0,0,0.08)',
-        }}
+        className="pointer-events-none absolute inset-0"
+        style={{ borderRadius: 6, border: active ? `2px solid ${accentColor}` : '1px solid rgba(0,0,0,0.08)' }}
       />
       <span
         {...attributes}
@@ -146,7 +156,6 @@ export default function CarouselEditorLayout({
   isGenerating,
   onGenerate,
   onDownloadAll,
-  onSharePlaceholder,
   validationError,
 }: {
   slides: Slide[];
@@ -171,22 +180,60 @@ export default function CarouselEditorLayout({
   isGenerating: boolean;
   onGenerate: () => void;
   onDownloadAll: () => void;
-  onSharePlaceholder: () => void;
   validationError: string | null;
 }) {
-  const [tab, setTab] = useState<EditorTab>('text');
-  const [sheetSnap, setSheetSnap] = useState<SheetSnap>('peek');
+  const [tab, setTab] = useState<EditorTab | null>(null);
   /** One bottom editor UI (tabs + panels + download): avoid duplicating form fields in the DOM. */
   const [isDesktopLayout, setIsDesktopLayout] = useState(false);
   const previewAreaRef = useRef<HTMLDivElement>(null);
   const [previewScale, setPreviewScale] = useState(0.28);
-  const touchStartX = useRef<number | null>(null);
+
+  const [viewportHeight, setViewportHeight] = useState(() =>
+    typeof window === 'undefined' ? 800 : window.innerHeight,
+  );
+
+  /** Horizontal swipe state for the mobile preview.
+   *  `swipeX` is the live pixel offset of the preview strip during a touch-drag.
+   *  `swipeSettling` is true while the CSS transition animates to the final position;
+   *  during settling we lock out new touches and commit the new active slide on end. */
+  const [swipeX, setSwipeX] = useState(0);
+  const [swipeSettling, setSwipeSettling] = useState(false);
+  const swipeRef = useRef<{
+    active: boolean;
+    startX: number;
+    startY: number;
+    width: number;
+    dx: number;
+    axisLocked: 'x' | 'y' | null;
+  }>({ active: false, startX: 0, startY: 0, width: 0, dx: 0, axisLocked: null });
 
   const activeIndex = Math.max(
     0,
     slides.findIndex((s) => s.id === activeSlideId),
   );
   const activeSlide = slides[activeIndex] ?? slides[0];
+  const hasActivePhoto =
+    Boolean(activeSlide) &&
+    activeSlide.backgroundType === 'image' &&
+    Boolean(activeSlide.backgroundImageUrl || activeSlide.backgroundImageBase64);
+  const [mobilePositioningMode, setMobilePositioningMode] = useState(false);
+  const [isPhotoInteracting, setIsPhotoInteracting] = useState(false);
+  const [livePhotoTransform, setLivePhotoTransform] = useState<BgPhotoTransform | null>(null);
+  const dragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    initial: BgPhotoTransform;
+  } | null>(null);
+  const pinchRef = useRef<{
+    initialDistance: number;
+    initialScale: number;
+    initial: BgPhotoTransform;
+    pointerA: number;
+    pointerB: number;
+  } | null>(null);
+  const activePointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const canDownload = useMemo(() => slides.some((s) => Boolean(s.generatedImageBase64)), [slides]);
 
   useLayoutEffect(() => {
     const mq = window.matchMedia('(min-width: 768px)');
@@ -196,25 +243,42 @@ export default function CarouselEditorLayout({
     return () => mq.removeEventListener('change', apply);
   }, []);
 
+  useEffect(() => {
+    if (isDesktopLayout && tab === null) setTab('text');
+  }, [isDesktopLayout, tab]);
+
+  useEffect(() => {
+    const onResize = () => setViewportHeight(window.innerHeight);
+    onResize();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
   useLayoutEffect(() => {
     const el = previewAreaRef.current;
     if (!el) return;
     const ro = new ResizeObserver(() => {
       const w = el.clientWidth;
       const h = el.clientHeight;
-      const s = Math.min(w, h) / CANVAS_SIZE;
+      const s = Math.min(w / CANVAS_WIDTH, h / CANVAS_HEIGHT);
       setPreviewScale(Math.max(0.12, s * 0.96));
     });
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
 
-  const desktopScale = useMemo(() => 480 / CANVAS_SIZE, []);
+  const desktopScale = useMemo(() => Math.min(480 / CANVAS_WIDTH, 600 / CANVAS_HEIGHT), []);
 
   const goSlide = useCallback(
     (delta: number) => {
       const next = activeIndex + delta;
       if (next < 0 || next >= slides.length) return;
+      setMobilePositioningMode(false);
+      setIsPhotoInteracting(false);
+      setLivePhotoTransform(null);
+      dragRef.current = null;
+      pinchRef.current = null;
+      activePointersRef.current.clear();
       setActiveSlideId(slides[next].id);
     },
     [activeIndex, slides, setActiveSlideId],
@@ -236,37 +300,128 @@ export default function CarouselEditorLayout({
     return () => window.removeEventListener('keydown', onKey);
   }, [goSlide]);
 
-  const onTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.changedTouches[0]?.clientX ?? null;
+  const prevSlide = activeIndex > 0 ? slides[activeIndex - 1] : null;
+  const nextSlide = activeIndex < slides.length - 1 ? slides[activeIndex + 1] : null;
+  const effectivePhotoTransform =
+    isPhotoInteracting && livePhotoTransform
+      ? livePhotoTransform
+      : activeSlide
+        ? getBgPhotoTransform(activeSlide.bgPhotoTransform)
+        : DEFAULT_BG_PHOTO_TRANSFORM;
+
+  const commitPhotoTransform = useCallback(
+    (next: BgPhotoTransform) => {
+      if (!activeSlide || !hasActivePhoto) return;
+      updateSlide(activeSlide.id, { bgPhotoTransform: normalizeBgPhotoTransform(next) });
+    },
+    [activeSlide, hasActivePhoto, updateSlide],
+  );
+
+  const nudgePhoto = useCallback(
+    (dxFrac: number, dyFrac: number) => {
+      if (!activeSlide || !hasActivePhoto) return;
+      const base = livePhotoTransform ?? getBgPhotoTransform(activeSlide.bgPhotoTransform);
+      const next = normalizeBgPhotoTransform({
+        ...base,
+        offset_x: base.offset_x + dxFrac,
+        offset_y: base.offset_y + dyFrac,
+      });
+      setLivePhotoTransform(next);
+      commitPhotoTransform(next);
+    },
+    [activeSlide, hasActivePhoto, livePhotoTransform, commitPhotoTransform],
+  );
+
+  const onPreviewTouchStart = (e: React.TouchEvent) => {
+    if (mobilePositioningMode) return;
+    if (swipeSettling) return;
+    const t = e.changedTouches[0];
+    if (!t) return;
+    const node = previewAreaRef.current;
+    swipeRef.current = {
+      active: true,
+      startX: t.clientX,
+      startY: t.clientY,
+      width: node?.clientWidth ?? 320,
+      dx: 0,
+      axisLocked: null,
+    };
   };
-  const onTouchEnd = (e: React.TouchEvent) => {
-    const start = touchStartX.current;
-    touchStartX.current = null;
-    if (start === null) return;
-    const end = e.changedTouches[0]?.clientX ?? start;
-    const dx = end - start;
-    if (dx > 40) goSlide(-1);
-    else if (dx < -40) goSlide(1);
+
+  const onPreviewTouchMove = (e: React.TouchEvent) => {
+    if (mobilePositioningMode) return;
+    const s = swipeRef.current;
+    if (!s.active) return;
+    const t = e.changedTouches[0];
+    if (!t) return;
+    const dx = t.clientX - s.startX;
+    const dy = t.clientY - s.startY;
+
+    // Lock the gesture to an axis once movement is meaningful, so vertical
+    // scrolls inside the preview area don't fight the swipe.
+    if (!s.axisLocked) {
+      if (Math.abs(dx) > 6 || Math.abs(dy) > 6) {
+        s.axisLocked = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+      }
+    }
+    if (s.axisLocked !== 'x') return;
+
+    let effective = dx;
+    // Rubber-band resistance when swiping past the first/last slide.
+    if ((dx > 0 && activeIndex === 0) || (dx < 0 && activeIndex === slides.length - 1)) {
+      effective = dx * 0.28;
+    }
+    // Keep within ±width so neighbours don't travel further than their slot.
+    const w = s.width;
+    effective = Math.max(-w, Math.min(w, effective));
+    s.dx = effective;
+    setSwipeX(effective);
+  };
+
+  const onPreviewTouchEnd = () => {
+    if (mobilePositioningMode) return;
+    const s = swipeRef.current;
+    if (!s.active) return;
+    s.active = false;
+    if (s.axisLocked !== 'x') {
+      setSwipeX(0);
+      return;
+    }
+    const { dx, width } = s;
+    const threshold = Math.min(70, width * 0.22);
+
+    if (dx > threshold && prevSlide) {
+      setSwipeSettling(true);
+      setSwipeX(width);
+    } else if (dx < -threshold && nextSlide) {
+      setSwipeSettling(true);
+      setSwipeX(-width);
+    } else {
+      setSwipeSettling(true);
+      setSwipeX(0);
+    }
+  };
+
+  const onPreviewSwipeTransitionEnd = () => {
+    if (!swipeSettling) return;
+    const w = swipeRef.current.width;
+    // When the strip has come to rest at ±w we commit the neighbour as active.
+    if (swipeX >= w - 0.5 && prevSlide) {
+      setActiveSlideId(prevSlide.id);
+    } else if (swipeX <= -w + 0.5 && nextSlide) {
+      setActiveSlideId(nextSlide.id);
+    }
+    setSwipeSettling(false);
+    setSwipeX(0);
   };
 
   const peekLeft = slides[activeIndex - 1]?.backgroundColor ?? slides[activeIndex]?.backgroundColor ?? '#ccc';
   const peekRight = slides[activeIndex + 1]?.backgroundColor ?? slides[activeIndex]?.backgroundColor ?? '#ccc';
 
-  const sheetY = useMemo(() => {
-    if (sheetSnap === 'dismissed') return 'translateY(100%)';
-    if (sheetSnap === 'peek') return 'translateY(calc(100% - 56px))';
-    return 'translateY(calc(100% - min(52vh, 70%)))';
-  }, [sheetSnap]);
+  const panelOpen = tab !== null;
 
-  const mobilePreviewHeight = useMemo(() => {
-    if (sheetSnap === 'half') return '40vh';
-    if (sheetSnap === 'dismissed') return '58vh';
-    return '52vh';
-  }, [sheetSnap]);
-
-  const mobilePreviewMaxHeight = sheetSnap === 'half' ? 420 : 560;
-  const mobileScaleFactor = sheetSnap === 'half' ? 0.72 : sheetSnap === 'peek' ? 0.86 : 1;
-  const mobilePreviewScale = previewScale * mobileScaleFactor;
+  const mobilePreviewHeightPx = Math.max(260, viewportHeight * (panelOpen ? 0.42 : 0.62));
+  const mobilePreviewScale = previewScale;
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -280,9 +435,9 @@ export default function CarouselEditorLayout({
   );
 
   const tabLabel = (t: EditorTab) =>
-    t === 'text' ? 'Текст' : t === 'bg' ? 'Фон' : 'Стиль';
+    t === 'type' ? 'Тип' : t === 'text' ? 'Текст' : t === 'position' ? 'Позиція' : t === 'bg' ? 'Фон' : 'Стиль';
 
-  const tabButtons = (
+  const desktopTabButtons = (
     <div className="flex shrink-0 border-b border-[color:var(--border)]">
       {(['text', 'bg', 'style'] as const).map((t) => (
         <button
@@ -290,7 +445,6 @@ export default function CarouselEditorLayout({
           type="button"
           onClick={() => {
             setTab(t);
-            setSheetSnap('half');
           }}
           className={[
             'flex-1 px-2 py-3 text-center text-xs font-medium transition md:py-2.5',
@@ -305,8 +459,8 @@ export default function CarouselEditorLayout({
     </div>
   );
 
-  const tabPanelScroll = (
-    <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+  const desktopTabPanelScroll = (
+    <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 pb-10 md:pb-3">
       {tab === 'text' && activeSlide ? (
         <CarouselEditorTextTab
           slide={activeSlide}
@@ -322,6 +476,7 @@ export default function CarouselEditorLayout({
         <CarouselEditorBackgroundTab
           slide={activeSlide}
           brandColorOptions={brandColorOptions}
+          brandVibe={brandSettings.vibe}
           getAutoTextColors={getAutoTextColors}
           onChange={updateSlide}
           onUnsplash={onUnsplash}
@@ -339,47 +494,218 @@ export default function CarouselEditorLayout({
     </div>
   );
 
-  const downloadFooter = (
-    <div className="shrink-0 border-t border-[color:var(--border)] bg-white px-4 py-3">
-      <DownloadButton
-        hasGenerated={hasGenerated}
-        isGenerating={isGenerating}
-        onGenerate={onGenerate}
-        onDownloadAll={onDownloadAll}
+  const mobilePanelContent = activeSlide ? (
+    tab === 'type' ? (
+      <MobileTypeTab slide={activeSlide} onChange={updateSlide} />
+    ) : tab === 'text' ? (
+      <CarouselEditorTextTab
+        slide={activeSlide}
+        index={activeIndex}
+        totalSlides={slides.length}
+        accentStyle={accentStyle}
+        accentColor={accentColor}
+        onChange={updateSlide}
+        onRemoveSlide={removeSlide}
+        showStructureControls={false}
+        showPositionControls={false}
       />
-    </div>
-  );
+    ) : tab === 'position' ? (
+      activeSlide.slideType === 'cover' ? (
+        <p className="text-sm text-zinc-500">Обкладинка завжди по центру.</p>
+      ) : (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="min-w-0">
+            <p className="mb-1 text-xs text-zinc-600">Розташування тексту</p>
+            <PlacementToggle value={activeSlide.placement} onChange={(p) => updateSlide(activeSlide.id, { placement: p })} />
+          </div>
+          <div className="min-w-0">
+            <p className="mb-1 text-xs text-zinc-600">Вирівнювання</p>
+            <TextAlignToggle value={activeSlide.textAlign} onChange={(a) => updateSlide(activeSlide.id, { textAlign: a })} />
+          </div>
+        </div>
+      )
+    ) : tab === 'bg' ? (
+      <CarouselEditorBackgroundTab
+        slide={activeSlide}
+        brandColorOptions={brandColorOptions}
+        brandVibe={brandSettings.vibe}
+        getAutoTextColors={getAutoTextColors}
+        onChange={updateSlide}
+        onUnsplash={onUnsplash}
+      />
+    ) : tab === 'style' ? (
+      activeSlide.backgroundType === 'image' ? (
+        <MobileOverlayStyleTab slide={activeSlide} onChange={updateSlide} />
+      ) : (
+        <p className="text-sm text-zinc-500">Доступно тільки для фото.</p>
+      )
+    ) : null
+  ) : null;
+
+  const startPhotoDrag = (clientX: number, clientY: number, pointerId: number) => {
+    if (!activeSlide || !hasActivePhoto) return;
+    setIsPhotoInteracting(true);
+    const current = livePhotoTransform ?? getBgPhotoTransform(activeSlide.bgPhotoTransform);
+    setLivePhotoTransform(current);
+    dragRef.current = {
+      pointerId,
+      startX: clientX,
+      startY: clientY,
+      initial: current,
+    };
+  };
+
+  const onPhotoPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!activeSlide || !hasActivePhoto) return;
+    if (!isDesktopLayout && !mobilePositioningMode) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (activePointersRef.current.size >= 2) {
+      const points = Array.from(activePointersRef.current.entries()).slice(0, 2);
+      const a = points[0][1];
+      const b = points[1][1];
+      const distance = Math.hypot(b.x - a.x, b.y - a.y);
+      pinchRef.current = {
+        initialDistance: Math.max(distance, 1),
+        initialScale: (livePhotoTransform ?? getBgPhotoTransform(activeSlide.bgPhotoTransform)).scale,
+        initial: livePhotoTransform ?? getBgPhotoTransform(activeSlide.bgPhotoTransform),
+        pointerA: points[0][0],
+        pointerB: points[1][0],
+      };
+      setIsPhotoInteracting(true);
+      return;
+    }
+
+    startPhotoDrag(e.clientX, e.clientY, e.pointerId);
+  };
+
+  const onPhotoPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!activeSlide || !hasActivePhoto) return;
+    if (!activePointersRef.current.has(e.pointerId)) return;
+    activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const frameRect = e.currentTarget.getBoundingClientRect();
+    const frameW = frameRect.width || 1;
+    const frameH = frameRect.height || 1;
+
+    if (pinchRef.current) {
+      const p = pinchRef.current;
+      const a = activePointersRef.current.get(p.pointerA);
+      const b = activePointersRef.current.get(p.pointerB);
+      if (!a || !b) return;
+      const distance = Math.hypot(b.x - a.x, b.y - a.y);
+      const ratio = Math.max(0.2, distance / p.initialDistance);
+      const centerX = (a.x + b.x) / 2 - frameRect.left - frameW / 2;
+      const centerY = (a.y + b.y) / 2 - frameRect.top - frameH / 2;
+      const next = zoomAroundPoint(p.initial, p.initialScale * ratio, centerX, centerY, frameW, frameH);
+      setLivePhotoTransform(next);
+      return;
+    }
+
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    const dx = e.clientX - drag.startX;
+    const dy = e.clientY - drag.startY;
+    const next = normalizeBgPhotoTransform({
+      ...drag.initial,
+      offset_x: drag.initial.offset_x + dx / frameW,
+      offset_y: drag.initial.offset_y + dy / frameH,
+    });
+    setLivePhotoTransform(next);
+  };
+
+  const finishPhotoInteraction = () => {
+    if (livePhotoTransform && activeSlide && hasActivePhoto) commitPhotoTransform(livePhotoTransform);
+    setIsPhotoInteracting(false);
+    dragRef.current = null;
+    pinchRef.current = null;
+    activePointersRef.current.clear();
+  };
+
+  const onPhotoPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    activePointersRef.current.delete(e.pointerId);
+    if (activePointersRef.current.size < 2) pinchRef.current = null;
+    if (activePointersRef.current.size === 0) finishPhotoInteraction();
+  };
+
+  const onPhotoWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (!activeSlide || !hasActivePhoto || !isDesktopLayout) return;
+    e.preventDefault();
+    const frameRect = e.currentTarget.getBoundingClientRect();
+    const speed = e.shiftKey ? 0.003 : 0.001;
+    const nextScale = (livePhotoTransform ?? getBgPhotoTransform(activeSlide.bgPhotoTransform)).scale - e.deltaY * speed;
+    const px = e.clientX - frameRect.left - frameRect.width / 2;
+    const py = e.clientY - frameRect.top - frameRect.height / 2;
+    const next = zoomAroundPoint(
+      livePhotoTransform ?? getBgPhotoTransform(activeSlide.bgPhotoTransform),
+      nextScale,
+      px,
+      py,
+      frameRect.width || 1,
+      frameRect.height || 1,
+    );
+    setLivePhotoTransform(next);
+    commitPhotoTransform(next);
+  };
+
+  const onPhotoLayerKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!hasActivePhoto) return;
+    const step = e.shiftKey ? 0.05 : 0.01;
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      nudgePhoto(-step, 0);
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      nudgePhoto(step, 0);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      nudgePhoto(0, -step);
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      nudgePhoto(0, step);
+    } else if (e.key === '+' || e.key === '=') {
+      e.preventDefault();
+      const base = livePhotoTransform ?? getBgPhotoTransform(activeSlide?.bgPhotoTransform);
+      const next = zoomAroundPoint(base, base.scale + 0.05, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      setLivePhotoTransform(next);
+      commitPhotoTransform(next);
+    } else if (e.key === '-') {
+      e.preventDefault();
+      const base = livePhotoTransform ?? getBgPhotoTransform(activeSlide?.bgPhotoTransform);
+      const next = zoomAroundPoint(base, base.scale - 0.05, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      setLivePhotoTransform(next);
+      commitPhotoTransform(next);
+    }
+  };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* Mobile top bar */}
       <header className="flex h-[52px] shrink-0 items-center justify-between border-b border-[color:var(--border)] px-3 md:hidden">
-        <Link href="/carousel" className="text-base font-semibold text-zinc-900">
-          Карусель
+        <Link
+          href="/carousel"
+          className="inline-flex items-center gap-1 rounded-full px-2 py-1.5 text-sm font-medium text-zinc-800"
+          aria-label="Всі каруселі"
+        >
+          <ChevronLeft className="h-5 w-5" />
+          <span>Всі каруселі</span>
         </Link>
-        <div className="flex items-center gap-1">
+        <p className="text-sm font-medium text-zinc-800">Слайд {activeIndex + 1} / {slides.length}</p>
+        <div className="flex items-center gap-1 md:hidden">
           <button
             type="button"
-            onClick={onSharePlaceholder}
-            className="rounded-lg p-2 text-zinc-600 hover:bg-[color:var(--surface)]"
-            aria-label="Поділитися"
+            onClick={hasGenerated ? onDownloadAll : onGenerate}
+            disabled={isGenerating}
+            className="inline-flex items-center gap-1 rounded-full border border-[color:var(--border)] bg-white px-3 py-1.5 text-[13px] font-medium text-zinc-900 disabled:opacity-50"
           >
-            <Share2 className="h-5 w-5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => (hasGenerated ? onDownloadAll() : undefined)}
-            disabled={!hasGenerated}
-            className="rounded-lg p-2 text-zinc-600 hover:bg-[color:var(--surface)] disabled:opacity-40"
-            aria-label="Завантажити"
-          >
-            <Download className="h-5 w-5" />
+            {isGenerating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+            Завантажити
           </button>
         </div>
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col md:min-h-0">
-        <div className="flex min-h-0 flex-1 flex-col md:flex-row md:gap-4 md:px-4 md:pt-0 md:pb-2">
+        <div className="flex min-h-0 flex-1 flex-col md:flex-row md:justify-center md:gap-4 md:px-4 md:pt-0 md:pb-2">
         {/* Preview column — first on mobile */}
         <div className="order-1 flex min-h-0 w-full flex-col items-center md:order-2 md:max-w-[min(100%,520px)]">
           <div
@@ -387,7 +713,11 @@ export default function CarouselEditorLayout({
             style={
               isDesktopLayout
                 ? undefined
-                : { height: mobilePreviewHeight, maxHeight: mobilePreviewMaxHeight, minHeight: 240 }
+                : {
+                    height: `${mobilePreviewHeightPx}px`,
+                    minHeight: 220,
+                    transition: 'height 250ms ease',
+                  }
             }
           >
             <div
@@ -401,38 +731,154 @@ export default function CarouselEditorLayout({
 
             <div
               ref={previewAreaRef}
-              className="relative flex h-full w-full max-w-[min(100vw,520px)] items-center justify-center md:hidden"
-              onTouchStart={onTouchStart}
-              onTouchEnd={onTouchEnd}
+              className="relative flex h-full w-full max-w-[min(100vw,520px)] items-center justify-center overflow-hidden md:hidden"
+              onClick={(e) => {
+                if (!mobilePositioningMode) return;
+                if (e.target === e.currentTarget) {
+                  finishPhotoInteraction();
+                  setMobilePositioningMode(false);
+                }
+              }}
+              onTouchStart={onPreviewTouchStart}
+              onTouchMove={onPreviewTouchMove}
+              onTouchEnd={onPreviewTouchEnd}
+              onTouchCancel={onPreviewTouchEnd}
             >
-              {activeSlide ? (
-                <CarouselSlidePreview
-                  slide={activeSlide}
-                  brand={brandSettings}
-                  brandFont={brandFont}
-                  scale={mobilePreviewScale}
-                  slideIndex={activeIndex + 1}
-                  totalSlides={slides.length}
-                />
-              ) : null}
+              <div
+                className="relative flex h-full w-full items-center justify-center"
+                style={{
+                  transform: `translate3d(${swipeX}px, 0, 0)`,
+                  transition: swipeSettling
+                    ? 'transform 260ms cubic-bezier(0.32, 0.72, 0, 1)'
+                    : 'none',
+                  willChange: 'transform',
+                }}
+                onTransitionEnd={(e) => {
+                  if (e.propertyName !== 'transform') return;
+                  onPreviewSwipeTransitionEnd();
+                }}
+              >
+                {prevSlide ? (
+                  <div
+                    className="pointer-events-none absolute inset-0 flex items-center justify-center"
+                    style={{ transform: 'translate3d(-100%, 0, 0)' }}
+                    aria-hidden
+                  >
+                    <CarouselSlidePreview
+                      slide={prevSlide}
+                      brand={brandSettings}
+                      brandFont={brandFont}
+                      scale={mobilePreviewScale}
+                      slideIndex={activeIndex}
+                      totalSlides={slides.length}
+                    />
+                  </div>
+                ) : null}
+                {activeSlide ? (
+                  <div
+                    className="relative"
+                    onClick={() => {
+                      if (!isDesktopLayout && hasActivePhoto && !mobilePositioningMode) {
+                        setMobilePositioningMode(true);
+                      }
+                    }}
+                  >
+                    <CarouselSlidePreview
+                      slide={activeSlide}
+                      brand={brandSettings}
+                      brandFont={brandFont}
+                      scale={mobilePreviewScale}
+                      slideIndex={activeIndex + 1}
+                      totalSlides={slides.length}
+                      photoTransformOverride={effectivePhotoTransform}
+                      isInteractingPhoto={isPhotoInteracting}
+                      mobilePositioningMode={mobilePositioningMode && !isDesktopLayout}
+                    />
+                    {hasActivePhoto ? (
+                      <div
+                        className="absolute inset-0 touch-none"
+                        style={{ cursor: isDesktopLayout ? (isPhotoInteracting ? 'grabbing' : 'grab') : 'default' }}
+                        tabIndex={0}
+                        onPointerDown={onPhotoPointerDown}
+                        onPointerMove={onPhotoPointerMove}
+                        onPointerUp={onPhotoPointerUp}
+                        onPointerCancel={onPhotoPointerUp}
+                        onWheel={onPhotoWheel}
+                        onKeyDown={onPhotoLayerKeyDown}
+                        role={mobilePositioningMode && !isDesktopLayout ? 'img' : undefined}
+                        aria-label={
+                          mobilePositioningMode && !isDesktopLayout
+                            ? 'Фон слайду — перетягни щоб розташувати'
+                            : undefined
+                        }
+                      />
+                    ) : null}
+                  </div>
+                ) : null}
+                {nextSlide ? (
+                  <div
+                    className="pointer-events-none absolute inset-0 flex items-center justify-center"
+                    style={{ transform: 'translate3d(100%, 0, 0)' }}
+                    aria-hidden
+                  >
+                    <CarouselSlidePreview
+                      slide={nextSlide}
+                      brand={brandSettings}
+                      brandFont={brandFont}
+                      scale={mobilePreviewScale}
+                      slideIndex={activeIndex + 2}
+                      totalSlides={slides.length}
+                    />
+                  </div>
+                ) : null}
+              </div>
             </div>
+            {mobilePositioningMode && !isDesktopLayout ? (
+              <button
+                type="button"
+                className="absolute bottom-3 left-1/2 z-[5] min-h-11 min-w-11 -translate-x-1/2 rounded-full bg-white px-4 py-2 text-sm font-medium text-zinc-900 shadow"
+                onClick={() => {
+                  finishPhotoInteraction();
+                  setMobilePositioningMode(false);
+                }}
+              >
+                Готово
+              </button>
+            ) : null}
 
-            <div className="relative mx-auto hidden overflow-hidden rounded-xl shadow-lg md:block" style={{ width: 480, height: 480 }}>
+            <div className="relative mx-auto hidden overflow-hidden rounded-xl shadow-lg md:block" style={{ width: 480, height: 600 }}>
               {activeSlide ? (
-                <CarouselSlidePreview
-                  slide={activeSlide}
-                  brand={brandSettings}
-                  brandFont={brandFont}
-                  scale={desktopScale}
-                  slideIndex={activeIndex + 1}
-                  totalSlides={slides.length}
-                />
+                <div className="relative">
+                  <CarouselSlidePreview
+                    slide={activeSlide}
+                    brand={brandSettings}
+                    brandFont={brandFont}
+                    scale={desktopScale}
+                    slideIndex={activeIndex + 1}
+                    totalSlides={slides.length}
+                    photoTransformOverride={effectivePhotoTransform}
+                    isInteractingPhoto={isPhotoInteracting}
+                  />
+                  {hasActivePhoto ? (
+                    <div
+                      className="absolute inset-0 touch-none"
+                      style={{ cursor: isPhotoInteracting ? 'grabbing' : 'grab' }}
+                      tabIndex={0}
+                      onPointerDown={onPhotoPointerDown}
+                      onPointerMove={onPhotoPointerMove}
+                      onPointerUp={onPhotoPointerUp}
+                      onPointerCancel={onPhotoPointerUp}
+                      onWheel={onPhotoWheel}
+                      onKeyDown={onPhotoLayerKeyDown}
+                    />
+                  ) : null}
+                </div>
               ) : null}
             </div>
 
             <button
               type="button"
-              className="absolute left-2 top-1/2 z-[2] hidden -translate-y-1/2 rounded-full border border-[color:var(--border)] bg-white/90 p-2 shadow md:block"
+              className="absolute top-1/2 z-[2] hidden -translate-y-1/2 rounded-full border border-[color:var(--border)] bg-white/90 p-2 shadow md:-left-12 md:block"
               onClick={() => goSlide(-1)}
               disabled={activeIndex <= 0}
               aria-label="Попередній слайд"
@@ -441,7 +887,7 @@ export default function CarouselEditorLayout({
             </button>
             <button
               type="button"
-              className="absolute right-2 top-1/2 z-[2] hidden -translate-y-1/2 rounded-full border border-[color:var(--border)] bg-white/90 p-2 shadow md:block"
+              className="absolute top-1/2 z-[2] hidden -translate-y-1/2 rounded-full border border-[color:var(--border)] bg-white/90 p-2 shadow md:-right-12 md:block"
               onClick={() => goSlide(1)}
               disabled={activeIndex >= slides.length - 1}
               aria-label="Наступний слайд"
@@ -462,7 +908,7 @@ export default function CarouselEditorLayout({
           modifiers={dragModifiers}
         >
           <SortableContext items={slides.map((s) => s.id)} strategy={rectSortingStrategy}>
-            <div className="order-2 flex shrink-0 flex-row gap-2 overflow-x-auto px-3 py-2 md:order-1 md:w-[72px] md:flex-col md:overflow-y-auto md:px-1 md:py-0">
+            <div className="order-2 flex shrink-0 flex-row items-center gap-2 overflow-x-auto px-3 py-2 md:order-1 md:w-[72px] md:flex-col md:overflow-y-auto md:px-1 md:py-0">
               {slides.map((slide, index) => (
                 <SortableThumb
                   key={slide.id}
@@ -470,14 +916,25 @@ export default function CarouselEditorLayout({
                   index={index}
                   active={slide.id === activeSlideId}
                   accentColor={accentColor}
-                  onSelect={() => setActiveSlideId(slide.id)}
-                  size="sm"
+                  onSelect={() => {
+                    setMobilePositioningMode(false);
+                    setIsPhotoInteracting(false);
+                    setLivePhotoTransform(null);
+                    dragRef.current = null;
+                    pinchRef.current = null;
+                    activePointersRef.current.clear();
+                    setActiveSlideId(slide.id);
+                  }}
+                  size={isDesktopLayout ? 'md' : 'sm'}
+                  brandSettings={brandSettings}
+                  brandFont={brandFont}
+                  totalSlides={slides.length}
                 />
               ))}
               <button
                 type="button"
                 onClick={addSlide}
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-dashed border-[color:var(--border)] text-zinc-500 hover:bg-[color:var(--surface)] md:h-[60px] md:w-[60px]"
+                className="flex h-[58px] w-[46px] shrink-0 items-center justify-center rounded-md border border-dashed border-[color:var(--border)] text-zinc-500 hover:bg-[color:var(--surface)] md:h-[78px] md:w-[62px]"
                 aria-label="Додати слайд"
               >
                 <Plus className="h-5 w-5" />
@@ -485,70 +942,43 @@ export default function CarouselEditorLayout({
             </div>
           </SortableContext>
         </DndContext>
-        </div>
 
         {isDesktopLayout ? (
-          <div className="flex min-h-0 w-full max-h-[min(440px,46vh)] shrink-0 flex-col overflow-hidden rounded-t-2xl border border-[color:var(--border)] bg-white shadow-[0_-4px_24px_rgba(0,0,0,0.06)] md:mx-4 md:mb-4">
-            {tabButtons}
-            {tabPanelScroll}
-            {downloadFooter}
+          <div className="hidden min-h-0 w-[360px] max-w-[38vw] shrink-0 overflow-hidden rounded-2xl border border-[color:var(--border)] bg-white shadow-[0_4px_24px_rgba(0,0,0,0.06)] md:flex md:flex-col">
+            {desktopTabButtons}
+            {desktopTabPanelScroll}
           </div>
         ) : null}
+        </div>
       </div>
 
       {!isDesktopLayout ? (
-        <>
+        <div className="shrink-0 border-t border-[color:var(--border)] bg-white">
           <div
-            className="fixed inset-x-0 bottom-16 z-[70] max-h-[85vh]"
-            style={{
-              transform: sheetY,
-              transition: 'transform 200ms cubic-bezier(0.32, 0.72, 0, 1)',
-            }}
+            className="overflow-hidden transition-[max-height] duration-250 ease-in-out"
+            style={{ maxHeight: panelOpen ? 260 : 0 }}
           >
-            <div className="flex min-h-0 max-h-[85vh] flex-col rounded-t-2xl border border-[color:var(--border)] bg-white shadow-[0_-8px_30px_rgba(0,0,0,0.12)]">
-              <button
-                type="button"
-                className="flex h-8 w-full shrink-0 touch-none items-center justify-center pt-2"
-                aria-label="Перетягнути панель"
-                onClick={() => {
-                  setSheetSnap((prev) => (prev === 'half' ? 'peek' : 'half'));
-                }}
-                onTouchStart={(e) => {
-                  const startY = e.touches[0]?.clientY ?? 0;
-                  let moved = false;
-                  let settled = false;
-                  const settle = (next: SheetSnap) => {
-                    if (settled) return;
-                    settled = true;
-                    setSheetSnap(next);
-                  };
-                  const onMove = (ev: TouchEvent) => {
-                    const y = ev.touches[0]?.clientY ?? startY;
-                    const dy = y - startY;
-                    if (Math.abs(dy) > 12) moved = true;
-                    if (dy > 40) settle('peek');
-                    if (dy < -40) settle('half');
-                  };
-                  const onEnd = () => {
-                    if (!settled && moved) {
-                      setSheetSnap((prev) => (prev === 'half' ? 'peek' : 'half'));
-                    }
-                    window.removeEventListener('touchmove', onMove);
-                    window.removeEventListener('touchend', onEnd);
-                  };
-                  window.addEventListener('touchmove', onMove, { passive: true });
-                  window.addEventListener('touchend', onEnd);
-                }}
-              >
-                <span className="h-1 w-10 rounded-full bg-zinc-300" />
-              </button>
-              {tabButtons}
-              {tabPanelScroll}
-              {downloadFooter}
-            </div>
+            <div className="max-h-[260px] overflow-y-auto px-4 py-3">{mobilePanelContent}</div>
           </div>
-          <div className="h-[120px] shrink-0" aria-hidden />
-        </>
+          <div className="flex gap-1 overflow-x-auto px-2 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {(['type', 'text', 'position', 'bg', 'style'] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTab((prev) => (prev === t ? null : t))}
+                className={[
+                  'flex min-h-11 min-w-16 shrink-0 flex-col items-center justify-center rounded-[10px] px-3 py-2',
+                  tab === t ? 'bg-[#eef1ff]' : 'bg-transparent',
+                ].join(' ')}
+              >
+                <MobileTabIcon tab={t} active={tab === t} />
+                <span className={tab === t ? 'text-[10px] font-medium text-[#4a6cf7]' : 'text-[10px] font-normal text-[#555]'}>
+                  {tabLabel(t)}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
       ) : null}
 
       {validationError ? (
@@ -558,6 +988,104 @@ export default function CarouselEditorLayout({
       ) : null}
     </div>
   );
+}
+
+function MobileTypeTab({
+  slide,
+  onChange,
+}: {
+  slide: Slide;
+  onChange: (id: string, patch: Partial<Slide>) => void;
+}) {
+  const slideType = slide.slideType ?? 'slide';
+  const preset = slide.layoutPreset ?? (slideType === 'final' ? 'goal' : 'text');
+  const types: Array<{ id: 'cover' | 'slide' | 'final'; label: string }> = [
+    { id: 'cover', label: 'Обкладинка' },
+    { id: 'slide', label: 'Слайд' },
+    { id: 'final', label: 'Фінал' },
+  ];
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-2">
+        {types.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() =>
+              onChange(slide.id, {
+                slideType: t.id,
+                layoutPreset: t.id === 'cover' ? null : t.id === 'final' ? 'goal' : 'text',
+              })
+            }
+            className={slideType === t.id ? 'rounded-full border border-[#4a6cf7] bg-[#eef1ff] px-3 py-1.5 text-xs font-medium text-[#4a6cf7]' : 'rounded-full border border-[color:var(--border)] px-3 py-1.5 text-xs text-zinc-700'}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {slideType === 'slide' ? (
+        <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {[
+            ['text', 'Текст'],
+            ['quote', 'Цитата'],
+            ['testimonial', 'Відгук'],
+            ['list', 'Список'],
+          ].map(([id, label]) => (
+            <button key={id} type="button" onClick={() => onChange(slide.id, { layoutPreset: id as Slide['layoutPreset'] })} className={preset === id ? 'rounded-full border border-[#4a6cf7] bg-[#eef1ff] px-3 py-1.5 text-xs font-medium text-[#4a6cf7]' : 'rounded-full border border-[color:var(--border)] px-3 py-1.5 text-xs text-zinc-700'}>
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {slideType === 'final' ? (
+        <div className="flex gap-2">
+          {[
+            ['goal', 'Goal'],
+            ['reaction', 'Reaction'],
+          ].map(([id, label]) => (
+            <button key={id} type="button" onClick={() => onChange(slide.id, { layoutPreset: id as Slide['layoutPreset'] })} className={preset === id ? 'rounded-full border border-[#4a6cf7] bg-[#eef1ff] px-3 py-1.5 text-xs font-medium text-[#4a6cf7]' : 'rounded-full border border-[color:var(--border)] px-3 py-1.5 text-xs text-zinc-700'}>
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function MobileOverlayStyleTab({
+  slide,
+  onChange,
+}: {
+  slide: Slide;
+  onChange: (id: string, patch: Partial<Slide>) => void;
+}) {
+  const opts: Array<{ id: NonNullable<Slide['overlayType']>; label: string }> = [
+    { id: 'full', label: 'Повний' },
+    { id: 'gradient', label: 'Градієнт' },
+    { id: 'frost', label: 'Фрост' },
+  ];
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-2">
+        {opts.map((o) => (
+          <button key={o.id} type="button" onClick={() => onChange(slide.id, { overlayType: o.id })} className={slide.overlayType === o.id ? 'rounded-full border border-[#4a6cf7] bg-[#eef1ff] px-3 py-1.5 text-xs font-medium text-[#4a6cf7]' : 'rounded-full border border-[color:var(--border)] px-3 py-1.5 text-xs text-zinc-700'}>
+            {o.label}
+          </button>
+        ))}
+      </div>
+      <p className="text-xs text-zinc-500">Доступно тільки для фото.</p>
+    </div>
+  );
+}
+
+function MobileTabIcon({ tab, active }: { tab: EditorTab; active: boolean }) {
+  const stroke = active ? '#4a6cf7' : '#555';
+  if (tab === 'type') return <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="4" y="5" width="16" height="14" rx="2" stroke={stroke} strokeWidth="1.6"/><path d="M4 9h16" stroke={stroke} strokeWidth="1.6"/></svg>;
+  if (tab === 'text') return <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6 6h12M12 6v12" stroke={stroke} strokeWidth="1.6" strokeLinecap="round"/></svg>;
+  if (tab === 'position') return <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M7 12h10M9 17h6" stroke={stroke} strokeWidth="1.6" strokeLinecap="round"/></svg>;
+  if (tab === 'bg') return <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="4" y="5" width="16" height="14" rx="2" stroke={stroke} strokeWidth="1.6"/><circle cx="9" cy="10" r="1.5" stroke={stroke} strokeWidth="1.6"/><path d="M7 17l10-8" stroke={stroke} strokeWidth="1.6"/></svg>;
+  return <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 4a8 8 0 1 1 0 16V4z" stroke={stroke} strokeWidth="1.6"/><circle cx="12" cy="12" r="8" stroke={stroke} strokeWidth="1.6"/></svg>;
 }
 
 function DownloadButton({

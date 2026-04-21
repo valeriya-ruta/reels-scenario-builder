@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   DndContext,
   closestCenter,
@@ -73,7 +74,7 @@ function SortableCarouselRow({
         </svg>
       </button>
 
-      <Link href={`/carousel/${project.id}`} className="flex-1 p-2.5 md:p-5">
+      <Link href={`/carousel/${project.id}`} prefetch className="flex-1 p-2.5 md:p-5">
         <h2 className="font-display font-medium text-zinc-900">{project.name}</h2>
         <p className="mt-1 text-sm text-zinc-600">
           Оновлено {new Date(project.updated_at).toLocaleDateString('uk-UA')}
@@ -120,10 +121,17 @@ function SortableCarouselRow({
 }
 
 export default function CarouselProjectsList({ projects }: Props) {
+  const router = useRouter();
   const [items, setItems] = useState(projects);
   const [projectToDelete, setProjectToDelete] = useState<CarouselProject | null>(null);
   const [projectToEdit, setProjectToEdit] = useState<CarouselProject | null>(null);
   const [editName, setEditName] = useState('');
+
+  useEffect(() => {
+    items.slice(0, 6).forEach((project) => {
+      router.prefetch(`/carousel/${project.id}`);
+    });
+  }, [items, router]);
 
   const sensors = useSensors(
     useSensor(PointerSensor),

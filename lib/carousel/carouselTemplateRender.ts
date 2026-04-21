@@ -1,10 +1,10 @@
 import { join } from 'path';
-import { createCanvas, GlobalFonts, loadImage, type SKRSContext2D, type Image } from '@napi-rs/canvas';
+import { createCanvas, GlobalFonts, type SKRSContext2D, type Image } from '@napi-rs/canvas';
 import {
   CANVAS_SIZE,
+  CANVAS_HEIGHT,
   PADDING,
   WATERMARK_Y,
-  DOT_BOTTOM_Y,
   DEFAULT_BG,
   DEFAULT_DARK,
   DEFAULT_ACCENT,
@@ -25,15 +25,140 @@ import type { BrandAccentStyle } from '@/lib/brand';
 const FONT_DIR = join(process.cwd(), 'public', 'fonts');
 
 let fontsReady = false;
+let activeFontPairing: string | null = null;
 
-function ensureCarouselFonts(): void {
-  if (fontsReady) return;
+function ensureCarouselFonts(fontPairing?: string | null): void {
+  const requestedFontId = (fontPairing ?? '').trim().toLowerCase();
+  const fontsourceDir = join(process.cwd(), 'node_modules', '@fontsource');
+  if (fontsReady && activeFontPairing === requestedFontId) return;
   try {
     GlobalFonts.registerFromPath(join(FONT_DIR, 'NotoSans-Bold.ttf'), 'NotoSansBold');
     GlobalFonts.registerFromPath(join(FONT_DIR, 'NotoSans-Regular.ttf'), 'NotoSans');
     GlobalFonts.registerFromPath(join(FONT_DIR, 'NotoSans-Italic.ttf'), 'NotoSansItalic');
     GlobalFonts.registerFromPath(join(FONT_DIR, 'NotoSerif-Italic.ttf'), 'NotoSerifItalic');
+    // Keep all drawing code unchanged by swapping font aliases to selected brand font.
+    if (requestedFontId === 'google_sans') {
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'google-sans', 'files', 'google-sans-cyrillic-700-normal.woff'),
+        'NotoSansBold',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'google-sans', 'files', 'google-sans-cyrillic-400-normal.woff'),
+        'NotoSans',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'google-sans', 'files', 'google-sans-cyrillic-400-italic.woff'),
+        'NotoSansItalic',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'google-sans', 'files', 'google-sans-cyrillic-400-italic.woff'),
+        'NotoSerifItalic',
+      );
+    } else if (requestedFontId === 'manrope') {
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'manrope', 'files', 'manrope-cyrillic-700-normal.woff'),
+        'NotoSansBold',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'manrope', 'files', 'manrope-cyrillic-400-normal.woff'),
+        'NotoSans',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'manrope', 'files', 'manrope-cyrillic-400-normal.woff'),
+        'NotoSansItalic',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'manrope', 'files', 'manrope-cyrillic-400-normal.woff'),
+        'NotoSerifItalic',
+      );
+    } else if (requestedFontId === 'cormorant') {
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'cormorant-garamond', 'files', 'cormorant-garamond-cyrillic-700-normal.woff'),
+        'NotoSansBold',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'cormorant-garamond', 'files', 'cormorant-garamond-cyrillic-400-normal.woff'),
+        'NotoSans',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'cormorant-garamond', 'files', 'cormorant-garamond-cyrillic-400-italic.woff'),
+        'NotoSansItalic',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'cormorant-garamond', 'files', 'cormorant-garamond-cyrillic-700-italic.woff'),
+        'NotoSerifItalic',
+      );
+    } else if (requestedFontId === 'days_one') {
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'days-one', 'files', 'days-one-cyrillic-400-normal.woff'),
+        'NotoSansBold',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'days-one', 'files', 'days-one-cyrillic-400-normal.woff'),
+        'NotoSans',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'days-one', 'files', 'days-one-cyrillic-400-normal.woff'),
+        'NotoSansItalic',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'days-one', 'files', 'days-one-cyrillic-400-normal.woff'),
+        'NotoSerifItalic',
+      );
+    } else if (requestedFontId === 'climate_crisis') {
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'climate-crisis', 'files', 'climate-crisis-cyrillic-400-normal.woff'),
+        'NotoSansBold',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'climate-crisis', 'files', 'climate-crisis-cyrillic-400-normal.woff'),
+        'NotoSans',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'climate-crisis', 'files', 'climate-crisis-cyrillic-400-normal.woff'),
+        'NotoSansItalic',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'climate-crisis', 'files', 'climate-crisis-cyrillic-400-normal.woff'),
+        'NotoSerifItalic',
+      );
+    } else if (requestedFontId === 'inter') {
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'inter', 'files', 'inter-cyrillic-700-normal.woff'),
+        'NotoSansBold',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'inter', 'files', 'inter-cyrillic-400-normal.woff'),
+        'NotoSans',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'inter', 'files', 'inter-cyrillic-400-italic.woff'),
+        'NotoSansItalic',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'inter', 'files', 'inter-cyrillic-400-italic.woff'),
+        'NotoSerifItalic',
+      );
+    } else if (requestedFontId === 'montserrat') {
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'montserrat', 'files', 'montserrat-cyrillic-700-normal.woff'),
+        'NotoSansBold',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'montserrat', 'files', 'montserrat-cyrillic-400-normal.woff'),
+        'NotoSans',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'montserrat', 'files', 'montserrat-cyrillic-400-italic.woff'),
+        'NotoSansItalic',
+      );
+      GlobalFonts.registerFromPath(
+        join(fontsourceDir, 'montserrat', 'files', 'montserrat-cyrillic-400-italic.woff'),
+        'NotoSerifItalic',
+      );
+    }
     fontsReady = true;
+    activeFontPairing = requestedFontId;
   } catch (e) {
     console.warn('[carousel] font registration:', e);
   }
@@ -185,37 +310,27 @@ function drawWatermark(
   }
 }
 
-function drawProgressDots(
-  ctx: SKRSContext2D,
-  slideIndex: number,
-  totalSlides: number,
-  accentColor: string,
-  lightOnDark: boolean,
-) {
-  const n = totalSlides;
-  const d = 14;
-  const gap = 10;
-  const totalW = n * d + (n - 1) * gap;
-  let x0 = (CANVAS_SIZE - totalW) / 2;
-  const y = CANVAS_SIZE - DOT_BOTTOM_Y - d / 2;
-  const inactive = lightOnDark ? 'rgba(255,255,255,0.35)' : 'rgba(200,200,200,0.5)';
-  const { r, g, b } = hexToRgb(accentColor);
-  for (let i = 0; i < n; i++) {
-    ctx.beginPath();
-    ctx.arc(x0 + d / 2, y, d / 2, 0, Math.PI * 2);
-    ctx.fillStyle = i === slideIndex - 1 ? `rgb(${r},${g},${b})` : inactive;
-    ctx.fill();
-    x0 += d + gap;
-  }
-}
+// Pagination intentionally removed from slide renders.
 
 export type CarouselTemplateInput = {
-  slideKind: SlideTemplateKind;
+  slideType: SlideTemplateKind;
+  layoutPreset?: 'text' | 'quote' | 'testimonial' | 'list' | 'goal' | 'reaction' | null;
   title: string;
   body: string;
   label: string | null;
   items: string[] | null;
   icon: string | null;
+  bulletStyle?: 'numbered-padded' | 'numbered-simple' | 'dots' | 'dashes' | 'checks' | 'cross-check' | null;
+  testimonialAuthor?: { name: string; handle: string; avatar_url: string | null } | null;
+  ctaAction?: 'follow' | 'save' | 'share' | 'comment' | 'link' | null;
+  ctaTitle?: string | null;
+  ctaKeyword?: string | null;
+  titleSize?: 'L' | 'M';
+  bodySize?: 'M' | 'S';
+  backgroundType?: 'color' | 'gradient' | 'image';
+  backgroundColor?: string;
+  gradientMidColor?: string;
+  gradientEndColor?: string;
   designNote: string | null;
   slideIndex: number;
   totalSlides: number;
@@ -224,17 +339,58 @@ export type CarouselTemplateInput = {
   domain: string;
 };
 
+const CTA_WORD: Record<'follow' | 'save' | 'share' | 'comment' | 'link', string> = {
+  follow: 'Підпишись',
+  save: 'Збережи',
+  share: 'Поділись',
+  comment: 'Коментуй',
+  link: 'Перейди',
+};
+
+function fillCoverBackground(
+  ctx: SKRSContext2D,
+  refined: boolean,
+  brand: BrandDnaForRender,
+  backgroundType?: 'color' | 'gradient' | 'image',
+  backgroundColor?: string,
+  gradientMidColor?: string,
+  gradientEndColor?: string,
+) {
+  if (backgroundType === 'gradient') {
+    const light = backgroundColor || brand.primaryColor || DEFAULT_CREAM;
+    const mid = gradientMidColor || brand.accentColor || DEFAULT_ACCENT;
+    const dark = gradientEndColor || DEFAULT_DARK;
+    const g = refined
+      ? ctx.createRadialGradient(CANVAS_SIZE * 0.4, CANVAS_HEIGHT * 0.3, 0, CANVAS_SIZE * 0.4, CANVAS_HEIGHT * 0.3, CANVAS_HEIGHT)
+      : ctx.createRadialGradient(CANVAS_SIZE * 0.3, CANVAS_HEIGHT * 0.3, 0, CANVAS_SIZE * 0.3, CANVAS_HEIGHT * 0.3, CANVAS_HEIGHT);
+    g.addColorStop(0, light);
+    g.addColorStop(0.6, mid);
+    g.addColorStop(1, dark);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
+    return;
+  }
+  ctx.fillStyle = backgroundType === 'color' ? (backgroundColor || (refined ? DEFAULT_CREAM : DEFAULT_DARK)) : refined ? DEFAULT_CREAM : DEFAULT_DARK;
+  ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
+}
+
 async function renderCover(
   ctx: SKRSContext2D,
   input: CarouselTemplateInput,
   refined: boolean,
 ): Promise<void> {
-  const { brand, handle, domain, title, body, label, designNote } = input;
+  const { brand, title, body, label, designNote } = input;
   const accent = brand.accentColor || DEFAULT_ACCENT;
   if (refined) {
-    ctx.fillStyle = DEFAULT_CREAM;
-    ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
-    drawWatermark(ctx, handle, domain, 'refined', false);
+    fillCoverBackground(
+      ctx,
+      true,
+      brand,
+      input.backgroundType,
+      input.backgroundColor,
+      input.gradientMidColor,
+      input.gradientEndColor,
+    );
     const [l1, l2] = splitEditorialTitle(stripAccentMarkers(title));
     ctx.font = '22px NotoSansBold';
     ctx.fillStyle = '#aaaaaa';
@@ -259,9 +415,15 @@ async function renderCover(
     const meta = stripAccentMarkers(body).trim() ? stripAccentMarkers(body) : designNote || '';
     if (meta) drawPlainParagraph(ctx, meta, PADDING, y, CANVAS_SIZE - PADDING * 2, 22, 28, '#bbbbbb', 'left');
   } else {
-    ctx.fillStyle = DEFAULT_DARK;
-    ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
-    drawWatermark(ctx, handle, domain, 'bold', true);
+    fillCoverBackground(
+      ctx,
+      false,
+      brand,
+      input.backgroundType,
+      input.backgroundColor,
+      input.gradientMidColor,
+      input.gradientEndColor,
+    );
     const barW = 48;
     const barH = 6;
     const contentW = CANVAS_SIZE - PADDING * 2;
@@ -310,7 +472,6 @@ async function renderCover(
       ctx.textBaseline = 'alphabetic';
       ctx.fillText(sub, PADDING, yy);
     }
-    drawProgressDots(ctx, input.slideIndex, input.totalSlides, accent, true);
   }
 }
 
@@ -324,10 +485,10 @@ async function renderContent(
   const dark = DEFAULT_DARK;
   if (refined) {
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+    ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
     ctx.strokeStyle = '#e8e3dc';
     ctx.lineWidth = 0.5;
-    ctx.strokeRect(0.25, 0.25, CANVAS_SIZE - 0.5, CANVAS_SIZE - 0.5);
+    ctx.strokeRect(0.25, 0.25, CANVAS_SIZE - 0.5, CANVAS_HEIGHT - 0.5);
     drawWatermark(ctx, handle, domain, 'refined', false);
     const [l1, l2] = splitEditorialTitle(stripAccentMarkers(title));
     let y = WATERMARK_Y + 48;
@@ -353,7 +514,7 @@ async function renderContent(
     drawPlainParagraph(ctx, stripAccentMarkers(body), PADDING, y, CANVAS_SIZE - PADDING * 2, 32, 40, '#777777', 'left');
   } else {
     ctx.fillStyle = DEFAULT_BG;
-    ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+    ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
     drawWatermark(ctx, handle, domain, 'bold', false);
     const contentW = CANVAS_SIZE - PADDING * 2;
     let y = PADDING + 40;
@@ -363,7 +524,7 @@ async function renderContent(
       pillH = 44;
       ctx.font = '22px NotoSansBold';
       const padX = 20;
-      let inner = lab.toUpperCase();
+      const inner = lab.toUpperCase();
       let iconW = 0;
       let iconImg: Image | null = null;
       if (icon) {
@@ -431,7 +592,6 @@ async function renderContent(
         if (cx > CANVAS_SIZE - PADDING - 100) break;
       }
     }
-    drawProgressDots(ctx, input.slideIndex, input.totalSlides, accent, false);
   }
 }
 
@@ -444,9 +604,9 @@ async function renderStatement(
   const accent = brand.accentColor || DEFAULT_ACCENT;
   if (refined) {
     ctx.fillStyle = '#1a1a1a';
-    ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+    ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
     drawWatermark(ctx, handle, domain, 'refined', true);
-    let y = CANVAS_SIZE / 2 - 80;
+    let y = CANVAS_HEIGHT / 2 - 80;
     ctx.font = '100px NotoSerifItalic';
     y = drawPlainParagraph(
       ctx,
@@ -478,7 +638,7 @@ async function renderStatement(
   } else {
     const { r, g, b } = hexToRgb(accent);
     ctx.fillStyle = `rgb(${r},${g},${b})`;
-    ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+    ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
     drawWatermark(ctx, handle, domain, 'bold', true);
     const img = await rasterizePhosphorIcon(icon || 'sparkle', 120, '#ffffff');
     if (img) {
@@ -511,7 +671,6 @@ async function renderStatement(
       );
       yy += 96;
     }
-    drawProgressDots(ctx, input.slideIndex, input.totalSlides, '#ffffff', true);
   }
 }
 
@@ -525,7 +684,7 @@ async function renderBullets(
   const list = items?.length ? items : body.split('\n').map((s) => s.replace(/^[-•]\s*/, '').trim()).filter(Boolean);
   if (refined) {
     ctx.fillStyle = DEFAULT_CREAM;
-    ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+    ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
     drawWatermark(ctx, handle, domain, 'refined', false);
     let y = PADDING + 40;
     y = drawPlainParagraph(
@@ -561,7 +720,7 @@ async function renderBullets(
     }
   } else {
     ctx.fillStyle = DEFAULT_BG;
-    ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+    ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
     drawWatermark(ctx, handle, domain, 'bold', false);
     let y = PADDING + 32;
     y = drawParagraphSegmented(
@@ -590,7 +749,6 @@ async function renderBullets(
       drawPlainParagraph(ctx, row, PADDING + 36 + 16, y + 28, CANVAS_SIZE - PADDING * 2 - 52, 34, 40, '#555555', 'left');
       y += 36 + 20;
     }
-    drawProgressDots(ctx, input.slideIndex, input.totalSlides, accent, false);
   }
 }
 
@@ -603,10 +761,10 @@ async function renderCta(
   const accent = brand.accentColor || DEFAULT_ACCENT;
   if (refined) {
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+    ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
     ctx.strokeStyle = '#e8e3dc';
     ctx.lineWidth = 0.5;
-    ctx.strokeRect(0.25, 0.25, CANVAS_SIZE - 0.5, CANVAS_SIZE - 0.5);
+    ctx.strokeRect(0.25, 0.25, CANVAS_SIZE - 0.5, CANVAS_HEIGHT - 0.5);
     drawWatermark(ctx, handle, domain, 'refined', false);
     let y = WATERMARK_Y + 56;
     ctx.font = '22px NotoSansBold';
@@ -663,7 +821,7 @@ async function renderCta(
     ctx.fillText('→', CANVAS_SIZE - PADDING - 30, circleY + 6);
   } else {
     ctx.fillStyle = DEFAULT_DARK;
-    ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+    ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
     drawWatermark(ctx, handle, domain, 'bold', true);
     let y = PADDING + 60;
     const { r, g, b } = hexToRgb(accent);
@@ -729,34 +887,61 @@ async function renderCta(
       ctx.fillText(lineText, (CANVAS_SIZE - tw) / 2, iy);
       iy += 42;
     }
-    drawProgressDots(ctx, input.slideIndex, input.totalSlides, accent, true);
   }
 }
 
 export async function renderCarouselTemplatePng(input: CarouselTemplateInput): Promise<Buffer> {
-  ensureCarouselFonts();
-  const canvas = createCanvas(CANVAS_SIZE, CANVAS_SIZE);
+  ensureCarouselFonts(input.brand.fontPairing);
+  const canvas = createCanvas(CANVAS_SIZE, CANVAS_HEIGHT);
   const ctx = canvas.getContext('2d');
   const refined = input.brand.vibe === 'refined';
-
-  switch (input.slideKind) {
-    case 'cover':
-      await renderCover(ctx, input, refined);
-      break;
-    case 'content':
-      await renderContent(ctx, input, refined);
-      break;
-    case 'statement':
-      await renderStatement(ctx, input, refined);
-      break;
-    case 'bullets':
-      await renderBullets(ctx, input, refined);
-      break;
-    case 'cta':
-      await renderCta(ctx, input, refined);
-      break;
-    default:
-      await renderContent(ctx, input, refined);
+  const preset = input.layoutPreset ?? (input.slideType === 'final' ? 'goal' : 'text');
+  if (input.slideType === 'cover') {
+    await renderCover(ctx, { ...input, label: null, body: '' }, refined);
+  } else if (input.slideType === 'slide') {
+    if (preset === 'quote') await renderStatement(ctx, { ...input, label: null }, refined);
+    else if (preset === 'testimonial') {
+      await renderStatement(ctx, { ...input, label: null }, refined);
+      const y = refined ? CANVAS_HEIGHT * 0.73 : CANVAS_HEIGHT * 0.66;
+      if (refined) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(PADDING, y - 20);
+        ctx.lineTo(CANVAS_SIZE - PADDING, y - 20);
+        ctx.stroke();
+      }
+      const author = input.testimonialAuthor;
+      const name = author?.name?.trim() || 'Автор';
+      const handle = author?.handle?.trim() || '@handle';
+      ctx.fillStyle = refined ? '#ffffff' : '#ffffff';
+      ctx.font = 'bold 28px NotoSansBold';
+      ctx.fillText(name, PADDING + 66, y);
+      ctx.font = '24px NotoSans';
+      ctx.fillStyle = 'rgba(255,255,255,0.75)';
+      ctx.fillText(handle, PADDING + 66, y + 30);
+      ctx.beginPath();
+      ctx.arc(PADDING + 24, y - 8, 20, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.2)';
+      ctx.fill();
+    } else if (preset === 'list') {
+      await renderBullets(ctx, { ...input, body: '', items: input.items }, refined);
+    } else {
+      await renderContent(ctx, { ...input, label: input.label ?? input.designNote }, refined);
+    }
+  } else {
+    if (preset === 'reaction') {
+      await renderCta(ctx, { ...input, title: input.ctaTitle || input.title, body: '' }, refined);
+      const kw = (input.ctaKeyword || '').trim() || 'РУТА';
+      ctx.textBaseline = 'alphabetic';
+      ctx.font = refined ? 'italic 128px NotoSerifItalic' : '900 128px NotoSansBold';
+      ctx.fillStyle = refined ? '#1a1a1a' : '#ffffff';
+      const tw = ctx.measureText(kw).width;
+      ctx.fillText(kw, (CANVAS_SIZE - tw) / 2, CANVAS_HEIGHT * 0.62);
+    } else {
+      const cta = CTA_WORD[(input.ctaAction || 'follow') as keyof typeof CTA_WORD] ?? CTA_WORD.follow;
+      await renderCta(ctx, { ...input, body: cta }, refined);
+    }
   }
 
   return canvas.toBuffer('image/png');
