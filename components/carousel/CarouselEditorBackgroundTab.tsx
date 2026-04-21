@@ -53,15 +53,6 @@ export default function CarouselEditorBackgroundTab({
   const photoSrc = slide.backgroundImageBase64
     ? `data:image/png;base64,${slide.backgroundImageBase64}`
     : slide.backgroundImageUrl || '';
-  const availableTextColorsForSolidBg = brandColorOptions.filter(
-    (color) => normalizeHex(color) !== normalizeHex(slide.backgroundColor),
-  );
-  const textColorChoices =
-    slide.backgroundType === 'color'
-      ? availableTextColorsForSolidBg
-      : slide.overlayType === 'frost' || slide.overlayType === 'gradient'
-        ? brandColorOptions
-        : brandColorOptions.filter((color) => normalizeHex(color) !== normalizeHex(slide.overlayColor));
 
   const setOverlayPatch = (patch: Partial<Slide>) => {
     onChange(slide.id, patch);
@@ -454,49 +445,6 @@ export default function CarouselEditorBackgroundTab({
           )}
         </div>
       )}
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div>
-          <label className="mb-2 block text-xs text-zinc-600">Колір заголовку</label>
-          <div className="flex flex-wrap gap-2">
-            {textColorChoices.map((color) => (
-              <button
-                key={`title-${color}`}
-                type="button"
-                aria-label={`Заголовок ${color}`}
-                onClick={() => onChange(slide.id, { titleColor: color })}
-                className={[
-                  'h-9 w-9 rounded-full border-2 transition-transform duration-[120ms] ease-out',
-                  normalizeHex(slide.titleColor) === normalizeHex(color)
-                    ? 'scale-[1.08] border-zinc-900'
-                    : 'border-[color:var(--border)]',
-                ].join(' ')}
-                style={{ backgroundColor: color }}
-              />
-            ))}
-          </div>
-        </div>
-        <div>
-          <label className="mb-2 block text-xs text-zinc-600">Колір тексту</label>
-          <div className="flex flex-wrap gap-2">
-            {textColorChoices.map((color) => (
-              <button
-                key={`body-${color}`}
-                type="button"
-                aria-label={`Текст ${color}`}
-                onClick={() => onChange(slide.id, { bodyColor: color })}
-                className={[
-                  'h-9 w-9 rounded-full border-2 transition-transform duration-[120ms] ease-out',
-                  normalizeHex(slide.bodyColor) === normalizeHex(color)
-                    ? 'scale-[1.08] border-zinc-900'
-                    : 'border-[color:var(--border)]',
-                ].join(' ')}
-                style={{ backgroundColor: color }}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
 
       {slide.design_note && (
         <p className="text-xs leading-relaxed text-zinc-500">

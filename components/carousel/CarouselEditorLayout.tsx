@@ -217,6 +217,7 @@ export default function CarouselEditorLayout({
   );
   const activeSlide = slides[activeIndex] ?? slides[0];
   const panelOpen = tab !== null;
+  const styleTabDisabled = Boolean(activeSlide) && activeSlide.backgroundType !== 'image';
   const hasActivePhoto =
     Boolean(activeSlide) &&
     activeSlide.backgroundType === 'image' &&
@@ -252,6 +253,10 @@ export default function CarouselEditorLayout({
   useEffect(() => {
     if (isDesktopLayout && tab === null) setTab('text');
   }, [isDesktopLayout, tab]);
+
+  useEffect(() => {
+    if (tab === 'style' && styleTabDisabled) setTab(null);
+  }, [tab, styleTabDisabled]);
 
   useEffect(() => {
     const onResize = () => setViewportHeight(window.innerHeight);
@@ -465,6 +470,20 @@ export default function CarouselEditorLayout({
 
   const tabLabel = (t: EditorTab) =>
     t === 'type' ? 'Тип' : t === 'text' ? 'Текст' : t === 'position' ? 'Позиція' : t === 'bg' ? 'Фон' : 'Стиль';
+  const getTextColorChoices = useCallback(
+    (slide: Slide) => {
+      if (slide.backgroundType === 'color') {
+        return brandColorOptions.filter(
+          (color) => normalizeHex(color) !== normalizeHex(slide.backgroundColor),
+        );
+      }
+      if (slide.overlayType === 'frost' || slide.overlayType === 'gradient') return brandColorOptions;
+      return brandColorOptions.filter(
+        (color) => normalizeHex(color) !== normalizeHex(slide.overlayColor),
+      );
+    },
+    [brandColorOptions],
+  );
 
   const onMobilePhotoUploadSuccess = useCallback(() => {
     if (isDesktopLayout) return;
@@ -490,14 +509,19 @@ export default function CarouselEditorLayout({
   const desktopTabButtons = (
     <div className="flex shrink-0 border-b border-[color:var(--border)]">
       {(['text', 'bg', 'style'] as const).map((t) => (
+        (() => {
+          const disabled = t === 'style' && styleTabDisabled;
+          return (
         <button
           key={t}
           type="button"
           onClick={() => {
+            if (disabled) return;
             setTab(t);
           }}
           className={[
             'flex-1 px-2 py-3 text-center text-xs font-medium transition md:py-2.5',
+            disabled ? 'cursor-not-allowed opacity-40' : '',
             tab === t
               ? 'border-b-2 border-[color:var(--accent)] text-[color:var(--accent)]'
               : 'text-zinc-500 hover:text-zinc-800 md:hover:text-zinc-800',
@@ -505,6 +529,8 @@ export default function CarouselEditorLayout({
         >
           {tabLabel(t)}
         </button>
+          );
+        })()
       ))}
     </div>
   );
@@ -520,6 +546,7 @@ export default function CarouselEditorLayout({
           accentColor={accentColor}
           onChange={updateSlide}
           onRemoveSlide={removeSlide}
+          textColorChoices={getTextColorChoices(activeSlide)}
         />
       ) : null}
       {tab === 'bg' && activeSlide ? (
@@ -557,6 +584,7 @@ export default function CarouselEditorLayout({
         accentColor={accentColor}
         onChange={updateSlide}
         onRemoveSlide={removeSlide}
+        textColorChoices={getTextColorChoices(activeSlide)}
         showStructureControls={false}
         showPositionControls={false}
       />
@@ -586,10 +614,10 @@ export default function CarouselEditorLayout({
         onPhotoUploadSuccess={onMobilePhotoUploadSuccess}
       />
     ) : tab === 'style' ? (
-      activeSlide.backgroundType === 'image' ? (
+      !styleTabDisabled ? (
         <MobileOverlayStyleTab slide={activeSlide} onChange={updateSlide} />
       ) : (
-        <p className="text-sm text-zinc-500">Доступно тільки для фото.</p>
+        null
       )
     ) : null
   ) : null;
@@ -1107,12 +1135,19 @@ export default function CarouselEditorLayout({
           </div>
           <div className="flex gap-1 overflow-x-auto px-2 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {(['type', 'text', 'position', 'bg', 'style'] as const).map((t) => (
+              (() => {
+                const disabled = t === 'style' && styleTabDisabled;
+                return (
               <button
                 key={t}
                 type="button"
-                onClick={() => setTab((prev) => (prev === t ? null : t))}
+                onClick={() => {
+                  if (disabled) return;
+                  setTab((prev) => (prev === t ? null : t));
+                }}
                 className={[
                   'flex min-h-11 min-w-16 shrink-0 flex-col items-center justify-center rounded-[10px] px-3 py-2',
+                  disabled ? 'cursor-not-allowed pointer-events-none opacity-40' : '',
                   tab === t ? 'bg-[#eef1ff]' : 'bg-transparent',
                 ].join(' ')}
               >
@@ -1121,6 +1156,8 @@ export default function CarouselEditorLayout({
                   {tabLabel(t)}
                 </span>
               </button>
+                );
+              })()
             ))}
           </div>
         </div>
@@ -1185,8 +1222,8 @@ function MobileTypeTab({
       {slideType === 'final' ? (
         <div className="flex gap-2">
           {[
-            ['goal', 'Goal'],
-            ['reaction', 'Reaction'],
+            ['goal', 'Ціль'],
+            ['reaction', 'Реакція'],
           ].map(([id, label]) => (
             <button key={id} type="button" onClick={() => onChange(slide.id, { layoutPreset: id as Slide['layoutPreset'] })} className={preset === id ? 'rounded-full border border-[#4a6cf7] bg-[#eef1ff] px-3 py-1.5 text-xs font-medium text-[#4a6cf7]' : 'rounded-full border border-[color:var(--border)] px-3 py-1.5 text-xs text-zinc-700'}>
               {label}
@@ -1219,7 +1256,6 @@ function MobileOverlayStyleTab({
           </button>
         ))}
       </div>
-      <p className="text-xs text-zinc-500">Доступно тільки для фото.</p>
     </div>
   );
 }
