@@ -9,7 +9,7 @@ import {
   layoutWords,
   segmentsToWords,
 } from '@/lib/carousel/canvasSegmentedText';
-import { getBgPhotoTransform } from '@/lib/carousel/bgPhotoTransform';
+import { getBgPhotoTransform, type BgPhotoTransform } from '@/lib/carousel/bgPhotoTransform';
 
 const CANVAS_W = 1080;
 const CANVAS_H = 1350;
@@ -258,11 +258,7 @@ export type GenerateSlideInput = {
   font_id?: string | null;
   title_size?: 'L' | 'M';
   body_size?: 'M' | 'S';
-  bg_photo_transform?: {
-    offset_x?: number;
-    offset_y?: number;
-    scale?: number;
-  } | null;
+  bg_photo_transform?: BgPhotoTransform | null;
 };
 
 function normalizeMultiline(input: string): string {

@@ -1,5 +1,6 @@
 import { renderSlideImagePng } from '@/lib/carousel/renderSlideImage';
 import { renderCarouselTemplatePng } from '@/lib/carousel/carouselTemplateRender';
+import { sanitizeBgPhotoTransform } from '@/lib/carousel/bgPhotoTransform';
 import { normalizeAccentStyle, type BrandAccentStyle } from '@/lib/brand';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import { NextResponse } from 'next/server';
@@ -210,7 +211,7 @@ export async function POST(req: Request) {
       font_id: fontId,
       title_size: json.title_size ?? 'L',
       body_size: json.body_size ?? 'M',
-      bg_photo_transform: json.bg_photo_transform ?? null,
+      bg_photo_transform: sanitizeBgPhotoTransform(json.bg_photo_transform) ?? null,
     });
     return NextResponse.json({ image_base64: png.toString('base64') });
   } catch (e) {

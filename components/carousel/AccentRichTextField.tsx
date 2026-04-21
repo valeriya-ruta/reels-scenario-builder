@@ -8,7 +8,7 @@ import { applyAccentToggle } from '@/lib/accentBracketText';
 import AccentPreviewLine from '@/components/carousel/AccentPreviewLine';
 import TextToolbar from '@/components/carousel/TextToolbar';
 
-type AccentField = 'title' | 'body';
+type AccentField = 'title' | 'body' | 'ctaTitle';
 
 function autoGrowTextarea(el: HTMLTextAreaElement | null) {
   if (!el) return;
@@ -34,7 +34,7 @@ export default function AccentRichTextField({
   slideId: string;
   field: AccentField;
   value: string;
-  onPatch: (id: string, patch: Partial<Pick<Slide, 'title' | 'body'>>) => void;
+  onPatch: (id: string, patch: Partial<Pick<Slide, 'title' | 'body' | 'ctaTitle'>>) => void;
   multiline: boolean;
   baseColor: string;
   accentStyle: BrandAccentStyle;
@@ -71,7 +71,7 @@ export default function AccentRichTextField({
     const end = el.selectionEnd ?? 0;
     const result = applyAccentToggle(value, start, end);
     if (!result) return;
-    const patch = field === 'title' ? { title: result.value } : { body: result.value };
+    const patch = field === 'body' ? { body: result.value } : field === 'ctaTitle' ? { ctaTitle: result.value } : { title: result.value };
     flushSync(() => {
       onPatch(slideId, patch);
     });
@@ -92,7 +92,10 @@ export default function AccentRichTextField({
   const sharedProps = {
     value,
     onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      onPatch(slideId, field === 'title' ? { title: e.target.value } : { body: e.target.value });
+      onPatch(
+        slideId,
+        field === 'body' ? { body: e.target.value } : field === 'ctaTitle' ? { ctaTitle: e.target.value } : { title: e.target.value }
+      );
       if (multiline && autoGrow && textareaRef.current) {
         requestAnimationFrame(() => autoGrowTextarea(textareaRef.current));
       }
