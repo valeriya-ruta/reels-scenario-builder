@@ -7,6 +7,9 @@ import { normalizeAccentStyle } from '@/lib/brand';
 import { normalizeSlidesFromDb } from '@/lib/carouselSlides';
 import type { Slide } from '@/lib/carouselTypes';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 interface BrandSettingsRow {
   theme: 'light' | 'dark';
   vibe: 'bold' | 'refined';

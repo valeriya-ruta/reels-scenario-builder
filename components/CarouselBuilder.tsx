@@ -237,7 +237,7 @@ export default function CarouselBuilder({
 
   const slideListTopRef = useRef<HTMLDivElement | null>(null);
   const slidesRef = useRef<Slide[]>(slides);
-  slidesRef.current = slides;
+  const saveSlidesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { setBadge, clearBadge } = useNavBadges();
   const { state: rantResultsState, clearResult: clearRantResult } = useRantResults();
   const skipPersistRef = useRef(true);
@@ -253,6 +253,10 @@ export default function CarouselBuilder({
     if (activeSlideId && slides.some((s) => s.id === activeSlideId)) return;
     setActiveSlideId(slides[0].id);
   }, [slides, activeSlideId]);
+
+  useEffect(() => {
+    slidesRef.current = slides;
+  }, [slides]);
 
   const handleProjectNameSave = useCallback(async () => {
     setEditingProjectName(false);
@@ -270,10 +274,30 @@ export default function CarouselBuilder({
       skipPersistRef.current = false;
       return;
     }
-    const t = window.setTimeout(() => {
-      void saveCarouselSlides(projectId, slides);
+    if (saveSlidesTimerRef.current) {
+      window.clearTimeout(saveSlidesTimerRef.current);
+    }
+    saveSlidesTimerRef.current = window.setTimeout(() => {
+      const currentSlides = slidesRef.current;
+      console.log('saveCarouselSlides called', currentSlides.length, Date.now());
+      void (async () => {
+        try {
+          const result = await saveCarouselSlides(projectId, currentSlides);
+          console.log('saveCarouselSlides result', {
+            ok: result?.ok ?? false,
+            projectId,
+            slidesCount: currentSlides.length,
+          });
+        } catch (error) {
+          console.error('saveCarouselSlides failed', error);
+        }
+      })();
     }, 1400);
-    return () => window.clearTimeout(t);
+    return () => {
+      if (saveSlidesTimerRef.current) {
+        window.clearTimeout(saveSlidesTimerRef.current);
+      }
+    };
   }, [projectId, slides]);
 
   useEffect(() => {
