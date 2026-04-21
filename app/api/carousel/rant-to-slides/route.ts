@@ -6,7 +6,22 @@ import { aiLimit } from '@/lib/ratelimit';
 
 export const runtime = 'nodejs';
 
-const SYSTEM_PROMPT = `Ти — досвідчений копірайтер каруселей для Instagram (українською). Перетворюєш сирий рент на серію слайдів для візуального шаблону з типами слайдів.
+type OutputLanguage = 'uk' | 'en';
+
+function detectOutputLanguage(rant: string): OutputLanguage {
+  const cyr = (rant.match(/[А-Яа-яІіЇїЄєҐґ]/g) ?? []).length;
+  const latin = (rant.match(/[A-Za-z]/g) ?? []).length;
+  if (latin >= 20 && latin >= cyr * 1.2) return 'en';
+  return 'uk';
+}
+
+function buildSystemPrompt(outputLanguage: OutputLanguage): string {
+  const languageRule =
+    outputLanguage === 'en'
+      ? 'Усі текстові поля (title/body/label/items) пиши англійською.'
+      : 'Усі текстові поля (title/body/label/items) пиши українською.';
+
+  return `Ти — досвідчений копірайтер каруселей для Instagram. Перетворюєш сирий рент на серію слайдів для візуального шаблону з типами слайдів.
 
 ПРИНЦИП: одна думка — один слайд. Не перевантажуй текст.
 
@@ -58,6 +73,7 @@ type має бути один із: cover, content, statement, bullets, cta
 ══════════════════════════════
 
 Лише JSON, без markdown і без тексту поза JSON.
+${languageRule}
 
 Приклад структури:
 
@@ -111,6 +127,7 @@ type має бути один із: cover, content, statement, bullets, cta
     }
   ]
 }`;
+}
 
 export async function POST(req: NextRequest) {
   let body: { rant?: string };
@@ -124,6 +141,7 @@ export async function POST(req: NextRequest) {
   if (!rant || rant.length < 10) {
     return NextResponse.json({ error: 'Рент занадто короткий' }, { status: 400 });
   }
+  const outputLanguage = detectOutputLanguage(rant);
 
   const supabase = await createServerSupabaseClient();
   const {
@@ -155,7 +173,7 @@ export async function POST(req: NextRequest) {
       max_tokens: 3000,
       response_format: { type: 'json_object' },
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: buildSystemPrompt(outputLanguage) },
         { role: 'user', content: rant },
       ],
     }),

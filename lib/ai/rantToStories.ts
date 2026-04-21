@@ -25,10 +25,25 @@ interface GroqResponse {
   }>;
 }
 
+type OutputLanguage = 'uk' | 'en';
+
 const VALID_VISUALS: StoryVisual[] = ['Кольоровий фон', 'Говоряча голова', 'Відео в тему', 'Гарне фото'];
 const VALID_INTERACTIVE: Exclude<StoryInteractive, null>[] = ['Стікер', 'Тягнулка', 'Опитування', 'Заклик в директ'];
 
-const SYSTEM_PROMPT = `Ти — досвідчений сценарист Instagram Stories для українських блогерів. Ти перетворюєш сирий рент на покроковий сценарій сторіс.
+function detectOutputLanguage(rant: string): OutputLanguage {
+  const cyr = (rant.match(/[А-Яа-яІіЇїЄєҐґ]/g) ?? []).length;
+  const latin = (rant.match(/[A-Za-z]/g) ?? []).length;
+  if (latin >= 20 && latin >= cyr * 1.2) return 'en';
+  return 'uk';
+}
+
+function buildSystemPrompt(outputLanguage: OutputLanguage): string {
+  const languageRule =
+    outputLanguage === 'en'
+      ? 'screen_text і voiceover пиши природною розмовною англійською.'
+      : 'screen_text і voiceover пиши природньою українською.';
+
+  return `Ти — досвідчений сценарист Instagram Stories для українських блогерів. Ти перетворюєш сирий рент на покроковий сценарій сторіс.
 
 ГОЛОВНИЙ ПРИНЦИП: одна думка — одна сторіс. Не перевантажуй. Кожен слайд = один момент уваги, одна емоція, одна ідея.
 
@@ -68,7 +83,8 @@ const SYSTEM_PROMPT = `Ти — досвідчений сценарист Instag
 
 2. ОДНА ДУМКА — ОДИН СЛАЙД:
    - screen_text: максимум 1–2 короткі рядки. Це те, що з'являється поверх відео/фото.
-   - voiceover: максимум 2–3 речення природньою українською. Це те, що людина каже вголос.
+   - voiceover: максимум 2–3 речення. Це те, що людина каже вголос.
+   - ${languageRule}
    - Якщо думка велика — розбий на два окремі слайди.
 
 3. ВИБІР ВІЗУАЛУ (visual):
@@ -127,15 +143,22 @@ const SYSTEM_PROMPT = `Ти — досвідчений сценарист Instag
     }
   ]
 }`;
+}
 
-function buildUserPrompt(rant: string): string {
+function buildUserPrompt(rant: string, outputLanguage: OutputLanguage): string {
+  const languageHint =
+    outputLanguage === 'en'
+      ? 'Усі текстові поля (template_name, one_thought, screen_text, voiceover, notes) пиши англійською.'
+      : 'Усі текстові поля пиши українською.';
   return `Ось рент:
 
 """
 ${rant}
 """
 
-Перетвори його на сценарій сторіс за правилами вище.`;
+Перетвори його на сценарій сторіс за правилами вище.
+${languageHint}
+Назви visual та interactive залишай лише з дозволеного списку (українськими значеннями).`;
 }
 
 function toVisual(value: unknown): StoryVisual {
@@ -226,6 +249,7 @@ export async function generateStoriesFromRant(rant: string): Promise<StoriesOutp
   if (!trimmed) {
     throw new Error('Введи рент перед генерацією.');
   }
+  const outputLanguage = detectOutputLanguage(trimmed);
 
   const apiKey = requireServerEnv('GROQ_API_KEY');
   const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -239,8 +263,8 @@ export async function generateStoriesFromRant(rant: string): Promise<StoriesOutp
       temperature: 0.7,
       response_format: { type: 'json_object' },
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: buildUserPrompt(trimmed) },
+        { role: 'system', content: buildSystemPrompt(outputLanguage) },
+        { role: 'user', content: buildUserPrompt(trimmed, outputLanguage) },
       ],
     }),
   });

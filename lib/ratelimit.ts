@@ -1,8 +1,5 @@
 import 'server-only';
 
-import { Ratelimit } from '@upstash/ratelimit';
-import { Redis } from '@upstash/redis';
-
 type LimitResult = {
   success: boolean;
   limit: number;
@@ -14,77 +11,85 @@ interface LimitClient {
   limit: (identifier: string) => Promise<LimitResult>;
 }
 
-function createNoopLimitClient(): LimitClient {
+type WindowMs = number;
+
+type CounterEntry = {
+  count: number;
+  resetAt: number;
+};
+
+const counters = new Map<string, CounterEntry>();
+
+function readPositiveIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name]?.trim();
+  if (!raw) return fallback;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.floor(n);
+}
+
+function createInMemoryWindowLimitClient(prefix: string, max: number, windowMs: WindowMs): LimitClient {
   return {
-    async limit() {
+    async limit(identifier: string) {
       const now = Date.now();
+      const key = `${prefix}:${identifier}`;
+      const entry = counters.get(key);
+
+      if (!entry || now >= entry.resetAt) {
+        const resetAt = now + windowMs;
+        counters.set(key, { count: 1, resetAt });
+        return {
+          success: true,
+          limit: max,
+          remaining: Math.max(0, max - 1),
+          reset: resetAt,
+        };
+      }
+
+      const nextCount = entry.count + 1;
+      entry.count = nextCount;
+      counters.set(key, entry);
+      const success = nextCount <= max;
+
       return {
-        success: true,
-        limit: Number.MAX_SAFE_INTEGER,
-        remaining: Number.MAX_SAFE_INTEGER,
-        reset: now + 60 * 60 * 1000,
+        success,
+        limit: max,
+        remaining: Math.max(0, max - nextCount),
+        reset: entry.resetAt,
       };
     },
   };
 }
 
-function hasUpstashEnv(): boolean {
-  return Boolean(
-    process.env.UPSTASH_REDIS_REST_URL?.trim() && process.env.UPSTASH_REDIS_REST_TOKEN?.trim()
-  );
-}
-
-function createLimitClient(factory: (redis: Redis) => Ratelimit): LimitClient {
-  if (!hasUpstashEnv()) {
-    console.warn('[ratelimit] Upstash env is missing. Falling back to no-op limits.');
-    return createNoopLimitClient();
-  }
-
-  try {
-    const redis = Redis.fromEnv();
-    return factory(redis);
-  } catch (error) {
-    console.error('[ratelimit] Failed to initialize Upstash client. Falling back to no-op limits.', error);
-    return createNoopLimitClient();
-  }
-}
-
 /** Groq: rant-to-reel, scenario builder, rant-to-stories, carousel text gen, template/scene AI steps. */
-export const aiLimit = createLimitClient(
-  (redis) =>
-    new Ratelimit({
-      redis,
-      limiter: Ratelimit.slidingWindow(20, '1 h'),
-      prefix: 'ratelimit:ai',
-    })
+const AI_LIMIT_PER_HOUR = readPositiveIntEnv('AI_LIMIT_PER_HOUR', 60);
+const TRANSCRIBE_LIMIT_PER_HOUR = readPositiveIntEnv('TRANSCRIBE_LIMIT_PER_HOUR', 40);
+const SCAN_LIMIT_FREE_PER_DAY = readPositiveIntEnv('SCAN_LIMIT_FREE_PER_DAY', 5);
+const SCAN_LIMIT_PAID_PER_DAY = readPositiveIntEnv('SCAN_LIMIT_PAID_PER_DAY', 50);
+
+export const aiLimit = createInMemoryWindowLimitClient(
+  'ratelimit:ai',
+  AI_LIMIT_PER_HOUR,
+  60 * 60 * 1000
 );
 
 /** Apify competitor scans — free tier. */
-export const scanLimitFree = createLimitClient(
-  (redis) =>
-    new Ratelimit({
-      redis,
-      limiter: Ratelimit.fixedWindow(3, '24 h'),
-      prefix: 'ratelimit:scan:free',
-    })
+export const scanLimitFree = createInMemoryWindowLimitClient(
+  'ratelimit:scan:free',
+  SCAN_LIMIT_FREE_PER_DAY,
+  24 * 60 * 60 * 1000
 );
 
 /** Apify competitor scans — paid tier. */
-export const scanLimitPaid = createLimitClient(
-  (redis) =>
-    new Ratelimit({
-      redis,
-      limiter: Ratelimit.fixedWindow(20, '24 h'),
-      prefix: 'ratelimit:scan:paid',
-    })
+export const scanLimitPaid = createInMemoryWindowLimitClient(
+  'ratelimit:scan:paid',
+  SCAN_LIMIT_PAID_PER_DAY,
+  24 * 60 * 60 * 1000
 );
 
 /** Audio transcription (Groq STT on reuse / reference flows). */
-export const transcribeLimit = createLimitClient(
-  (redis) =>
-    new Ratelimit({
-      redis,
-      limiter: Ratelimit.slidingWindow(30, '1 h'),
-      prefix: 'ratelimit:transcribe',
-    })
+export const transcribeLimit = createInMemoryWindowLimitClient(
+  'ratelimit:transcribe',
+  TRANSCRIBE_LIMIT_PER_HOUR,
+  60 * 60 * 1000
 );
