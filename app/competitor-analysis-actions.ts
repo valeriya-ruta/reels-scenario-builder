@@ -2,11 +2,10 @@
 
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import type FluentFfmpeg from 'fluent-ffmpeg';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import { requireAuth } from '@/lib/auth';
 import { optionalServerEnv, requireServerEnv } from '@/lib/env';
-import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
-import ffmpeg from 'fluent-ffmpeg';
 import { computeTopReelsPayload } from '@/lib/competitorScoring';
 import {
   apifyItemsToRawReels,
@@ -36,13 +35,55 @@ const REEL_TOO_LONG_ERROR =
   'Це відео задовге для транскрипції (ймовірно, запис трансляції). Спробуй інший рілс.';
 const REEL_NO_AUDIO_ERROR = 'Цей рілс без звуку — нічого транскрибувати.';
 
-ffmpeg.setFfmpegPath(ffmpegInstaller.path);
-const ffprobePath = join(
-  dirname(ffmpegInstaller.path),
-  process.platform === 'win32' ? 'ffprobe.exe' : 'ffprobe'
-);
-if (existsSync(ffprobePath)) {
-  ffmpeg.setFfprobePath(ffprobePath);
+/**
+ * Fully lazy ffmpeg loader. Both `fluent-ffmpeg` and `@ffmpeg-installer/ffmpeg`
+ * are imported dynamically — previously the top-level `import` of
+ * `@ffmpeg-installer/ffmpeg` evaluated that package's body, which synchronously
+ * `require()`s a platform-specific subpackage (e.g. `@ffmpeg-installer/linux-x64`).
+ * When the subpackage couldn't be resolved on serverless hosts, the import
+ * threw, which took down the *entire* server-actions module — breaking
+ * unrelated flows like `listIdeaScansForUser`, `startCompetitorScan`, and
+ * `pollCompetitorScan` that never touch ffmpeg. Now failures are contained
+ * to the transcription call itself.
+ */
+let ffmpegPromise: Promise<typeof FluentFfmpeg> | null = null;
+async function loadFfmpeg(): Promise<typeof FluentFfmpeg> {
+  if (ffmpegPromise) return ffmpegPromise;
+  ffmpegPromise = (async () => {
+    const ffmpegModule = (await import('fluent-ffmpeg')) as
+      | { default: typeof FluentFfmpeg }
+      | typeof FluentFfmpeg;
+    const ffmpeg = (
+      'default' in ffmpegModule ? ffmpegModule.default : ffmpegModule
+    ) as typeof FluentFfmpeg;
+    try {
+      const installerModule = (await import('@ffmpeg-installer/ffmpeg')) as
+        | { default?: { path?: string }; path?: string }
+        | { path?: string };
+      const installer =
+        'default' in installerModule && installerModule.default
+          ? installerModule.default
+          : (installerModule as { path?: string });
+      const installerPath = installer?.path;
+      if (typeof installerPath === 'string' && installerPath.length > 0) {
+        ffmpeg.setFfmpegPath(installerPath);
+        const ffprobePath = join(
+          dirname(installerPath),
+          process.platform === 'win32' ? 'ffprobe.exe' : 'ffprobe'
+        );
+        if (existsSync(ffprobePath)) {
+          ffmpeg.setFfprobePath(ffprobePath);
+        }
+      }
+    } catch (err) {
+      console.error('ffmpeg installer unavailable', err);
+    }
+    return ffmpeg;
+  })().catch((err) => {
+    ffmpegPromise = null;
+    throw err;
+  });
+  return ffmpegPromise;
 }
 
 interface GroqTranscriptionResponse {
@@ -50,6 +91,7 @@ interface GroqTranscriptionResponse {
 }
 
 async function probeReelMedia(url: string): Promise<{ durationSec: number; hasAudio: boolean }> {
+  const ffmpeg = await loadFfmpeg();
   return new Promise((resolve, reject) => {
     ffmpeg.ffprobe(url, (error, metadata) => {
       if (error) {
@@ -74,6 +116,7 @@ async function probeReelMedia(url: string): Promise<{ durationSec: number; hasAu
 }
 
 async function extractAudioMp3ToBuffer(url: string): Promise<Buffer> {
+  const ffmpeg = await loadFfmpeg();
   return new Promise((resolve, reject) => {
     let settled = false;
     let totalBytes = 0;
