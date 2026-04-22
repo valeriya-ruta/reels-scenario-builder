@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { Eye, Heart, MessageCircle } from 'lucide-react';
 import {
   parseIdeaScanReelStringMap,
   type IdeaScanRow,
@@ -29,8 +30,7 @@ interface RecentEntry {
   handle: string;
   initial: string;
   followersLabel: string;
-  avgViews: string;
-  avgEr: string;
+  avgPlays: string;
   dateLabel: string;
   savedCount: number;
 }
@@ -44,11 +44,9 @@ interface DisplayReel {
   hook: string;
   templatePattern: string;
   templateBody: string;
-  videoViewCount: number;
+  plays: number;
   likesCount: number;
   commentsCount: number;
-  erPercent: number;
-  multiplier: number;
   isViral: boolean;
 }
 
@@ -73,11 +71,13 @@ function mapTopItemsToDisplayReels(items: IdeaTopReelItem[]): DisplayReel[] {
     hook: item.hook,
     templatePattern: item.templatePattern,
     templateBody: item.templateLines.join('\n'),
-    videoViewCount: item.videoViewCount,
+    // Backward-compat for cached rows produced before `plays` key rename.
+    plays:
+      item.plays ??
+      (item as unknown as { videoPlayCount?: number }).videoPlayCount ??
+      0,
     likesCount: item.likesCount,
     commentsCount: item.commentsCount,
-    erPercent: item.erPercent,
-    multiplier: item.viralScore,
     isViral: item.isViral,
   }));
 }
@@ -94,15 +94,6 @@ function normalizeInstagramInput(raw: string): string {
 function avatarLetter(handle: string): string {
   const u = handle.replace(/^@+/, '');
   return u ? u[0]!.toUpperCase() : '?';
-}
-
-function fmtEr(p: number): string {
-  return `${p.toFixed(1)}%`;
-}
-
-function fmtLikeRate(likesCount: number, videoViewCount: number): string {
-  if (videoViewCount <= 0 || likesCount < 0) return '—';
-  return `${((likesCount / videoViewCount) * 100).toFixed(1)}%`;
 }
 
 function formatCompactCount(n: number): string {
@@ -143,49 +134,6 @@ function ExternalLinkIcon({ className }: { className?: string }) {
   );
 }
 
-/** Eye — views / перегляди */
-function ViewsIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.75}
-      className={className}
-      aria-hidden
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 5 12 5c4.638 0 8.573 2.51 9.963 6.683.071.204.071.431 0 .639C20.577 16.49 16.64 19 12 19c-4.638 0-8.573-2.51-9.963-6.683Z"
-      />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-    </svg>
-  );
-}
-
-/** Heart — likes / лайки */
-function LikesIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.75}
-      className={className}
-      aria-hidden
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z"
-      />
-    </svg>
-  );
-}
-
 export default function CompetitorAnalysisView() {
   const [screen, setScreen] = useState<Screen>('home');
   const [searchInput, setSearchInput] = useState('');
@@ -216,16 +164,14 @@ export default function CompetitorAnalysisView() {
     if (!currentScan) {
       return {
         followersLabel: '—',
-        avgViews: '—',
-        avgEr: '—',
+        avgPlays: '—',
         reelsAnalyzed: 0,
       };
     }
     const s = currentScan.top_reels.summary;
     return {
       followersLabel: `${formatCompactCount(currentScan.followers_count)} підп.`,
-      avgViews: s.avgViewsDisplay,
-      avgEr: s.avgErDisplay,
+      avgPlays: s.avgPlaysDisplay,
       reelsAnalyzed: s.reelsAnalyzed,
     };
   }, [currentScan]);
@@ -241,8 +187,7 @@ export default function CompetitorAnalysisView() {
           handle: row.handle,
           initial: avatarLetter(row.handle),
           followersLabel: `${formatCompactCount(row.followers_count)} підп.`,
-          avgViews: row.avgViewsDisplay ?? '—',
-          avgEr: row.avgErDisplay ?? '—',
+          avgPlays: row.avgPlaysDisplay ?? '—',
           dateLabel: new Date(row.scanned_at).toLocaleDateString('uk-UA', {
             day: 'numeric',
             month: 'short',
@@ -598,13 +543,12 @@ export default function CompetitorAnalysisView() {
               <div className="overflow-x-auto">
                 <div className="min-w-[560px] sm:min-w-[720px]">
                   <div
-                    className="grid grid-cols-[36px_minmax(140px,1fr)_88px_84px_60px_28px] items-center gap-2 border-b border-[var(--color-border-primary)] bg-[var(--color-background-secondary)] px-3 py-3 text-[10px] font-medium uppercase tracking-wide text-[var(--color-text-muted)] sm:grid-cols-[40px_minmax(220px,1fr)_104px_96px_72px_36px] sm:gap-3 sm:px-5 sm:text-[11px]"
+                    className="grid grid-cols-[36px_minmax(140px,1fr)_88px_84px_28px] items-center gap-2 border-b border-[var(--color-border-primary)] bg-[var(--color-background-secondary)] px-3 py-3 text-[10px] font-medium uppercase tracking-wide text-[var(--color-text-muted)] sm:grid-cols-[40px_minmax(220px,1fr)_104px_96px_36px] sm:gap-3 sm:px-5 sm:text-[11px]"
                   >
                     <span aria-hidden className="block w-9 sm:w-10" />
                     <span className="whitespace-nowrap">Instagram акаунт</span>
                     <span className="whitespace-nowrap text-right">Підписники</span>
-                    <span className="whitespace-nowrap text-right">Сер. перегл.</span>
-                    <span className="whitespace-nowrap text-right">ER</span>
+                    <span className="whitespace-nowrap text-right">Сер. відтв.</span>
                     <span />
                   </div>
                   {recentsLoading ? (
@@ -648,7 +592,7 @@ export default function CompetitorAnalysisView() {
                           <button
                             type="button"
                             onClick={() => void onRecentClick(entry)}
-                            className="grid w-full cursor-pointer grid-cols-[36px_minmax(140px,1fr)_88px_84px_60px_28px] items-center gap-2 px-3 py-3.5 text-left transition-colors hover:bg-[#fafbfd] sm:grid-cols-[40px_minmax(220px,1fr)_104px_96px_72px_36px] sm:gap-3 sm:px-5"
+                            className="grid w-full cursor-pointer grid-cols-[36px_minmax(140px,1fr)_88px_84px_28px] items-center gap-2 px-3 py-3.5 text-left transition-colors hover:bg-[#fafbfd] sm:grid-cols-[40px_minmax(220px,1fr)_104px_96px_36px] sm:gap-3 sm:px-5"
                           >
                             <div
                               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#eef1f8] to-[#dfe4f2] text-xs font-semibold text-[var(--color-text-primary)] sm:h-10 sm:w-10 sm:text-sm"
@@ -678,10 +622,7 @@ export default function CompetitorAnalysisView() {
                               {followersShortFromLabel(entry.followersLabel)}
                             </span>
                             <span className="text-right text-xs font-semibold tabular-nums text-[var(--color-text-primary)] sm:text-sm">
-                              {entry.avgViews}
-                            </span>
-                            <span className="text-right text-xs font-semibold tabular-nums text-[var(--color-text-primary)] sm:text-sm">
-                              {entry.avgEr}
+                              {entry.avgPlays}
                             </span>
                             <span className="flex justify-end text-[var(--color-text-muted)]">
                               <ExternalLinkIcon className="h-4 w-4" />
@@ -780,18 +721,10 @@ export default function CompetitorAnalysisView() {
                 <div className="flex flex-wrap gap-10">
                   <div>
                     <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
-                      Сер. перегляди
+                      Сер. відтворення
                     </p>
                     <p className="mt-1 text-2xl font-bold tabular-nums text-[var(--color-text-primary)]">
-                      {profileMeta.avgViews}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
-                      Сер. ER
-                    </p>
-                    <p className="mt-1 text-2xl font-bold tabular-nums text-[var(--color-text-primary)]">
-                      {profileMeta.avgEr}
+                      {profileMeta.avgPlays}
                     </p>
                   </div>
                 </div>
@@ -809,7 +742,7 @@ export default function CompetitorAnalysisView() {
                 </div>
                 {reelItems.length === 0 ? (
                   <div className="flex flex-1 items-center justify-center p-6 text-center text-sm text-[var(--color-text-muted)]">
-                    Немає рілсів з переглядами для цього профілю. Спробуй інший акаунт або
+                    Немає рілсів із відтвореннями для цього профілю. Спробуй інший акаунт або
                     перевір, що профіль публічний.
                   </div>
                 ) : (
@@ -856,9 +789,6 @@ export default function CompetitorAnalysisView() {
                               >
                                 {reel.isViral ? 'Вірусний' : 'Топ профілю'}
                               </span>
-                              <span className="text-[10px] text-[var(--color-text-muted)]">
-                                {reel.multiplier.toFixed(1)}×
-                              </span>
                             </div>
                             <p
                               className="mt-2 text-[13px] font-medium leading-snug text-[var(--color-text-primary)]"
@@ -871,28 +801,19 @@ export default function CompetitorAnalysisView() {
                             >
                               {reel.hook}
                             </p>
-                            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--color-text-muted)]">
+                            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-[var(--color-text-muted)]">
                               <span className="inline-flex items-center gap-0.5 tabular-nums">
-                                <ViewsIcon className="h-3.5 w-3.5 shrink-0 opacity-80" />
-                                {formatCompactCount(reel.videoViewCount)}
-                              </span>
-                              <span aria-hidden className="text-[var(--color-border-primary)]">
-                                ·
+                                <Eye className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+                                {formatCompactCount(reel.plays)}
                               </span>
                               <span className="inline-flex items-center gap-0.5 tabular-nums">
-                                <LikesIcon className="h-3.5 w-3.5 shrink-0 opacity-80" />
+                                <Heart className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
                                 {likesDisplay(reel.likesCount)}
                               </span>
-                              <span aria-hidden className="text-[var(--color-border-primary)]">
-                                ·
+                              <span className="inline-flex items-center gap-0.5 tabular-nums">
+                                <MessageCircle className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+                                {formatCompactCount(reel.commentsCount)}
                               </span>
-                              <span>
-                                LR {fmtLikeRate(reel.likesCount, reel.videoViewCount)}
-                              </span>
-                              <span aria-hidden className="text-[var(--color-border-primary)]">
-                                ·
-                              </span>
-                              <span>ER {fmtEr(reel.erPercent)}</span>
                             </div>
                           </button>
                         </li>
@@ -983,40 +904,19 @@ export default function CompetitorAnalysisView() {
                         className="shrink-0 border-b border-[var(--color-border-primary)]"
                         style={{ padding: '12px 20px' }}
                       >
-                        <p className="text-[10px] font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
-                          СТАТИСТИКА
-                        </p>
-                        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                          {(
-                            [
-                              ['Перегляди', formatCompactCount(selectedReel.videoViewCount)],
-                              ['Лайки', likesDisplay(selectedReel.likesCount)],
-                              [
-                                'Like rate',
-                                fmtLikeRate(
-                                  selectedReel.likesCount,
-                                  selectedReel.videoViewCount
-                                ),
-                              ],
-                              [
-                                'Коментарі',
-                                formatCompactCount(selectedReel.commentsCount),
-                              ],
-                            ] as const
-                          ).map(([label, val]) => (
-                            <div
-                              key={label}
-                              className="rounded-[var(--border-radius-md)] bg-[var(--color-background-secondary)]"
-                              style={{ padding: '8px 10px' }}
-                            >
-                              <p className="text-[11px] text-[var(--color-text-muted)]">
-                                {label}
-                              </p>
-                              <p className="mt-1 text-sm font-medium text-[var(--color-text-primary)]">
-                                {val}
-                              </p>
-                            </div>
-                          ))}
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] tabular-nums text-[var(--color-text-primary)]">
+                          <span className="inline-flex items-center gap-1 tabular-nums">
+                            <Eye className="h-4 w-4 shrink-0 text-[var(--color-text-muted)] opacity-80" aria-hidden />
+                            <span className="font-medium">{formatCompactCount(selectedReel.plays)}</span>
+                          </span>
+                          <span className="inline-flex items-center gap-1 tabular-nums">
+                            <Heart className="h-4 w-4 shrink-0 text-[var(--color-text-muted)] opacity-80" aria-hidden />
+                            <span className="font-medium">{likesDisplay(selectedReel.likesCount)}</span>
+                          </span>
+                          <span className="inline-flex items-center gap-1 tabular-nums">
+                            <MessageCircle className="h-4 w-4 shrink-0 text-[var(--color-text-muted)] opacity-80" aria-hidden />
+                            <span className="font-medium">{formatCompactCount(selectedReel.commentsCount)}</span>
+                          </span>
                         </div>
                       </section>
 

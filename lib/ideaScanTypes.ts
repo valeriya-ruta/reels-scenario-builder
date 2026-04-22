@@ -5,14 +5,12 @@ export interface IdeaScanSummary {
   scanned_at: string;
   saved_reel_ids: string[];
   /** Filled by list API from `top_reels.summary` for the recents table. */
-  avgViewsDisplay?: string;
-  avgErDisplay?: string;
+  avgPlaysDisplay?: string;
 }
 
 export interface IdeaTopReelsSummary {
   reelsAnalyzed: number;
-  avgViewsDisplay: string;
-  avgErDisplay: string;
+  avgPlaysDisplay: string;
   qualifiedCount: number;
 }
 
@@ -24,12 +22,10 @@ export interface IdeaTopReelItem {
   hook: string;
   templatePattern: string;
   templateLines: string[];
-  videoViewCount: number;
-  savesCount: number;
+  /** Instagram play count (Apify `videoPlayCount`, with legacy fallbacks at ingest). */
+  plays: number;
   likesCount: number;
   commentsCount: number;
-  erPercent: number;
-  viralScore: number;
   isViral: boolean;
 }
 

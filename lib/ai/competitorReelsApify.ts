@@ -194,16 +194,6 @@ function shortCodeFromItem(item: Record<string, unknown>, index: number): string
   return `reel-${index}`;
 }
 
-function savesFromItem(item: Record<string, unknown>): number {
-  return num(
-    item.savedCount ??
-      item.savesCount ??
-      item.videoSavedCount ??
-      item.saveCount ??
-      item.collectedCount
-  );
-}
-
 /**
  * Parses Apify dataset rows into scoring input. Skips obvious non-video rows when possible.
  */
@@ -218,14 +208,16 @@ export function apifyItemsToRawReels(items: unknown[]): RawReelInput[] {
     const hasVideo =
       typeof item.videoUrl === 'string' ||
       typeof item.video_url === 'string' ||
+      num(item.videoPlayCount) > 0 ||
       num(item.videoViewCount) > 0 ||
       num(item.playCount) > 0;
 
     if (type === 'image' && !hasVideo) return;
     if (product === 'feed' && !hasVideo) return;
 
-    const views = num(
-      item.videoViewCount ?? item.playCount ?? item.videoPlayCount ?? item.viewCount
+    /** Instagram public UI aligns with plays (`videoPlayCount`); older rows may use `playCount` / `videoViewCount`. */
+    const plays = num(
+      item.videoPlayCount ?? item.playCount ?? item.videoViewCount ?? 0
     );
 
     const shortCode = shortCodeFromItem(item, index);
@@ -237,8 +229,7 @@ export function apifyItemsToRawReels(items: unknown[]): RawReelInput[] {
       hook: captionToHook(item) || 'Без підпису',
       templatePattern: template.pattern,
       templateLines: template.lines,
-      videoViewCount: views,
-      saves: savesFromItem(item),
+      plays,
       likes: num(item.likesCount ?? item.likes ?? item.likeCount),
       comments: num(item.commentsCount ?? item.commentCount ?? item.comments),
     };

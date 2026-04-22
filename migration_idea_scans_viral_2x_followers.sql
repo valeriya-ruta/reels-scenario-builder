@@ -1,4 +1,5 @@
--- Backfill idea_scans.top_reels: isViral = (videoViewCount >= 2 * followers_count)
+-- Backfill idea_scans.top_reels: isViral = (play count >= 2 * followers_count)
+-- JSON keys: prefer `plays`, then videoPlayCount, then legacy videoViewCount.
 -- and summary.qualifiedCount = count of such items in top 10.
 -- Run once in Supabase SQL (or via migration). Matches lib/competitorScoring.ts isReelViralByFollowerThreshold.
 
@@ -14,7 +15,12 @@ SET top_reels = jsonb_set(
             'isViral',
             (
               s.followers_count > 0
-              AND COALESCE((x.value ->> 'videoViewCount')::numeric, 0)
+              AND COALESCE(
+                  NULLIF((x.value ->> 'plays')::text, '')::numeric,
+                  NULLIF((x.value ->> 'videoPlayCount')::text, '')::numeric,
+                  NULLIF((x.value ->> 'videoViewCount')::text, '')::numeric,
+                  0
+                )
                 >= (2::numeric * s.followers_count::numeric)
             )
           ))
@@ -33,7 +39,12 @@ SET top_reels = jsonb_set(
         SELECT COUNT(*)::int
         FROM jsonb_array_elements(s.top_reels -> 'items') AS e (value)
         WHERE s.followers_count > 0
-          AND COALESCE((e.value ->> 'videoViewCount')::numeric, 0)
+          AND COALESCE(
+              NULLIF((e.value ->> 'plays')::text, '')::numeric,
+              NULLIF((e.value ->> 'videoPlayCount')::text, '')::numeric,
+              NULLIF((e.value ->> 'videoViewCount')::text, '')::numeric,
+              0
+            )
             >= (2::numeric * s.followers_count::numeric)
       ),
       0

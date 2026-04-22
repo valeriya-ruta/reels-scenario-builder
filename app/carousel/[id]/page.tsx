@@ -76,19 +76,6 @@ export default async function CarouselStudioPage({ params }: PageProps) {
 
   const slides: Slide[] = normalizeSlidesFromDb(projectRow.slides);
 
-  const dn = profileRow?.display_name?.trim();
-  const handleFromProfile = dn
-    ? (() => {
-        const slug = dn.replace(/\s+/g, '').replace(/^@+/, '');
-        return slug ? `@${slug}` : dn;
-      })()
-    : '';
-
-  const initialWatermarkHandle =
-    (typeof projectRow.watermark_handle === 'string' && projectRow.watermark_handle.trim()) ||
-    handleFromProfile ||
-    '';
-
   return (
     <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col">
       <CarouselPageClient
@@ -100,7 +87,6 @@ export default async function CarouselStudioPage({ params }: PageProps) {
           name: projectRow.name,
           slides,
         }}
-        initialWatermarkHandle={initialWatermarkHandle}
       />
     </div>
   );

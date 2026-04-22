@@ -1,4 +1,9 @@
 {
+  "functions": {
+    "app/competitor-analysis-actions.ts": {
+      "maxDuration": 60
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/billing",

@@ -10,13 +10,10 @@ import { createEmptySlide, normalizeSlidesFromDb } from '@/lib/carouselSlides';
 import {
   saveCarouselSlides,
   updateCarouselProjectName,
-  updateCarouselWatermarkHandle,
 } from '@/app/carousel-actions';
-import { createClient } from '@/lib/supabaseClient';
 import { useNavBadges } from '@/components/NavBadgeContext';
 import { readPendingCarouselFromStorage, useRantResults } from '@/components/RantResultsContext';
 import { useBrandStore } from '@/components/BrandProvider';
-import type { BrandAccentStyle } from '@/lib/brand';
 import { normalizeAccentStyle, normalizeHex } from '@/lib/brand';
 import {
   getCarouselBrandPalette,
@@ -185,16 +182,14 @@ export interface CarouselBuilderProps {
   projectId: string;
   initialProjectName: string;
   initialSlides: Slide[];
-  initialWatermarkHandle: string;
 }
 
 export default function CarouselBuilder({
   projectId,
   initialProjectName,
   initialSlides,
-  initialWatermarkHandle,
 }: CarouselBuilderProps) {
-  const { brandSettings, refetchBrand } = useBrandStore();
+  const { brandSettings } = useBrandStore();
   const brandFont = useMemo(() => resolveBrandFont(brandSettings?.fontId), [brandSettings?.fontId]);
 
   const [projectName, setProjectName] = useState(initialProjectName);
@@ -214,10 +209,6 @@ export default function CarouselBuilder({
   const [toast, setToast] = useState<string | null>(null);
   const [unsplashForId, setUnsplashForId] = useState<string | null>(null);
   const [pendingRantOutput, setPendingRantOutput] = useState<CarouselRantOutput | null>(null);
-  const [watermarkDraft, setWatermarkDraft] = useState(initialWatermarkHandle);
-  const [accentDraft, setAccentDraft] = useState<BrandAccentStyle>(() =>
-    normalizeAccentStyle(brandSettings?.accentStyle),
-  );
 
   const slideListTopRef = useRef<HTMLDivElement | null>(null);
   const slidesRef = useRef<Slide[]>(slides);
@@ -225,12 +216,6 @@ export default function CarouselBuilder({
   const { setBadge, clearBadge } = useNavBadges();
   const { state: rantResultsState, clearResult: clearRantResult } = useRantResults();
   const skipPersistRef = useRef(true);
-  const watermarkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const accentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    setAccentDraft(normalizeAccentStyle(brandSettings?.accentStyle));
-  }, [brandSettings?.accentStyle]);
 
   useEffect(() => {
     if (!slides.length) return;
@@ -283,34 +268,6 @@ export default function CarouselBuilder({
       }
     };
   }, [projectId, slides]);
-
-  useEffect(() => {
-    if (watermarkTimerRef.current) clearTimeout(watermarkTimerRef.current);
-    watermarkTimerRef.current = setTimeout(() => {
-      void updateCarouselWatermarkHandle(projectId, watermarkDraft);
-    }, 800);
-    return () => {
-      if (watermarkTimerRef.current) clearTimeout(watermarkTimerRef.current);
-    };
-  }, [projectId, watermarkDraft]);
-
-  useEffect(() => {
-    if (accentTimerRef.current) clearTimeout(accentTimerRef.current);
-    accentTimerRef.current = setTimeout(() => {
-      void (async () => {
-        const supabase = createClient();
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (!user) return;
-        await supabase.from('brand_settings').update({ accent_style: accentDraft }).eq('user_id', user.id);
-        void refetchBrand();
-      })();
-    }, 800);
-    return () => {
-      if (accentTimerRef.current) clearTimeout(accentTimerRef.current);
-    };
-  }, [accentDraft, refetchBrand]);
 
   useEffect(() => {
     if (hasGenerated && !hasDownloaded) {
@@ -737,10 +694,6 @@ export default function CarouselBuilder({
           onUnsplash={() => activeSlideId && setUnsplashForId(activeSlideId)}
           brandColorOptions={brandColorOptions}
           getAutoTextColors={getAutoTextColors}
-          accentDraft={accentDraft}
-          onAccentDraft={setAccentDraft}
-          watermarkDraft={watermarkDraft}
-          onWatermarkDraft={setWatermarkDraft}
           hasGenerated={hasGenerated}
           isGenerating={isGenerating}
           onGenerate={() => void runGeneration()}

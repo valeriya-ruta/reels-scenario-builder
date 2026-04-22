@@ -20,7 +20,6 @@ import {
   type DragEndEvent,
 } from '@dnd-kit/core';
 import {
-  arrayMove,
   rectSortingStrategy,
   SortableContext,
   sortableKeyboardCoordinates,
@@ -39,6 +38,7 @@ import {
   Loader2,
   Move,
   Plus,
+  X,
 } from 'lucide-react';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '@/lib/carousel/carouselConstants';
 import type { Slide } from '@/lib/carouselTypes';
@@ -48,7 +48,6 @@ import type { BrandFont } from '@/lib/brandFonts';
 import CarouselSlidePreview from '@/components/carousel/CarouselSlidePreview';
 import CarouselEditorTextTab from '@/components/carousel/CarouselEditorTextTab';
 import CarouselEditorBackgroundTab from '@/components/carousel/CarouselEditorBackgroundTab';
-import CarouselEditorStyleTab from '@/components/carousel/CarouselEditorStyleTab';
 import TextAlignToggle from '@/components/carousel/TextAlignToggle';
 import PlacementToggle from '@/components/carousel/PlacementToggle';
 import {
@@ -150,11 +149,6 @@ export default function CarouselEditorLayout({
   onUnsplash,
   brandColorOptions,
   getAutoTextColors,
-  /** Style tab */
-  accentDraft,
-  onAccentDraft,
-  watermarkDraft,
-  onWatermarkDraft,
   /** Generation / download */
   hasGenerated,
   isGenerating,
@@ -176,10 +170,6 @@ export default function CarouselEditorLayout({
   onUnsplash: () => void;
   brandColorOptions: string[];
   getAutoTextColors: (bg: string) => { titleColor: string; bodyColor: string };
-  accentDraft: import('@/lib/brand').BrandAccentStyle;
-  onAccentDraft: (a: import('@/lib/brand').BrandAccentStyle) => void;
-  watermarkDraft: string;
-  onWatermarkDraft: (v: string) => void;
   hasGenerated: boolean;
   isGenerating: boolean;
   onGenerate: () => void;
@@ -190,7 +180,9 @@ export default function CarouselEditorLayout({
   /** One bottom editor UI (tabs + panels + download): avoid duplicating form fields in the DOM. */
   const [isDesktopLayout, setIsDesktopLayout] = useState(false);
   const previewAreaRef = useRef<HTMLDivElement>(null);
+  const desktopPreviewBoxRef = useRef<HTMLDivElement>(null);
   const [previewScale, setPreviewScale] = useState(0.28);
+  const [desktopPreviewScale, setDesktopPreviewScale] = useState(0.25);
 
   const [viewportHeight, setViewportHeight] = useState(() =>
     typeof window === 'undefined' ? 800 : window.innerHeight,
@@ -242,8 +234,6 @@ export default function CarouselEditorLayout({
     pointerB: number;
   } | null>(null);
   const activePointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
-  const canDownload = useMemo(() => slides.some((s) => Boolean(s.generatedImageBase64)), [slides]);
-
   useLayoutEffect(() => {
     const mq = window.matchMedia('(min-width: 768px)');
     const apply = () => setIsDesktopLayout(mq.matches);
@@ -251,12 +241,6 @@ export default function CarouselEditorLayout({
     mq.addEventListener('change', apply);
     return () => mq.removeEventListener('change', apply);
   }, []);
-
-  useEffect(() => {
-    if (!isDesktopLayout || tab !== null) return;
-    const timer = window.setTimeout(() => setTab('text'), 0);
-    return () => window.clearTimeout(timer);
-  }, [isDesktopLayout, tab]);
 
   useEffect(() => {
     if (tab !== 'style' || !styleTabDisabled) return;
@@ -325,7 +309,24 @@ export default function CarouselEditorLayout({
     };
   }, [isDesktopLayout, tab, viewportHeight, slides.length, activeSlideId]);
 
-  const desktopScale = useMemo(() => Math.min(480 / CANVAS_WIDTH, 600 / CANVAS_HEIGHT), []);
+  useLayoutEffect(() => {
+    if (!isDesktopLayout) return;
+    const el = desktopPreviewBoxRef.current;
+    if (!el) return;
+    const update = () => {
+      const w = el.clientWidth;
+      if (w <= 0) return;
+      setDesktopPreviewScale(Math.max(0.06, Math.min(w / CANVAS_WIDTH, 1)));
+    };
+    update();
+    const ro = new ResizeObserver(() => update());
+    ro.observe(el);
+    window.addEventListener('resize', update);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', update);
+    };
+  }, [isDesktopLayout, tab, panelOpen, activeSlideId, slides.length]);
 
   const goSlide = useCallback(
     (delta: number) => {
@@ -503,6 +504,14 @@ export default function CarouselEditorLayout({
     [brandColorOptions],
   );
 
+  const handleEditorTabIconClick = useCallback(
+    (t: EditorTab) => {
+      if (t === 'style' && styleTabDisabled) return;
+      setTab((prev) => (prev === t ? null : t));
+    },
+    [styleTabDisabled],
+  );
+
   const onMobilePhotoUploadSuccess = useCallback(() => {
     if (isDesktopLayout) return;
     setLivePhotoTransform(null);
@@ -524,73 +533,7 @@ export default function CarouselEditorLayout({
     }
   }, [isDesktopLayout]);
 
-  const desktopTabButtons = (
-    <div className="flex shrink-0 border-b border-[color:var(--border)]">
-      {(['text', 'bg', 'style'] as const).map((t) => (
-        (() => {
-          const disabled = t === 'style' && styleTabDisabled;
-          return (
-        <button
-          key={t}
-          type="button"
-          onClick={() => {
-            if (disabled) return;
-            setTab(t);
-          }}
-          className={[
-            'flex-1 px-2 py-3 text-center text-xs font-medium transition md:py-2.5',
-            disabled ? 'cursor-not-allowed opacity-40' : '',
-            tab === t
-              ? 'border-b-2 border-[color:var(--accent)] text-[color:var(--accent)]'
-              : 'text-zinc-500 hover:text-zinc-800 md:hover:text-zinc-800',
-          ].join(' ')}
-        >
-          {tabLabel(t)}
-        </button>
-          );
-        })()
-      ))}
-    </div>
-  );
-
-  const desktopTabPanelScroll = (
-    <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 pb-10 md:pb-3">
-      {tab === 'text' && activeSlide ? (
-        <CarouselEditorTextTab
-          slide={activeSlide}
-          index={activeIndex}
-          totalSlides={slides.length}
-          accentStyle={accentStyle}
-          accentColor={accentColor}
-          onChange={updateSlide}
-          onRemoveSlide={removeSlide}
-          textColorChoices={getTextColorChoices(activeSlide)}
-        />
-      ) : null}
-      {tab === 'bg' && activeSlide ? (
-        <CarouselEditorBackgroundTab
-          slide={activeSlide}
-          brandColorOptions={brandColorOptions}
-          brandVibe={brandSettings.vibe}
-          getAutoTextColors={getAutoTextColors}
-          onChange={updateSlide}
-          onUnsplash={onUnsplash}
-          onPhotoUploadSuccess={onMobilePhotoUploadSuccess}
-        />
-      ) : null}
-      {tab === 'style' ? (
-        <CarouselEditorStyleTab
-          brand={brandSettings}
-          accentDraft={accentDraft}
-          onAccentDraft={onAccentDraft}
-          watermarkDraft={watermarkDraft}
-          onWatermarkDraft={onWatermarkDraft}
-        />
-      ) : null}
-    </div>
-  );
-
-  const mobilePanelContent = activeSlide ? (
+  const tabPanelContent = activeSlide ? (
     tab === 'type' ? (
       <MobileTypeTab slide={activeSlide} onChange={updateSlide} />
     ) : tab === 'text' ? (
@@ -814,14 +757,186 @@ export default function CarouselEditorLayout({
               }
         }
       >
-        <div className="flex min-h-0 flex-1 flex-col md:flex-row md:justify-center md:gap-4 md:px-4 md:pt-0 md:pb-2">
-        {/* Preview column — first on mobile */}
-        <div className="order-1 flex min-h-0 w-full flex-1 flex-col md:order-1 md:max-w-[min(100%,520px)]">
-          <div className="relative flex min-h-0 flex-1 flex-col md:min-h-[min(520px,70vh)]">
-            {/* Mobile: direct flex canvas child (no absolute wrapper), centered in both axes */}
+        {isDesktopLayout ? (
+          <div className="flex min-h-0 flex-1 flex-row px-4 pb-2">
+            <nav
+              className="flex h-full w-[84px] shrink-0 flex-col items-center gap-3 border-r border-black/[0.08] py-4"
+              style={{ background: '#fafaf7' }}
+              aria-label="Панелі редагування"
+            >
+              {(['type', 'text', 'position', 'bg', 'style'] as const).map((t) => {
+                const disabled = t === 'style' && styleTabDisabled;
+                const active = !disabled && tab === t;
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => handleEditorTabIconClick(t)}
+                    className={[
+                      'flex h-[62px] w-[62px] shrink-0 flex-col items-center justify-center gap-1 rounded-[13px] transition-colors',
+                      disabled ? 'cursor-not-allowed opacity-40' : 'cursor-pointer',
+                      active ? 'bg-[#eef1ff]' : 'bg-transparent',
+                    ].join(' ')}
+                    aria-label={tabLabel(t)}
+                    aria-pressed={active}
+                  >
+                    <MobileTabIcon tab={t} active={active} size={29} />
+                    <span
+                      className={
+                        active
+                          ? 'text-[13px] font-medium text-[#4a6cf7]'
+                          : 'text-[13px] font-normal text-[#555]'
+                      }
+                    >
+                      {tabLabel(t)}
+                    </span>
+                  </button>
+                );
+              })}
+            </nav>
+
             <div
-              ref={previewAreaRef}
-              className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-4 md:hidden"
+              className="shrink-0 overflow-hidden border-r border-black/[0.08] bg-white"
+              style={{
+                width: panelOpen ? 320 : 0,
+                transition: 'width 0.2s ease',
+              }}
+            >
+              <div className="flex h-full min-h-0 min-w-[320px] flex-col">
+                {panelOpen && tab !== null ? (
+                  <>
+                    <div className="flex shrink-0 items-center justify-between border-b border-black/[0.06] px-5 py-4">
+                      <span className="text-[15px] font-medium text-zinc-900">{tabLabel(tab)}</span>
+                      <button
+                        type="button"
+                        className="rounded-lg p-0.5 text-zinc-500 transition hover:bg-zinc-100"
+                        onClick={() => setTab(null)}
+                        aria-label="Закрити"
+                      >
+                        <X className="h-5 w-5" strokeWidth={1.75} />
+                      </button>
+                    </div>
+                    <div
+                      className="min-h-0 flex-1 overflow-y-auto px-5 py-4"
+                      style={{ overscrollBehavior: 'contain' }}
+                    >
+                      {tabPanelContent}
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+              <div className="relative flex min-h-[min(520px,70vh)] flex-1 flex-col">
+                <div className="flex min-h-0 flex-1 items-center justify-center p-4">
+                  <div
+                    ref={desktopPreviewBoxRef}
+                    className="relative w-[min(80%,48vh)] shrink-0 overflow-hidden rounded-xl shadow-lg"
+                    style={{ aspectRatio: `${CANVAS_WIDTH} / ${CANVAS_HEIGHT}` }}
+                  >
+                    {activeSlide ? (
+                      <div className="relative h-full w-full">
+                        <CarouselSlidePreview
+                          slide={activeSlide}
+                          brand={brandSettings}
+                          brandFont={brandFont}
+                          scale={desktopPreviewScale}
+                          slideIndex={activeIndex + 1}
+                          totalSlides={slides.length}
+                          photoTransformOverride={effectivePhotoTransform}
+                          isInteractingPhoto={isPhotoInteracting}
+                        />
+                        {hasActivePhoto ? (
+                          <div
+                            className="absolute inset-0 touch-none"
+                            style={{ cursor: isPhotoInteracting ? 'grabbing' : 'grab' }}
+                            tabIndex={0}
+                            onPointerDown={onPhotoPointerDown}
+                            onPointerMove={onPhotoPointerMove}
+                            onPointerUp={onPhotoPointerUp}
+                            onPointerCancel={onPhotoPointerUp}
+                            onWheel={onPhotoWheel}
+                            onKeyDown={onPhotoLayerKeyDown}
+                          />
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  className="absolute top-1/2 left-3 z-[2] -translate-y-1/2 rounded-full border border-[color:var(--border)] bg-white/90 p-2 shadow"
+                  onClick={() => goSlide(-1)}
+                  disabled={activeIndex <= 0}
+                  aria-label="Попередній слайд"
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+                <button
+                  type="button"
+                  className="absolute top-1/2 right-3 z-[2] -translate-y-1/2 rounded-full border border-[color:var(--border)] bg-white/90 p-2 shadow"
+                  onClick={() => goSlide(1)}
+                  disabled={activeIndex >= slides.length - 1}
+                  aria-label="Наступний слайд"
+                >
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={onDragEnd}
+              modifiers={dragModifiers}
+            >
+              <SortableContext items={slides.map((s) => s.id)} strategy={rectSortingStrategy}>
+                <div className="flex w-[72px] shrink-0 flex-col items-center gap-2 overflow-y-auto px-1 py-0">
+                  {slides.map((slide, index) => (
+                    <SortableThumb
+                      key={slide.id}
+                      slide={slide}
+                      index={index}
+                      active={slide.id === activeSlideId}
+                      accentColor={accentColor}
+                      onSelect={() => {
+                        setMobilePositioningMode(false);
+                        setIsPhotoInteracting(false);
+                        setLivePhotoTransform(null);
+                        dragRef.current = null;
+                        pinchRef.current = null;
+                        activePointersRef.current.clear();
+                        setActiveSlideId(slide.id);
+                      }}
+                      size="md"
+                      brandSettings={brandSettings}
+                      brandFont={brandFont}
+                      totalSlides={slides.length}
+                    />
+                  ))}
+                  <button
+                    type="button"
+                    onClick={addSlide}
+                    className="flex h-[78px] w-[62px] shrink-0 items-center justify-center rounded-md border border-dashed border-[color:var(--border)] text-zinc-500 hover:bg-[color:var(--surface)]"
+                    aria-label="Додати слайд"
+                  >
+                    <Plus className="h-5 w-5" />
+                  </button>
+                </div>
+              </SortableContext>
+            </DndContext>
+          </div>
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="order-1 flex min-h-0 w-full flex-1 flex-col">
+              <div className="relative flex min-h-0 flex-1 flex-col">
+                {/* Mobile: direct flex canvas child (no absolute wrapper), centered in both axes */}
+                <div
+                  ref={previewAreaRef}
+                  className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-4 md:hidden"
               onClick={(e) => {
                 if (!mobilePositioningMode) return;
                 if (e.target === e.currentTarget) {
@@ -956,113 +1071,10 @@ export default function CarouselEditorLayout({
                 Готово
               </button>
             ) : null}
-
-            <div className="relative mx-auto hidden overflow-hidden rounded-xl shadow-lg md:block" style={{ width: 480, height: 600 }}>
-              {activeSlide ? (
-                <div className="relative">
-                  <CarouselSlidePreview
-                    slide={activeSlide}
-                    brand={brandSettings}
-                    brandFont={brandFont}
-                    scale={desktopScale}
-                    slideIndex={activeIndex + 1}
-                    totalSlides={slides.length}
-                    photoTransformOverride={effectivePhotoTransform}
-                    isInteractingPhoto={isPhotoInteracting}
-                  />
-                  {hasActivePhoto ? (
-                    <div
-                      className="absolute inset-0 touch-none"
-                      style={{ cursor: isPhotoInteracting ? 'grabbing' : 'grab' }}
-                      tabIndex={0}
-                      onPointerDown={onPhotoPointerDown}
-                      onPointerMove={onPhotoPointerMove}
-                      onPointerUp={onPhotoPointerUp}
-                      onPointerCancel={onPhotoPointerUp}
-                      onWheel={onPhotoWheel}
-                      onKeyDown={onPhotoLayerKeyDown}
-                    />
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-
-            <button
-              type="button"
-              className="absolute top-1/2 z-[2] hidden -translate-y-1/2 rounded-full border border-[color:var(--border)] bg-white/90 p-2 shadow md:-left-12 md:block"
-              onClick={() => goSlide(-1)}
-              disabled={activeIndex <= 0}
-              aria-label="Попередній слайд"
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </button>
-            <button
-              type="button"
-              className="absolute top-1/2 z-[2] hidden -translate-y-1/2 rounded-full border border-[color:var(--border)] bg-white/90 p-2 shadow md:-right-12 md:block"
-              onClick={() => goSlide(1)}
-              disabled={activeIndex >= slides.length - 1}
-              aria-label="Наступний слайд"
-            >
-              <ChevronRight className="h-5 w-5" />
-            </button>
           </div>
-
-          <p className="mt-2 hidden text-sm text-zinc-500 md:block">
-            {activeIndex + 1} / {slides.length}
-          </p>
         </div>
-
-        {isDesktopLayout ? (
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={onDragEnd}
-            modifiers={dragModifiers}
-          >
-            <SortableContext items={slides.map((s) => s.id)} strategy={rectSortingStrategy}>
-              <div className="order-2 flex shrink-0 flex-row items-center gap-2 overflow-x-auto px-3 py-2 md:order-2 md:w-[72px] md:flex-col md:overflow-y-auto md:px-1 md:py-0">
-                {slides.map((slide, index) => (
-                  <SortableThumb
-                    key={slide.id}
-                    slide={slide}
-                    index={index}
-                    active={slide.id === activeSlideId}
-                    accentColor={accentColor}
-                    onSelect={() => {
-                      setMobilePositioningMode(false);
-                      setIsPhotoInteracting(false);
-                      setLivePhotoTransform(null);
-                      dragRef.current = null;
-                      pinchRef.current = null;
-                      activePointersRef.current.clear();
-                      setActiveSlideId(slide.id);
-                    }}
-                    size={isDesktopLayout ? 'md' : 'sm'}
-                    brandSettings={brandSettings}
-                    brandFont={brandFont}
-                    totalSlides={slides.length}
-                  />
-                ))}
-                <button
-                  type="button"
-                  onClick={addSlide}
-                  className="flex h-[58px] w-[46px] shrink-0 items-center justify-center rounded-md border border-dashed border-[color:var(--border)] text-zinc-500 hover:bg-[color:var(--surface)] md:h-[78px] md:w-[62px]"
-                  aria-label="Додати слайд"
-                >
-                  <Plus className="h-5 w-5" />
-                </button>
-              </div>
-            </SortableContext>
-          </DndContext>
-        ) : null}
-
-        {isDesktopLayout ? (
-          <div className="hidden min-h-0 w-[360px] max-w-[38vw] shrink-0 overflow-hidden rounded-2xl border border-[color:var(--border)] bg-white shadow-[0_4px_24px_rgba(0,0,0,0.06)] md:flex md:flex-col">
-            {desktopTabButtons}
-            {desktopTabPanelScroll}
           </div>
-        ) : null}
-        </div>
+        )}
       </div>
 
       {!isDesktopLayout ? (
@@ -1132,7 +1144,7 @@ export default function CarouselEditorLayout({
                 paddingBottom: 'calc(20px + env(safe-area-inset-bottom))',
               }}
             >
-              {mobilePanelContent}
+              {tabPanelContent}
             </div>
           </div>
           <div className="grid grid-cols-5 gap-1 px-2 py-2">
@@ -1145,7 +1157,7 @@ export default function CarouselEditorLayout({
                 type="button"
                 onClick={() => {
                   if (disabled) return;
-                  setTab((prev) => (prev === t ? null : t));
+                  handleEditorTabIconClick(t);
                 }}
                 className={[
                   'flex min-h-11 w-full min-w-0 flex-col items-center justify-center rounded-[10px] px-2 py-2',
@@ -1262,47 +1274,40 @@ function MobileOverlayStyleTab({
   );
 }
 
-function MobileTabIcon({ tab, active }: { tab: EditorTab; active: boolean }) {
+function MobileTabIcon({ tab, active, size = 22 }: { tab: EditorTab; active: boolean; size?: number }) {
   const stroke = active ? '#4a6cf7' : '#555';
-  if (tab === 'type') return <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="4" y="5" width="16" height="14" rx="2" stroke={stroke} strokeWidth="1.6"/><path d="M4 9h16" stroke={stroke} strokeWidth="1.6"/></svg>;
-  if (tab === 'text') return <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6 6h12M12 6v12" stroke={stroke} strokeWidth="1.6" strokeLinecap="round"/></svg>;
-  if (tab === 'position') return <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M7 12h10M9 17h6" stroke={stroke} strokeWidth="1.6" strokeLinecap="round"/></svg>;
-  if (tab === 'bg') return <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="4" y="5" width="16" height="14" rx="2" stroke={stroke} strokeWidth="1.6"/><circle cx="9" cy="10" r="1.5" stroke={stroke} strokeWidth="1.6"/><path d="M7 17l10-8" stroke={stroke} strokeWidth="1.6"/></svg>;
-  return <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 4a8 8 0 1 1 0 16V4z" stroke={stroke} strokeWidth="1.6"/><circle cx="12" cy="12" r="8" stroke={stroke} strokeWidth="1.6"/></svg>;
-}
-
-function DownloadButton({
-  hasGenerated,
-  isGenerating,
-  onGenerate,
-  onDownloadAll,
-}: {
-  hasGenerated: boolean;
-  isGenerating: boolean;
-  onGenerate: () => void;
-  onDownloadAll: () => void;
-}) {
-  if (!hasGenerated) {
+  const sw = size >= 26 ? 2 : 1.6;
+  if (tab === 'type')
     return (
-      <button
-        type="button"
-        disabled={isGenerating}
-        onClick={onGenerate}
-        className="btn-primary flex w-full items-center justify-center gap-2 rounded-xl bg-[color:var(--accent)] py-3 text-sm font-medium text-white transition hover:brightness-110 disabled:opacity-50"
-      >
-        {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-        {isGenerating ? 'Генеруємо…' : 'Згенерувати карусель'}
-      </button>
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <rect x="4" y="5" width="16" height="14" rx="2" stroke={stroke} strokeWidth={sw} />
+        <path d="M4 9h16" stroke={stroke} strokeWidth={sw} />
+      </svg>
     );
-  }
+  if (tab === 'text')
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <path d="M6 6h12M12 6v12" stroke={stroke} strokeWidth={sw} strokeLinecap="round" />
+      </svg>
+    );
+  if (tab === 'position')
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <path d="M4 7h16M7 12h10M9 17h6" stroke={stroke} strokeWidth={sw} strokeLinecap="round" />
+      </svg>
+    );
+  if (tab === 'bg')
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <rect x="4" y="5" width="16" height="14" rx="2" stroke={stroke} strokeWidth={sw} />
+        <circle cx="9" cy="10" r="1.5" stroke={stroke} strokeWidth={sw} />
+        <path d="M7 17l10-8" stroke={stroke} strokeWidth={sw} />
+      </svg>
+    );
   return (
-    <button
-      type="button"
-      onClick={onDownloadAll}
-      className="btn-primary flex w-full items-center justify-center gap-2 rounded-xl bg-[color:var(--accent)] py-3 text-sm font-medium text-white transition hover:brightness-110"
-    >
-      <Download className="h-4 w-4" />
-      Завантажити всі
-    </button>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d="M12 4a8 8 0 1 1 0 16V4z" stroke={stroke} strokeWidth={sw} />
+      <circle cx="12" cy="12" r="8" stroke={stroke} strokeWidth={sw} />
+    </svg>
   );
 }

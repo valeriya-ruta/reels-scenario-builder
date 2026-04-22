@@ -10,11 +10,9 @@ import type { Slide } from '@/lib/carouselTypes';
 export default function CarouselPageClient({
   initialBrandSettings,
   carouselProject,
-  initialWatermarkHandle,
 }: {
   initialBrandSettings: BrandSettings | null;
   carouselProject: { id: string; name: string; slides: Slide[] };
-  initialWatermarkHandle: string;
 }) {
   const { brandSettings, loading, refetchBrand, setBrandSettings } = useBrandStore();
   const effectiveBrandSettings = brandSettings ?? initialBrandSettings;
@@ -48,7 +46,6 @@ export default function CarouselPageClient({
         projectId={carouselProject.id}
         initialProjectName={carouselProject.name}
         initialSlides={carouselProject.slides}
-        initialWatermarkHandle={initialWatermarkHandle}
       />
     </div>
   );

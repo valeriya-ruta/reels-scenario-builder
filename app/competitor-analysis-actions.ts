@@ -1,8 +1,12 @@
 'use server';
 
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import { requireAuth } from '@/lib/auth';
 import { optionalServerEnv, requireServerEnv } from '@/lib/env';
+import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
+import ffmpeg from 'fluent-ffmpeg';
 import { computeTopReelsPayload } from '@/lib/competitorScoring';
 import {
   apifyItemsToRawReels,
@@ -19,12 +23,165 @@ import {
   type IdeaScanSummary,
   type IdeaTopReelsPayload,
 } from '@/lib/ideaScanTypes';
-import { transcribeMediaFromUrl } from '@/lib/ai/sttProvider';
 import { scanLimitFree, scanLimitPaid, transcribeLimit } from '@/lib/ratelimit';
 import { userHasPaidScanAccess } from '@/lib/userScanTier';
 
 const APIFY_BASE = 'https://api.apify.com/v2';
 const FALLBACK_REEL_ACTOR_ID = 'xMc5Ga1oCONPmWJIa';
+const TRANSCRIBE_MAX_DURATION_SEC = 300;
+const FFMPEG_TIMEOUT_MS = 60_000;
+const MAX_AUDIO_BUFFER_BYTES = 25 * 1024 * 1024;
+const EXTRACT_AUDIO_ERROR = 'Не вдалося витягнути аудіо. Спробуй інший рілс.';
+const REEL_TOO_LONG_ERROR =
+  'Це відео задовге для транскрипції (ймовірно, запис трансляції). Спробуй інший рілс.';
+const REEL_NO_AUDIO_ERROR = 'Цей рілс без звуку — нічого транскрибувати.';
+
+ffmpeg.setFfmpegPath(ffmpegInstaller.path);
+const ffprobePath = join(
+  dirname(ffmpegInstaller.path),
+  process.platform === 'win32' ? 'ffprobe.exe' : 'ffprobe'
+);
+if (existsSync(ffprobePath)) {
+  ffmpeg.setFfprobePath(ffprobePath);
+}
+
+interface GroqTranscriptionResponse {
+  text?: string;
+}
+
+async function probeReelMedia(url: string): Promise<{ durationSec: number; hasAudio: boolean }> {
+  return new Promise((resolve, reject) => {
+    ffmpeg.ffprobe(url, (error, metadata) => {
+      if (error) {
+        reject(new Error(EXTRACT_AUDIO_ERROR));
+        return;
+      }
+
+      const hasAudio = (metadata.streams ?? []).some((stream) => stream.codec_type === 'audio');
+      const durationRaw = metadata.format?.duration;
+      const durationSec =
+        typeof durationRaw === 'number'
+          ? durationRaw
+          : typeof durationRaw === 'string'
+            ? Number(durationRaw)
+            : 0;
+      resolve({
+        durationSec: Number.isFinite(durationSec) && durationSec > 0 ? durationSec : 0,
+        hasAudio,
+      });
+    });
+  });
+}
+
+async function extractAudioMp3ToBuffer(url: string): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let totalBytes = 0;
+    const chunks: Buffer[] = [];
+
+    const command = ffmpeg(url)
+      .noVideo()
+      .audioCodec('libmp3lame')
+      .audioFrequency(16000)
+      .audioChannels(1)
+      .audioBitrate('64k')
+      .format('mp3')
+      .duration(TRANSCRIBE_MAX_DURATION_SEC);
+
+    const fail = () => {
+      if (settled) return;
+      settled = true;
+      reject(new Error(EXTRACT_AUDIO_ERROR));
+    };
+
+    const timeout = setTimeout(() => {
+      command.kill('SIGKILL');
+      fail();
+    }, FFMPEG_TIMEOUT_MS);
+
+    command.on('error', () => {
+      clearTimeout(timeout);
+      fail();
+    });
+
+    const stream = command.pipe();
+    stream.on('data', (chunk: Buffer) => {
+      if (settled) return;
+      totalBytes += chunk.length;
+      if (totalBytes > MAX_AUDIO_BUFFER_BYTES) {
+        command.kill('SIGKILL');
+        clearTimeout(timeout);
+        fail();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    stream.on('error', () => {
+      clearTimeout(timeout);
+      fail();
+    });
+    stream.on('end', () => {
+      clearTimeout(timeout);
+      if (settled) return;
+      settled = true;
+      const result = Buffer.concat(chunks);
+      if (result.length === 0) {
+        reject(new Error(EXTRACT_AUDIO_ERROR));
+        return;
+      }
+      resolve(result);
+    });
+  });
+}
+
+async function transcribeCompetitorMediaFromUrl(url: string): Promise<string> {
+  const { durationSec, hasAudio } = await probeReelMedia(url);
+  if (!hasAudio) {
+    throw new Error(REEL_NO_AUDIO_ERROR);
+  }
+  if (durationSec > TRANSCRIBE_MAX_DURATION_SEC) {
+    throw new Error(REEL_TOO_LONG_ERROR);
+  }
+
+  const audioBuffer = await extractAudioMp3ToBuffer(url);
+  const apiKey = requireServerEnv('GROQ_API_KEY');
+  const formData = new FormData();
+  formData.append('model', 'whisper-large-v3-turbo');
+  formData.append('response_format', 'verbose_json');
+  formData.append('temperature', '0');
+  formData.append(
+    'file',
+    new File([new Uint8Array(audioBuffer)], 'reel-audio.mp3', { type: 'audio/mpeg' })
+  );
+
+  const sttRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: formData,
+  });
+  if (!sttRes.ok) {
+    const body = await sttRes.text();
+    throw new Error(`Помилка транскрипції (${sttRes.status}): ${body.slice(0, 500)}`);
+  }
+
+  const parsed = (await sttRes.json()) as GroqTranscriptionResponse;
+  const transcript = (parsed.text ?? '').trim();
+  if (!transcript) {
+    throw new Error('Transcript is empty. Try another reel URL.');
+  }
+  return transcript;
+}
+
+function hasPlaysFieldInTopReels(row: IdeaScanRow | null | undefined): boolean {
+  const items = row?.top_reels?.items;
+  if (!Array.isArray(items) || items.length === 0) return false;
+  return items.some((item) => {
+    if (!item || typeof item !== 'object') return false;
+    return typeof (item as { plays?: unknown }).plays === 'number';
+  });
+}
 
 function normalizeHandle(raw: string): string {
   let v = raw.trim();
@@ -70,8 +227,7 @@ export async function listIdeaScansForUser(): Promise<IdeaScanSummary[]> {
       followers_count: row.followers_count,
       scanned_at: row.scanned_at,
       saved_reel_ids: row.saved_reel_ids ?? [],
-      avgViewsDisplay: top?.summary?.avgViewsDisplay ?? '—',
-      avgErDisplay: top?.summary?.avgErDisplay ?? '—',
+      avgPlaysDisplay: top?.summary?.avgPlaysDisplay ?? '—',
     };
   }) as IdeaScanSummary[];
 }
@@ -117,7 +273,7 @@ export async function startCompetitorScan(inputHandle: string): Promise<StartSca
       .limit(1)
       .maybeSingle();
 
-    if (cached) {
+    if (cached && hasPlaysFieldInTopReels(cached as IdeaScanRow)) {
       return { ok: true, kind: 'cached', scan: cached as IdeaScanRow };
     }
 
@@ -165,7 +321,7 @@ export async function pollCompetitorScan(
       .limit(1)
       .maybeSingle();
 
-    if (raced) {
+    if (raced && hasPlaysFieldInTopReels(raced as IdeaScanRow)) {
       return { ok: true, kind: 'ready', scan: raced as IdeaScanRow };
     }
 
@@ -216,7 +372,7 @@ export async function pollCompetitorScan(
       .limit(1)
       .maybeSingle();
 
-    if (racedBeforeInsert) {
+    if (racedBeforeInsert && hasPlaysFieldInTopReels(racedBeforeInsert as IdeaScanRow)) {
       return { ok: true, kind: 'ready', scan: racedBeforeInsert as IdeaScanRow };
     }
 
@@ -379,11 +535,11 @@ export async function transcribeCompetitorReelVideo(
       return { ok: false, error: 'Ліміт запитів вичерпано. Спробуй пізніше.' };
     }
 
-    const result = await transcribeMediaFromUrl(url);
+    const transcript = await transcribeCompetitorMediaFromUrl(url);
     if (ctx) {
-      await mergeIdeaScanReelTranscript(ctx.scanId, ctx.shortCode, result.transcript);
+      await mergeIdeaScanReelTranscript(ctx.scanId, ctx.shortCode, transcript);
     }
-    return { ok: true, transcript: result.transcript };
+    return { ok: true, transcript };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }

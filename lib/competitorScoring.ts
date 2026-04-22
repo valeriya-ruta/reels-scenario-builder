@@ -7,17 +7,16 @@ export interface RawReelInput {
   hook: string;
   templatePattern: string;
   templateLines: string[];
-  videoViewCount: number;
-  saves: number;
+  plays: number;
   likes: number;
   comments: number;
 }
 
-const W_VIEW = 0.4;
+const W_PLAY = 0.4;
 const W_LIKE = 0.35;
 const W_COMMENT = 0.25;
-/** When `likes === -1` (hidden), like weight is dropped: view + comment only. */
-const W_VIEW_HIDDEN_LIKES = 0.55;
+/** When `likes === -1` (hidden), like weight is dropped: play + comment only. */
+const W_PLAY_HIDDEN_LIKES = 0.55;
 const W_COMMENT_HIDDEN_LIKES = 0.45;
 
 export function formatCompactCount(n: number): string {
@@ -43,59 +42,53 @@ function percentileCap(sortedAsc: number[], pIndex: number): number {
 }
 
 /**
- * accountAvgViews: mean of min(view, P80) over reels with views &gt; 0.
- * Same cap rule as before — used as denominator for viewScore.
+ * accountAvgPlays: mean of min(play, P80) over reels with plays &gt; 0.
+ * Same cap rule as before — used as denominator for playScore.
  */
-function accountAvgViewsFromReels(reels: RawReelInput[]): number {
-  const pool = reels.filter((r) => r.videoViewCount > 0);
+function accountAvgPlaysFromReels(reels: RawReelInput[]): number {
+  const pool = reels.filter((r) => r.plays > 0);
   const n = pool.length;
   if (n === 0) return 0;
 
-  const viewsAsc = [...pool.map((r) => r.videoViewCount)].sort((a, b) => a - b);
-  const cap = percentileCap(viewsAsc, Math.floor(n * 0.8));
+  const playsAsc = [...pool.map((r) => r.plays)].sort((a, b) => a - b);
+  const cap = percentileCap(playsAsc, Math.floor(n * 0.8));
 
-  let sumCappedV = 0;
+  let sumCappedP = 0;
   for (const r of pool) {
-    sumCappedV += Math.min(r.videoViewCount, cap);
+    sumCappedP += Math.min(r.plays, cap);
   }
-  return sumCappedV / n;
+  return sumCappedP / n;
 }
 
-function viralScoreForReel(reel: RawReelInput, accountAvgViews: number): number {
-  if (reel.videoViewCount <= 0 || accountAvgViews <= 0) return 0;
+function viralScoreForReel(reel: RawReelInput, accountAvgPlays: number): number {
+  if (reel.plays <= 0 || accountAvgPlays <= 0) return 0;
 
-  const viewScore = reel.videoViewCount / accountAvgViews;
-  const commentRatio = reel.comments / reel.videoViewCount;
+  const playScore = reel.plays / accountAvgPlays;
+  const commentRatio = reel.comments / reel.plays;
 
   if (reel.likes === -1) {
-    return viewScore * W_VIEW_HIDDEN_LIKES + commentRatio * W_COMMENT_HIDDEN_LIKES;
+    return playScore * W_PLAY_HIDDEN_LIKES + commentRatio * W_COMMENT_HIDDEN_LIKES;
   }
 
-  const likeRatio = reel.likes / reel.videoViewCount;
+  const likeRatio = reel.likes / reel.plays;
   return (
-    viewScore * W_VIEW + likeRatio * W_LIKE + commentRatio * W_COMMENT
+    playScore * W_PLAY + likeRatio * W_LIKE + commentRatio * W_COMMENT
   );
 }
 
-function erPercent(reel: RawReelInput): number {
-  const v = Math.max(1, reel.videoViewCount);
-  const likes = reel.likes < 0 ? 0 : reel.likes;
-  return ((likes + reel.saves + reel.comments) / v) * 100;
-}
-
-/** «Вірусний» only when reel views ≥ 2× account followers (scoring uses ratios, unchanged). */
+/** «Вірусний» only when reel plays ≥ 2× account followers (scoring uses ratios, unchanged). */
 function isReelViralByFollowerThreshold(
   reel: RawReelInput,
   followersCount: number
 ): boolean {
   const fc = Math.max(0, Math.round(followersCount));
-  if (fc <= 0 || reel.videoViewCount <= 0) return false;
-  return reel.videoViewCount >= 2 * fc;
+  if (fc <= 0 || reel.plays <= 0) return false;
+  return reel.plays >= 2 * fc;
 }
 
 /**
  * Computes top reels and summary from raw Apify-normalized rows.
- * Reels with videoViewCount === 0 are excluded (no ratios).
+ * Reels with plays === 0 are excluded (no ratios).
  * @param followersCount — profile followers from the scan; used only for `isViral` / `qualifiedCount`.
  */
 export function computeTopReelsPayload(
@@ -103,21 +96,14 @@ export function computeTopReelsPayload(
   followersCount: number
 ): IdeaTopReelsPayload {
   const followerCountSafe = Math.max(0, Math.round(followersCount));
-  const accountAvgViews = accountAvgViewsFromReels(reels);
-  const pool = reels.filter((r) => r.videoViewCount > 0);
+  const accountAvgPlays = accountAvgPlaysFromReels(reels);
+  const pool = reels.filter((r) => r.plays > 0);
   const reelsAnalyzed = pool.length;
-
-  let sumEr = 0;
-  for (const r of pool) {
-    sumEr += erPercent(r);
-  }
-  const avgErDisplay =
-    reelsAnalyzed > 0 ? `${(sumEr / reelsAnalyzed).toFixed(1)}%` : '0%';
 
   const scored = pool
     .map((r) => ({
       reel: r,
-      viralScore: viralScoreForReel(r, accountAvgViews),
+      viralScore: viralScoreForReel(r, accountAvgPlays),
     }))
     .sort((a, b) => b.viralScore - a.viralScore)
     .slice(0, 10);
@@ -136,12 +122,9 @@ export function computeTopReelsPayload(
       hook: r.hook,
       templatePattern: r.templatePattern,
       templateLines: r.templateLines,
-      videoViewCount: r.videoViewCount,
-      savesCount: r.saves,
+      plays: r.plays,
       likesCount: r.likes,
       commentsCount: r.comments,
-      erPercent: erPercent(r),
-      viralScore: s.viralScore,
       isViral: isReelViralByFollowerThreshold(r, followerCountSafe),
     };
   });
@@ -149,8 +132,7 @@ export function computeTopReelsPayload(
   return {
     summary: {
       reelsAnalyzed,
-      avgViewsDisplay: formatCompactCount(accountAvgViews),
-      avgErDisplay,
+      avgPlaysDisplay: formatCompactCount(accountAvgPlays),
       qualifiedCount,
     },
     items,
