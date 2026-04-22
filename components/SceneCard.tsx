@@ -110,7 +110,9 @@ export default function SceneCard({
   shouldGlow = false,
 }: SceneCardProps) {
   const onDeleteRef = useRef(onDelete);
-  onDeleteRef.current = onDelete;
+  useEffect(() => {
+    onDeleteRef.current = onDelete;
+  }, [onDelete]);
 
   const sortableDisabled =
     dragDisabled || isOptimisticSceneId(scene.id);

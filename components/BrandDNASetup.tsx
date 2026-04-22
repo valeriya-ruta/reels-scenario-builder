@@ -355,14 +355,16 @@ export default function BrandDNASetup({
     palette,
     accentStyle,
   });
-  persistRef.current = {
-    theme,
-    vibe,
-    favHex,
-    fontId,
-    palette,
-    accentStyle,
-  };
+  useEffect(() => {
+    persistRef.current = {
+      theme,
+      vibe,
+      favHex,
+      fontId,
+      palette,
+      accentStyle,
+    };
+  }, [theme, vibe, favHex, fontId, palette, accentStyle]);
 
   const upsertBrandSettings = useCallback(async (): Promise<boolean> => {
     const supabase = createClient();

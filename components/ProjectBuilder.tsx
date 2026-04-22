@@ -24,7 +24,11 @@ export default function ProjectBuilder({
   backLabel,
 }: ProjectBuilderProps) {
   const { state, clearResult } = useRantResults();
-  const [project, setProject] = useState(initialProject);
+  const [project, setProject] = useState(() =>
+    initialProject.scenario_unseen
+      ? { ...initialProject, scenario_unseen: false }
+      : initialProject,
+  );
   const [scenes, setScenes] = useState(initialScenes);
   const [locations, setLocations] = useState(initialLocations);
   const [focusSceneId, setFocusSceneId] = useState<string | null>(null);
@@ -39,7 +43,6 @@ export default function ProjectBuilder({
   useEffect(() => {
     if (!initialProject.scenario_unseen) return;
     void markProjectScenarioSeen(initialProject.id);
-    setProject((p) => ({ ...p, scenario_unseen: false }));
   }, [initialProject.id, initialProject.scenario_unseen]);
 
   return (
