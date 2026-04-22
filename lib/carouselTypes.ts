@@ -56,6 +56,10 @@ export type Slide = {
   bgPhotoTransform?: BgPhotoTransform;
   titleColor: string;
   bodyColor: string;
+  /** True after the user manually picks text color in the editor. */
+  textColorUserSet?: boolean;
+  /** True once auto-contrast has already been applied for this slide. */
+  textColorAutoSet?: boolean;
   generatedImageBase64: string | null;
   /** Photo overlay mode; `null` when background is not a photo. */
   overlayType: SlideOverlayType | null;

@@ -28,8 +28,76 @@ import {
   getBgPhotoTransform,
   normalizeBgPhotoTransform,
 } from '@/lib/carousel/bgPhotoTransform';
+import { createClient } from '@/lib/supabaseClient';
 
 const MAX_SLIDES = 20;
+
+class CarouselGenerationError extends Error {
+  status?: number;
+  responseBody?: string;
+
+  constructor(message: string, status?: number, responseBody?: string) {
+    super(message);
+    this.name = 'CarouselGenerationError';
+    this.status = status;
+    this.responseBody = responseBody;
+  }
+}
+
+type NormalizedGenerationError = {
+  message: string;
+  status?: number;
+  responseBody?: string;
+  stack?: string;
+  isNetworkError: boolean;
+};
+
+function normalizeGenerationError(error: unknown): NormalizedGenerationError {
+  if (error instanceof CarouselGenerationError) {
+    return {
+      message: error.message || 'Помилка генерації',
+      status: error.status,
+      responseBody: error.responseBody,
+      stack: error.stack,
+      isNetworkError: false,
+    };
+  }
+  if (error instanceof Error) {
+    const networkHint = /network|fetch|failed to fetch|load failed|connection/i.test(error.message);
+    return {
+      message: error.message || 'Невідома помилка',
+      stack: error.stack,
+      isNetworkError: networkHint,
+    };
+  }
+  return {
+    message: typeof error === 'string' ? error : 'Невідома помилка',
+    isNetworkError: false,
+  };
+}
+
+function getFriendlyGenerationErrorMessage(err: NormalizedGenerationError): { main: string; detail: string | null } {
+  const status = err.status;
+  if (status === 401 || status === 403) {
+    return { main: 'Session expired, please reload', detail: null };
+  }
+  if (status === 429) {
+    return { main: 'Too many requests, try again in a moment', detail: null };
+  }
+  if (status === 413 || /payload too large|entity too large|request entity too large/i.test(err.message)) {
+    return { main: 'Image too large, try a smaller file', detail: null };
+  }
+  if (status === 504 || /timeout|timed out/i.test(err.message)) {
+    return { main: 'Generation took too long, try fewer slides', detail: null };
+  }
+  if (err.isNetworkError) {
+    return { main: 'Connection issue, check your internet', detail: null };
+  }
+  return {
+    main: 'Не вдалося згенерувати слайди.',
+    detail: err.message || null,
+  };
+}
 
 function isCarouselEmpty(slides: Slide[]): boolean {
   return slides.every((s) => !s.title.trim() && !s.body.trim() && !s.generatedImageBase64);
@@ -206,9 +274,11 @@ export default function CarouselBuilder({
   const [hasGenerated, setHasGenerated] = useState(false);
   const [hasDownloaded, setHasDownloaded] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [validationErrorDetail, setValidationErrorDetail] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [unsplashForId, setUnsplashForId] = useState<string | null>(null);
   const [pendingRantOutput, setPendingRantOutput] = useState<CarouselRantOutput | null>(null);
+  const supabase = useMemo(() => createClient(), []);
 
   const slideListTopRef = useRef<HTMLDivElement | null>(null);
   const slidesRef = useRef<Slide[]>(slides);
@@ -299,13 +369,6 @@ export default function CarouselBuilder({
   const canDownload = useMemo(() => slides.some((s) => Boolean(s.generatedImageBase64)), [slides]);
   const brandPalette = useMemo(() => getCarouselBrandPalette(brandSettings), [brandSettings]);
 
-  const getAutoTextColors = useCallback(
-    (backgroundColor: string) => {
-      return resolveTitleAndBodyColors('color', backgroundColor, brandPalette);
-    },
-    [brandPalette],
-  );
-
   const updateSlide = useCallback((id: string, patch: Partial<Slide>) => {
     setSlides((prev) =>
       prev.map((s) => {
@@ -316,8 +379,51 @@ export default function CarouselBuilder({
             getBgPhotoTransform(nextPatch.bgPhotoTransform ?? undefined),
           );
         }
-        const next = { ...s, ...nextPatch };
-        const resolved = resolveSlideVisualColors(next, prev.findIndex((x) => x.id === s.id), prev.length, brandPalette);
+        const textColorWasManuallySet =
+          nextPatch.titleColor !== undefined || nextPatch.bodyColor !== undefined;
+        const next = {
+          ...s,
+          ...nextPatch,
+          textColorUserSet: textColorWasManuallySet ? true : s.textColorUserSet,
+        };
+        const slideIndex = prev.findIndex((x) => x.id === s.id);
+        const resolved = resolveSlideVisualColors(next, slideIndex, prev.length, brandPalette);
+        const visualPatchChanged =
+          nextPatch.backgroundType !== undefined ||
+          nextPatch.backgroundColor !== undefined ||
+          nextPatch.gradientMidColor !== undefined ||
+          nextPatch.gradientEndColor !== undefined ||
+          nextPatch.backgroundImageUrl !== undefined ||
+          nextPatch.backgroundImageBase64 !== undefined ||
+          nextPatch.overlayType !== undefined ||
+          nextPatch.overlayColor !== undefined ||
+          nextPatch.overlayOpacity !== undefined ||
+          nextPatch.hasBackgroundOverride !== undefined;
+        const hasActualImage =
+          next.backgroundType === 'image' &&
+          Boolean(
+            (next.backgroundImageUrl && next.backgroundImageUrl.trim().length > 0) ||
+              (next.backgroundImageBase64 && next.backgroundImageBase64.trim().length > 0),
+          );
+        const canAutoContrast =
+          visualPatchChanged &&
+          next.textColorUserSet !== true &&
+          next.textColorAutoSet !== true &&
+          (next.backgroundType !== 'image' || hasActualImage);
+        if (canAutoContrast) {
+          const auto = resolveTitleAndBodyColors(
+            next.backgroundType === 'image' ? 'image' : next.backgroundType,
+            resolved.backgroundColor,
+            brandPalette,
+          );
+          return {
+            ...next,
+            ...resolved,
+            titleColor: auto.titleColor,
+            bodyColor: auto.bodyColor,
+            textColorAutoSet: true,
+          };
+        }
         return { ...next, ...resolved };
       }),
     );
@@ -372,18 +478,22 @@ export default function CarouselBuilder({
     const valid = slides.some((s) => s.title.trim().length > 0 || s.body.trim().length > 0);
     if (!valid) {
       setValidationError('Додай заголовок або текст хоча б на одному слайді.');
+      setValidationErrorDetail(null);
       return;
     }
     setValidationError(null);
+    setValidationErrorDetail(null);
     setIsGenerating(true);
     setGeneratingIndex(0);
     const snapshot = slides;
     setDoneMask(snapshot.map(() => false));
     setHasGenerated(false);
+    let currentSlideIndex = 0;
 
     const total = snapshot.length;
     try {
       for (let i = 0; i < snapshot.length; i++) {
+        currentSlideIndex = i;
         setGeneratingIndex(i);
         const s = snapshot[i];
         const body: Record<string, unknown> = {
@@ -428,9 +538,19 @@ export default function CarouselBuilder({
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(body),
         });
-        const data = (await res.json()) as { image_base64?: string; error?: string };
-        if (!res.ok || !data.image_base64) {
-          throw new Error(data.error ?? 'Помилка генерації');
+        const responseText = await res.text();
+        let data: { image_base64?: string; error?: string } = {};
+        try {
+          data = responseText ? (JSON.parse(responseText) as { image_base64?: string; error?: string }) : {};
+        } catch {
+          data = {};
+        }
+
+        if (!res.ok) {
+          throw new CarouselGenerationError(data.error ?? `HTTP ${res.status}`, res.status, responseText);
+        }
+        if (!data.image_base64) {
+          throw new CarouselGenerationError(data.error ?? 'Помилка генерації', res.status, responseText);
         }
         setSlides((prev) =>
           prev.map((row, j) => (j === i ? { ...row, generatedImageBase64: data.image_base64! } : row)),
@@ -444,8 +564,52 @@ export default function CarouselBuilder({
       setHasGenerated(true);
       setHasDownloaded(false);
     } catch (e) {
-      console.error(e);
-      setValidationError('Не вдалося згенерувати слайди.');
+      const normalizedError = normalizeGenerationError(e);
+      const errorContext = {
+        target: 'carousel',
+        operation: 'generate-slide',
+        projectId,
+        totalSlides: snapshot.length,
+        generatingIndex: currentSlideIndex,
+        slideType: snapshot[currentSlideIndex]
+          ? resolveSlideType(snapshot[currentSlideIndex], currentSlideIndex, snapshot.length)
+          : null,
+        hasBackgroundImages: snapshot.some((slide) => slide.backgroundType === 'image' && Boolean(slide.backgroundImageBase64 || slide.backgroundImageUrl)),
+        imageBase64SlidesCount: snapshot.filter((slide) => Boolean(slide.backgroundImageBase64)).length,
+      };
+      console.error('[carousel/generation] Failed to generate carousel.', {
+        message: normalizedError.message,
+        status: normalizedError.status,
+        responseBody: normalizedError.responseBody,
+        stack: normalizedError.stack,
+        context: errorContext,
+      });
+      void (async () => {
+        try {
+          const { data: userData } = await supabase.auth.getUser();
+          const userId = userData.user?.id ?? null;
+          const { error: logError } = await supabase.from('error_logs').insert({
+            user_id: userId,
+            timestamp: new Date().toISOString(),
+            error_message: normalizedError.message,
+            error_stack: normalizedError.stack ?? null,
+            context: {
+              ...errorContext,
+              status: normalizedError.status ?? null,
+              responseBody: normalizedError.responseBody ?? null,
+            },
+          });
+          if (logError) {
+            console.warn('[carousel/generation] Failed to write to error_logs:', logError);
+          }
+        } catch (logFailure) {
+          console.warn('[carousel/generation] Error while logging to Supabase:', logFailure);
+        }
+      })();
+
+      const mappedError = getFriendlyGenerationErrorMessage(normalizedError);
+      setValidationError(mappedError.main);
+      setValidationErrorDetail(mappedError.detail);
     } finally {
       setIsGenerating(false);
       setGeneratingIndex(0);
@@ -606,6 +770,7 @@ export default function CarouselBuilder({
       {validationError && (
         <p className="hidden px-4 text-sm text-red-600 md:block" role="alert">
           {validationError}
+          {validationErrorDetail ? <span className="mt-1 block text-xs text-red-500/90">{validationErrorDetail}</span> : null}
         </p>
       )}
 
@@ -693,12 +858,12 @@ export default function CarouselBuilder({
           onDragEnd={handleDragEnd}
           onUnsplash={() => activeSlideId && setUnsplashForId(activeSlideId)}
           brandColorOptions={brandColorOptions}
-          getAutoTextColors={getAutoTextColors}
           hasGenerated={hasGenerated}
           isGenerating={isGenerating}
           onGenerate={() => void runGeneration()}
           onDownloadAll={() => void downloadAll()}
           validationError={validationError}
+          validationErrorDetail={validationErrorDetail}
         />
       </div>
 

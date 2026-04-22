@@ -1,3 +1,4 @@
+import { existsSync } from 'fs';
 import { join } from 'path';
 import { createCanvas, GlobalFonts, loadImage, type SKRSContext2D } from '@napi-rs/canvas';
 import sharp from 'sharp';
@@ -24,6 +25,37 @@ const BODY_SCALE: Record<'M' | 'S', number> = { M: 1, S: 0.8 };
 let fontsRegistered = false;
 let activeFontId: string | null = null;
 
+function resolveFontsourceFile(
+  fontsourceDir: string,
+  packageName: string,
+  weight: '400' | '700',
+  style: 'normal' | 'italic',
+): string | null {
+  const subsets = ['cyrillic', 'latin-ext', 'latin'];
+  const exts = ['woff2', 'woff', 'ttf', 'otf'];
+  for (const subset of subsets) {
+    for (const ext of exts) {
+      const filePath = join(fontsourceDir, packageName, 'files', `${packageName}-${subset}-${weight}-${style}.${ext}`);
+      if (existsSync(filePath)) {
+        return filePath;
+      }
+    }
+  }
+  return null;
+}
+
+function registerAliasFromFontsource(
+  fontsourceDir: string,
+  packageName: string,
+  alias: string,
+  weight: '400' | '700',
+  style: 'normal' | 'italic',
+): boolean {
+  const resolved = resolveFontsourceFile(fontsourceDir, packageName, weight, style);
+  if (!resolved) return false;
+  return GlobalFonts.registerFromPath(resolved, alias);
+}
+
 function ensureFonts(fontId?: string | null) {
   const fontDir = join(process.cwd(), 'public', 'fonts');
   const requestedFontId = (fontId ?? '').trim().toLowerCase();
@@ -35,97 +67,27 @@ function ensureFonts(fontId?: string | null) {
     GlobalFonts.registerFromPath(join(fontDir, 'NotoSans-Regular.ttf'), 'NotoSans');
     GlobalFonts.registerFromPath(join(fontDir, 'NotoSans-Italic.ttf'), 'NotoSansItalic');
     // Override aliases with the selected Brand DNA font so downloaded PNGs match preview typography.
-    if (requestedFontId === 'google_sans') {
-      GlobalFonts.registerFromPath(
-        join(fontsourceDir, 'google-sans', 'files', 'google-sans-cyrillic-700-normal.woff'),
-        'NotoSansBold',
-      );
-      GlobalFonts.registerFromPath(
-        join(fontsourceDir, 'google-sans', 'files', 'google-sans-cyrillic-400-normal.woff'),
-        'NotoSans',
-      );
-      GlobalFonts.registerFromPath(
-        join(fontsourceDir, 'google-sans', 'files', 'google-sans-cyrillic-400-italic.woff'),
-        'NotoSansItalic',
-      );
-    } else if (requestedFontId === 'manrope') {
-      GlobalFonts.registerFromPath(
-        join(fontsourceDir, 'manrope', 'files', 'manrope-cyrillic-700-normal.woff'),
-        'NotoSansBold',
-      );
-      GlobalFonts.registerFromPath(
-        join(fontsourceDir, 'manrope', 'files', 'manrope-cyrillic-400-normal.woff'),
-        'NotoSans',
-      );
-      GlobalFonts.registerFromPath(
-        join(fontsourceDir, 'manrope', 'files', 'manrope-cyrillic-400-normal.woff'),
-        'NotoSansItalic',
-      );
-    } else if (requestedFontId === 'cormorant') {
-      GlobalFonts.registerFromPath(
-        join(fontsourceDir, 'cormorant-garamond', 'files', 'cormorant-garamond-cyrillic-700-normal.woff'),
-        'NotoSansBold',
-      );
-      GlobalFonts.registerFromPath(
-        join(fontsourceDir, 'cormorant-garamond', 'files', 'cormorant-garamond-cyrillic-400-normal.woff'),
-        'NotoSans',
-      );
-      GlobalFonts.registerFromPath(
-        join(fontsourceDir, 'cormorant-garamond', 'files', 'cormorant-garamond-cyrillic-400-italic.woff'),
-        'NotoSansItalic',
-      );
-    } else if (requestedFontId === 'days_one') {
-      GlobalFonts.registerFromPath(
-        join(fontsourceDir, 'days-one', 'files', 'days-one-cyrillic-400-normal.woff'),
-        'NotoSansBold',
-      );
-      GlobalFonts.registerFromPath(
-        join(fontsourceDir, 'days-one', 'files', 'days-one-cyrillic-400-normal.woff'),
-        'NotoSans',
-      );
-      GlobalFonts.registerFromPath(
-        join(fontsourceDir, 'days-one', 'files', 'days-one-cyrillic-400-normal.woff'),
-        'NotoSansItalic',
-      );
-    } else if (requestedFontId === 'climate_crisis') {
-      GlobalFonts.registerFromPath(
-        join(fontsourceDir, 'climate-crisis', 'files', 'climate-crisis-cyrillic-400-normal.woff'),
-        'NotoSansBold',
-      );
-      GlobalFonts.registerFromPath(
-        join(fontsourceDir, 'climate-crisis', 'files', 'climate-crisis-cyrillic-400-normal.woff'),
-        'NotoSans',
-      );
-      GlobalFonts.registerFromPath(
-        join(fontsourceDir, 'climate-crisis', 'files', 'climate-crisis-cyrillic-400-normal.woff'),
-        'NotoSansItalic',
-      );
-    } else if (requestedFontId === 'inter') {
-      GlobalFonts.registerFromPath(
-        join(fontsourceDir, 'inter', 'files', 'inter-cyrillic-700-normal.woff'),
-        'NotoSansBold',
-      );
-      GlobalFonts.registerFromPath(
-        join(fontsourceDir, 'inter', 'files', 'inter-cyrillic-400-normal.woff'),
-        'NotoSans',
-      );
-      GlobalFonts.registerFromPath(
-        join(fontsourceDir, 'inter', 'files', 'inter-cyrillic-400-italic.woff'),
-        'NotoSansItalic',
-      );
-    } else if (requestedFontId === 'montserrat') {
-      GlobalFonts.registerFromPath(
-        join(fontsourceDir, 'montserrat', 'files', 'montserrat-cyrillic-700-normal.woff'),
-        'NotoSansBold',
-      );
-      GlobalFonts.registerFromPath(
-        join(fontsourceDir, 'montserrat', 'files', 'montserrat-cyrillic-400-normal.woff'),
-        'NotoSans',
-      );
-      GlobalFonts.registerFromPath(
-        join(fontsourceDir, 'montserrat', 'files', 'montserrat-cyrillic-400-italic.woff'),
-        'NotoSansItalic',
-      );
+    let packageName: string | null = null;
+    if (requestedFontId === 'google_sans') packageName = 'google-sans';
+    else if (requestedFontId === 'manrope') packageName = 'manrope';
+    else if (requestedFontId === 'cormorant') packageName = 'cormorant-garamond';
+    else if (requestedFontId === 'days_one') packageName = 'days-one';
+    else if (requestedFontId === 'climate_crisis') packageName = 'climate-crisis';
+    else if (requestedFontId === 'inter') packageName = 'inter';
+    else if (requestedFontId === 'montserrat') packageName = 'montserrat';
+
+    if (packageName) {
+      const bodyRegistered = registerAliasFromFontsource(fontsourceDir, packageName, 'NotoSans', '400', 'normal');
+      const titleRegistered =
+        registerAliasFromFontsource(fontsourceDir, packageName, 'NotoSansBold', '700', 'normal') ||
+        registerAliasFromFontsource(fontsourceDir, packageName, 'NotoSansBold', '400', 'normal');
+      const italicRegistered =
+        registerAliasFromFontsource(fontsourceDir, packageName, 'NotoSansItalic', '400', 'italic') ||
+        registerAliasFromFontsource(fontsourceDir, packageName, 'NotoSansItalic', '400', 'normal');
+
+      if (!bodyRegistered || !titleRegistered || !italicRegistered) {
+        console.warn(`[carousel] Partial font alias registration for "${requestedFontId}". Falling back to bundled defaults for missing variants.`);
+      }
     }
     fontsRegistered = true;
     activeFontId = requestedFontId;

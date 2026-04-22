@@ -29,7 +29,6 @@ export default function CarouselEditorBackgroundTab({
   slide,
   brandColorOptions,
   brandVibe,
-  getAutoTextColors,
   onChange,
   onUnsplash,
   onPhotoUploadSuccess,
@@ -38,7 +37,6 @@ export default function CarouselEditorBackgroundTab({
   slide: Slide;
   brandColorOptions: string[];
   brandVibe: 'bold' | 'refined';
-  getAutoTextColors: (bg: string) => { titleColor: string; bodyColor: string };
   onChange: (id: string, patch: Partial<Slide>) => void;
   onUnsplash: () => void;
   onPhotoUploadSuccess?: () => void;
@@ -89,7 +87,6 @@ export default function CarouselEditorBackgroundTab({
             type="button"
             onClick={() => {
               if (opt.id === 'color') {
-                const auto = getAutoTextColors(slide.backgroundColor);
                 onChange(slide.id, {
                   backgroundType: 'color',
                   hasBackgroundOverride: true,
@@ -97,7 +94,6 @@ export default function CarouselEditorBackgroundTab({
                   backgroundImageBase64: null,
                   bgPhotoTransform: undefined,
                   overlayType: null,
-                  ...auto,
                 });
                 return;
               }
@@ -108,7 +104,6 @@ export default function CarouselEditorBackgroundTab({
                   brandColorOptions[Math.floor((brandColorOptions.length - 1) / 2)] ||
                   '#d6b58a';
                 const end = slide.gradientEndColor || brandColorOptions[brandColorOptions.length - 1] || '#1a1a2e';
-                const auto = getAutoTextColors(end);
                 onChange(slide.id, {
                   backgroundType: 'gradient',
                   hasBackgroundOverride: true,
@@ -119,7 +114,6 @@ export default function CarouselEditorBackgroundTab({
                   backgroundImageBase64: null,
                   bgPhotoTransform: undefined,
                   overlayType: null,
-                  ...auto,
                 });
                 return;
               }
@@ -154,8 +148,7 @@ export default function CarouselEditorBackgroundTab({
                   type="button"
                   aria-label={`Колір фону ${color}`}
                   onClick={() => {
-                    const auto = getAutoTextColors(color);
-                    onChange(slide.id, { hasBackgroundOverride: true, backgroundColor: color, ...auto });
+                    onChange(slide.id, { hasBackgroundOverride: true, backgroundColor: color });
                   }}
                   className={[
                     'relative h-11 w-11 rounded-full border-2 transition-transform duration-[120ms] ease-out',
@@ -199,10 +192,7 @@ export default function CarouselEditorBackgroundTab({
                               : stop.key === 'gradientMidColor'
                                 ? { hasBackgroundOverride: true, gradientMidColor: color }
                                 : { hasBackgroundOverride: true, gradientEndColor: color };
-                          const auto = getAutoTextColors(
-                            stop.key === 'gradientEndColor' ? color : gradientStops[2],
-                          );
-                          onChange(slide.id, { ...nextPatch, ...auto });
+                          onChange(slide.id, nextPatch);
                         }}
                         className={[
                           'h-8 w-8 rounded-full border-2 transition-transform duration-[120ms] ease-out',

@@ -148,13 +148,13 @@ export default function CarouselEditorLayout({
   onDragEnd,
   onUnsplash,
   brandColorOptions,
-  getAutoTextColors,
   /** Generation / download */
   hasGenerated,
   isGenerating,
   onGenerate,
   onDownloadAll,
   validationError,
+  validationErrorDetail,
 }: {
   slides: Slide[];
   activeSlideId: string | null;
@@ -169,12 +169,12 @@ export default function CarouselEditorLayout({
   onDragEnd: (e: DragEndEvent) => void;
   onUnsplash: () => void;
   brandColorOptions: string[];
-  getAutoTextColors: (bg: string) => { titleColor: string; bodyColor: string };
   hasGenerated: boolean;
   isGenerating: boolean;
   onGenerate: () => void;
   onDownloadAll: () => void;
   validationError: string | null;
+  validationErrorDetail: string | null;
 }) {
   const [tab, setTab] = useState<EditorTab | null>(null);
   /** One bottom editor UI (tabs + panels + download): avoid duplicating form fields in the DOM. */
@@ -225,6 +225,7 @@ export default function CarouselEditorLayout({
     startX: number;
     startY: number;
     initial: BgPhotoTransform;
+    initialScale: number;
   } | null>(null);
   const pinchRef = useRef<{
     initialDistance: number;
@@ -362,11 +363,25 @@ export default function CarouselEditorLayout({
   const prevSlide = activeIndex > 0 ? slides[activeIndex - 1] : null;
   const nextSlide = activeIndex < slides.length - 1 ? slides[activeIndex + 1] : null;
   const effectivePhotoTransform =
-    isPhotoInteracting && livePhotoTransform
-      ? livePhotoTransform
-      : activeSlide
-        ? getBgPhotoTransform(activeSlide.bgPhotoTransform)
-        : DEFAULT_BG_PHOTO_TRANSFORM;
+    livePhotoTransform ??
+    (activeSlide
+      ? getBgPhotoTransform(activeSlide.bgPhotoTransform)
+      : DEFAULT_BG_PHOTO_TRANSFORM);
+
+  useEffect(() => {
+    if (!activeSlide) {
+      setLivePhotoTransform(null);
+      return;
+    }
+    if (isPhotoInteracting) return;
+    setLivePhotoTransform(getBgPhotoTransform(activeSlide.bgPhotoTransform));
+  }, [
+    activeSlide?.id,
+    activeSlide?.bgPhotoTransform?.offset_x,
+    activeSlide?.bgPhotoTransform?.offset_y,
+    activeSlide?.bgPhotoTransform?.scale,
+    isPhotoInteracting,
+  ]);
 
   const commitPhotoTransform = useCallback(
     (next: BgPhotoTransform) => {
@@ -569,7 +584,6 @@ export default function CarouselEditorLayout({
         slide={activeSlide}
         brandColorOptions={brandColorOptions}
         brandVibe={brandSettings.vibe}
-        getAutoTextColors={getAutoTextColors}
         onChange={updateSlide}
         onUnsplash={onUnsplash}
         onPhotoUploadSuccess={onMobilePhotoUploadSuccess}
@@ -586,13 +600,14 @@ export default function CarouselEditorLayout({
   const startPhotoDrag = (clientX: number, clientY: number, pointerId: number) => {
     if (!activeSlide || !hasActivePhoto) return;
     setIsPhotoInteracting(true);
-    const current = livePhotoTransform ?? getBgPhotoTransform(activeSlide.bgPhotoTransform);
+    const current = effectivePhotoTransform;
     setLivePhotoTransform(current);
     dragRef.current = {
       pointerId,
       startX: clientX,
       startY: clientY,
       initial: current,
+      initialScale: current.scale,
     };
   };
 
@@ -652,6 +667,7 @@ export default function CarouselEditorLayout({
       ...drag.initial,
       offset_x: drag.initial.offset_x + dx / frameW,
       offset_y: drag.initial.offset_y + dy / frameH,
+      scale: drag.initialScale,
     });
     setLivePhotoTransform(next);
   };
@@ -1180,6 +1196,7 @@ export default function CarouselEditorLayout({
       {validationError ? (
         <p className="px-3 pb-2 text-sm text-red-600 md:px-4" role="alert">
           {validationError}
+          {validationErrorDetail ? <span className="mt-1 block text-xs text-red-500/90">{validationErrorDetail}</span> : null}
         </p>
       ) : null}
     </div>

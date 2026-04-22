@@ -37,6 +37,8 @@ export function createEmptySlide(brandDefaults?: { overlayColor: string }): Slid
     bgPhotoTransform: undefined,
     titleColor: '#FFFFFF',
     bodyColor: '#FFFFFF',
+    textColorUserSet: false,
+    textColorAutoSet: false,
     generatedImageBase64: null,
     overlayType: null,
     overlayColor,
@@ -184,6 +186,9 @@ export function normalizeSlidesFromDb(raw: unknown): Slide[] {
       bgPhotoTransform,
       titleColor: typeof o.titleColor === 'string' ? o.titleColor : base.titleColor,
       bodyColor: typeof o.bodyColor === 'string' ? o.bodyColor : base.bodyColor,
+      textColorUserSet: o.textColorUserSet === true,
+      textColorAutoSet:
+        typeof o.textColorAutoSet === 'boolean' ? o.textColorAutoSet : true,
       generatedImageBase64:
         o.generatedImageBase64 === null || typeof o.generatedImageBase64 === 'string'
           ? o.generatedImageBase64

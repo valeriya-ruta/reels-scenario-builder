@@ -116,10 +116,19 @@ export function resolveSlideVisualColors(
   const baseBackground = hasOverride
     ? normalizeHex(slide.backgroundColor || palette.light)
     : getAutomaticBackgroundColor(slideType, layoutPreset, palette);
-  const text = resolveTitleAndBodyColors(slide.backgroundType, baseBackground, palette);
+  const hasImage =
+    slide.backgroundType === 'image' &&
+    Boolean(
+      (slide.backgroundImageUrl && slide.backgroundImageUrl.trim().length > 0) ||
+        (slide.backgroundImageBase64 && slide.backgroundImageBase64.trim().length > 0),
+    );
+  const effectiveBackgroundType =
+    slide.backgroundType === 'image' && !hasImage ? 'color' : slide.backgroundType;
+  const text = resolveTitleAndBodyColors(effectiveBackgroundType, baseBackground, palette);
+  const keepExistingText = slide.textColorUserSet === true || slide.textColorAutoSet === true;
   return {
     backgroundColor: baseBackground,
-    titleColor: text.titleColor,
-    bodyColor: text.bodyColor,
+    titleColor: keepExistingText ? slide.titleColor : text.titleColor,
+    bodyColor: keepExistingText ? slide.bodyColor : text.bodyColor,
   };
 }
