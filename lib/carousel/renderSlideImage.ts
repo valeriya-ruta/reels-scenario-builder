@@ -53,7 +53,7 @@ function registerAliasFromFontsource(
 ): boolean {
   const resolved = resolveFontsourceFile(fontsourceDir, packageName, weight, style);
   if (!resolved) return false;
-  return GlobalFonts.registerFromPath(resolved, alias);
+  return Boolean(GlobalFonts.registerFromPath(resolved, alias));
 }
 
 function ensureFonts(fontId?: string | null) {
