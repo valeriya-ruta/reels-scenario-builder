@@ -5,12 +5,18 @@ import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import { nanoid } from 'nanoid';
 import { Project, Scene, Transition, SnapshotData, Location } from '@/lib/domain';
 import {
+  parseIdeaScanTranscriptMap,
   type IdeaScanReelStringMap,
   parseIdeaScanReelStringMap,
 } from '@/lib/ideaScanTypes';
 import { DEFAULT_SCENE_VALUES } from '@/lib/sceneDefaults';
 import { headers } from 'next/headers';
 import { resolveReferenceMediaUrl } from '@/lib/ai/referenceMedia';
+import {
+  InstagramReferenceInputError,
+  InstagramReferenceNoVideoError,
+  InstagramReferenceSystemError,
+} from '@/lib/ai/instagramMedia';
 import { transcribeMediaFromUrl, type TranscriptSegment } from '@/lib/ai/sttProvider';
 import { splitTranscriptIntoScenes } from '@/lib/ai/sceneSegmentation';
 import { transformRantToScript } from '@/lib/ai/rantToScript';
@@ -33,6 +39,8 @@ interface ReferencePreview {
   }>;
 }
 
+type ReferenceErrorKind = 'input' | 'content_unavailable' | 'system';
+
 export type GenerateReferenceResult =
   | {
       ok: true;
@@ -41,7 +49,55 @@ export type GenerateReferenceResult =
   | {
       ok: false;
       error: string;
+      errorKind: ReferenceErrorKind;
     };
+
+const COPYREF_PARSE_ERROR_MESSAGE =
+  'Це не схоже на рілз 🤔 Скопіюй посилання прямо з Instagram (з кнопки «Поділитися» → «Копіювати посилання») і спробуй ще раз.';
+const COPYREF_NO_VIDEO_ERROR_MESSAGE =
+  'Не вдалося завантажити цей рілз. Можливо, він видалений, акаунт приватний, або це не відеопост.';
+const COPYREF_SYSTEM_ERROR_MESSAGE =
+  'Йой, щось пішло не так! Рута вже знає про це і біжить виправляти. Спробуй ще раз через хвилинку.';
+
+function reportCopyrefImportFailureWebhook(payload: {
+  userId: string;
+  inputUrlRaw: string;
+  canonicalUrl: string;
+  shortcode: string;
+  errorMessage: string;
+  attemptCount: number;
+  firstAttemptAt: string;
+  lastAttemptAt: string;
+}): void {
+  const webhookUrl = process.env.RUTA_ERROR_WEBHOOK_URL;
+  const secret = process.env.RUTA_ERROR_SECRET;
+  if (!webhookUrl || !secret) return;
+
+  void fetch(webhookUrl, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-ruta-error-secret': secret,
+    },
+    body: JSON.stringify({
+      source: 'copyref_import',
+      user_id: payload.userId,
+      input_url_raw: payload.inputUrlRaw,
+      canonical_url: payload.canonicalUrl,
+      shortcode: payload.shortcode,
+      error_message: payload.errorMessage,
+      attempt_count: payload.attemptCount,
+      trigger: 'auto',
+      timestamps: {
+        first_attempt_at: payload.firstAttemptAt,
+        last_attempt_at: payload.lastAttemptAt,
+      },
+    }),
+    signal: AbortSignal.timeout(5_000),
+  }).catch((error) => {
+    console.error('copyref import webhook failed', error);
+  });
+}
 
 export type GenerateReelFromRantResult =
   | { ok: true; projectId: string }
@@ -137,24 +193,27 @@ export async function generateReferenceFromVideoLink(
   projectId: string,
   reelUrl: string
 ): Promise<GenerateReferenceResult> {
+  const rawInputUrl = reelUrl;
+  let userId: string | null = null;
   try {
     const user = await requireAuth();
     if (!user) {
-      return { ok: false, error: 'Необхідно увійти в акаунт.' };
+      return { ok: false, error: 'Необхідно увійти в акаунт.', errorKind: 'system' };
     }
+    userId = user.id;
 
     if (!reelUrl.trim()) {
-      return { ok: false, error: 'Встав посилання на публічний Instagram Reel або відео TikTok.' };
+      return { ok: false, error: COPYREF_PARSE_ERROR_MESSAGE, errorKind: 'input' };
     }
 
     const isOwner = await assertProjectOwner(projectId, user.id);
     if (!isOwner) {
-      return { ok: false, error: 'Проєкт не знайдено або доступ заборонений.' };
+      return { ok: false, error: 'Проєкт не знайдено або доступ заборонений.', errorKind: 'system' };
     }
 
     const tr = await transcribeLimit.limit(user.id);
     if (!tr.success) {
-      return { ok: false, error: 'Ліміт запитів вичерпано. Спробуй пізніше.' };
+      return { ok: false, error: 'Ліміт запитів вичерпано. Спробуй пізніше.', errorKind: 'system' };
     }
 
     const { mediaUrl } = await resolveReferenceMediaUrl(reelUrl);
@@ -162,7 +221,7 @@ export async function generateReferenceFromVideoLink(
 
     const ai = await aiLimit.limit(user.id);
     if (!ai.success) {
-      return { ok: false, error: 'Ліміт запитів вичерпано. Спробуй пізніше.' };
+      return { ok: false, error: 'Ліміт запитів вичерпано. Спробуй пізніше.', errorKind: 'system' };
     }
 
     const sceneDrafts = await splitTranscriptIntoScenes(
@@ -179,13 +238,45 @@ export async function generateReferenceFromVideoLink(
       },
     };
   } catch (error) {
+    if (error instanceof InstagramReferenceInputError) {
+      return { ok: false, error: COPYREF_PARSE_ERROR_MESSAGE, errorKind: 'input' };
+    }
+    if (error instanceof InstagramReferenceNoVideoError) {
+      return { ok: false, error: COPYREF_NO_VIDEO_ERROR_MESSAGE, errorKind: 'content_unavailable' };
+    }
+    if (error instanceof InstagramReferenceSystemError) {
+      if (error.attemptCount >= 3) {
+        reportCopyrefImportFailureWebhook({
+          userId: userId ?? 'unknown',
+          inputUrlRaw: rawInputUrl,
+          canonicalUrl: error.canonicalUrl,
+          shortcode: error.shortcode,
+          errorMessage: error.message,
+          attemptCount: error.attemptCount,
+          firstAttemptAt: error.firstAttemptAt,
+          lastAttemptAt: error.lastAttemptAt,
+        });
+      }
+      return { ok: false, error: COPYREF_SYSTEM_ERROR_MESSAGE, errorKind: 'system' };
+    }
+
+    if (error instanceof Error) {
+      const lowered = error.message.toLowerCase();
+      if (
+        lowered.includes('некоректне посилання') ||
+        lowered.includes('підтримуються лише посилання instagram reel або tiktok')
+      ) {
+        return { ok: false, error: COPYREF_PARSE_ERROR_MESSAGE, errorKind: 'input' };
+      }
+    }
+
     const fallback =
       'Не вдалося обробити посилання. Перевір, що Reel публічний і спробуй ще раз через хвилину.';
     const raw =
       error instanceof Error && error.message.trim().length > 0
         ? error.message
         : fallback;
-    return { ok: false, error: sanitizePipelineErrorForUser(raw) };
+    return { ok: false, error: sanitizePipelineErrorForUser(raw), errorKind: 'system' };
   }
 }
 
@@ -604,6 +695,8 @@ export type SaveCompetitorReelToScenarioResult =
   | { ok: false; error: string };
 
 const MAX_COMPETITOR_REEL_NOTE = 500;
+const COMPETITOR_TRANSCRIPTION_USER_ERROR =
+  'Не вдалося розпізнати мову з відео. Спробуй ще раз або інший рілс.';
 
 /**
  * Transcribes the reel video, generalizes the transcript into a reusable template (placeholders in [brackets]),
@@ -632,7 +725,7 @@ export async function saveCompetitorReelToScenario(
 
     const { data: scanRow, error: scanErr } = await supabase
       .from('idea_scans')
-      .select('id, saved_reel_ids, user_note, reference_url')
+      .select('id, saved_reel_ids, user_note, reference_url, reel_transcripts, raw_reels, top_reels')
       .eq('id', scanId)
       .eq('user_id', user.id)
       .maybeSingle();
@@ -658,27 +751,69 @@ export async function saveCompetitorReelToScenario(
       return { ok: false, error: 'Цей рілс уже збережено.' };
     }
 
+    const transcriptMap = parseIdeaScanTranscriptMap(scanRow.reel_transcripts);
+    const transcriptEntry = transcriptMap[shortCode];
+    if (transcriptEntry?.transcript_status === 'failed' && transcriptEntry.transcript_source === null) {
+      return { ok: false, error: "спочатку натисни 'спробувати ще раз'" };
+    }
+
+    const findCaptionForShortCode = (): string => {
+      const rawReels = Array.isArray(scanRow.raw_reels) ? scanRow.raw_reels : [];
+      for (const item of rawReels) {
+        if (!item || typeof item !== 'object') continue;
+        const row = item as Record<string, unknown>;
+        const code =
+          typeof row.shortCode === 'string'
+            ? row.shortCode
+            : typeof row.shortcode === 'string'
+              ? row.shortcode
+              : typeof row.id === 'string'
+                ? row.id
+                : '';
+        if (code !== shortCode) continue;
+        const caption = row.caption;
+        if (typeof caption === 'string' && caption.trim()) return caption.trim();
+        if (caption && typeof caption === 'object' && 'text' in caption) {
+          const text = (caption as { text?: unknown }).text;
+          if (typeof text === 'string' && text.trim()) return text.trim();
+        }
+        if (typeof row.title === 'string' && row.title.trim()) return row.title.trim();
+        if (typeof row.text === 'string' && row.text.trim()) return row.text.trim();
+      }
+      const topItem =
+        (scanRow.top_reels as { items?: Array<{ shortCode?: string; hook?: string }> } | null)?.items?.find(
+          (item) => item.shortCode === shortCode
+        );
+      return topItem?.hook?.trim() ?? '';
+    };
+
     const trLimit = await transcribeLimit.limit(user.id);
     if (!trLimit.success) {
       return { ok: false, error: 'Ліміт запитів вичерпано. Спробуй пізніше.' };
     }
 
-    let transcript = '';
+    let transcript = transcriptEntry?.transcript?.trim() ?? '';
     let segments: TranscriptSegment[] = [];
-
-    try {
-      const transcriptResult = await transcribeMediaFromUrl(videoUrl);
-      transcript = transcriptResult.transcript;
-      segments = transcriptResult.segments;
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      const canBrief = refNoteRaw.length > 0 || refUrlRaw.length > 0;
-      if (canBrief && msg.includes('empty')) {
-        transcript = '';
-        segments = [];
-      } else {
-        throw e;
+    if (!transcript) {
+      try {
+        const transcriptResult = await transcribeMediaFromUrl(videoUrl);
+        transcript = transcriptResult.transcript;
+        segments = transcriptResult.segments;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        const canBrief = refNoteRaw.length > 0 || refUrlRaw.length > 0;
+        if (canBrief && msg.includes('empty')) {
+          transcript = '';
+          segments = [];
+        } else {
+          console.error('saveCompetitorReelToScenario transcription failed', e);
+          throw new Error(COMPETITOR_TRANSCRIPTION_USER_ERROR);
+        }
       }
+    }
+    if (transcriptEntry?.transcript_source === 'caption_fallback') {
+      transcript = findCaptionForShortCode();
+      segments = [];
     }
 
     const tplContext = {

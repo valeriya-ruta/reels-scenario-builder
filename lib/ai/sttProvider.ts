@@ -1,12 +1,5 @@
 import 'server-only';
 
-import { randomBytes } from 'node:crypto';
-import { spawn } from 'node:child_process';
-import { readFile, unlink, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import ffmpegStatic from 'ffmpeg-static';
-
 import { requireServerEnv } from '@/lib/env';
 import { isAbsoluteHttpUrlString } from '@/lib/isAbsoluteHttpUrl';
 
@@ -21,6 +14,8 @@ export interface TranscriptResult {
   transcript: string;
   segments: TranscriptSegment[];
 }
+
+const GROQ_MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
 interface GroqSegment {
   start?: number;
@@ -51,6 +46,8 @@ function normalizeSegments(segments: GroqSegment[] | undefined): TranscriptSegme
 function guessInputExt(contentType: string, mediaUrl: string): string {
   const ct = contentType.toLowerCase();
   if (ct.includes('webm')) return 'webm';
+  if (ct.includes('wav')) return 'wav';
+  if (ct.includes('mp3')) return 'mp3';
   if (ct.includes('mpeg') && !ct.includes('mpeg4')) return 'mpeg';
   if (ct.includes('quicktime')) return 'mov';
   if (ct.includes('mp4') || ct.includes('m4a') || ct.includes('mpeg4')) return 'mp4';
@@ -65,58 +62,6 @@ function guessInputExt(contentType: string, mediaUrl: string): string {
     /* ignore */
   }
   return 'mp4';
-}
-
-/** Mono 16 kHz FLAC — small enough for Groq’s ~25MB upload cap even for long reels. */
-async function transcodeToSpeechFlac(inputBuffer: Buffer, inputExt: string): Promise<Buffer> {
-  const ffmpeg = ffmpegStatic;
-  if (!ffmpeg) {
-    throw new Error('ffmpeg binary is not available on this platform.');
-  }
-
-  const id = randomBytes(12).toString('hex');
-  const inputPath = join(tmpdir(), `stt-in-${id}.${inputExt}`);
-  const outputPath = join(tmpdir(), `stt-out-${id}.flac`);
-
-  await writeFile(inputPath, inputBuffer);
-
-  const args = [
-    '-y',
-    '-i',
-    inputPath,
-    '-vn',
-    '-map',
-    '0:a:0',
-    '-ac',
-    '1',
-    '-ar',
-    '16000',
-    '-c:a',
-    'flac',
-    '-compression_level',
-    '8',
-    outputPath,
-  ];
-
-  await new Promise<void>((resolve, reject) => {
-    const p = spawn(ffmpeg, args, { stdio: ['ignore', 'ignore', 'pipe'] });
-    let err = '';
-    p.stderr?.on('data', (d: Buffer) => {
-      err += d.toString();
-    });
-    p.on('error', reject);
-    p.on('close', (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`ffmpeg failed (${code}): ${err.slice(-1800)}`));
-    });
-  });
-
-  try {
-    return await readFile(outputPath);
-  } finally {
-    await unlink(inputPath).catch(() => {});
-    await unlink(outputPath).catch(() => {});
-  }
 }
 
 function buildGroqFormData(): FormData {
@@ -189,22 +134,18 @@ export async function transcribeMediaFromUrl(mediaUrl: string): Promise<Transcri
     );
   }
 
-  const contentType = mediaRes.headers.get('content-type') || 'audio/mp4';
+  const contentType = mediaRes.headers.get('content-type') || 'video/mp4';
   const mediaBuffer = await mediaRes.arrayBuffer();
-  const rawBuf = Buffer.from(mediaBuffer);
-  const inputExt = guessInputExt(contentType, mediaUrl);
-
-  let audioBuf: Buffer;
-  try {
-    audioBuf = await transcodeToSpeechFlac(rawBuf, inputExt);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
+  if (mediaBuffer.byteLength > GROQ_MAX_UPLOAD_BYTES) {
     throw new Error(
-      `Не вдалося витягнути аудіо з відео. Спробуй інший рілс або пізніше. (${msg.slice(0, 320)})`
+      'Відео завелике для розпізнавання (понад 25MB). Спробуй коротший рілс або інший ролик.'
     );
   }
 
-  const upload = new File([new Uint8Array(audioBuf)], 'reel-audio.flac', { type: 'audio/flac' });
+  const rawBuf = Buffer.from(mediaBuffer);
+  const inputExt = guessInputExt(contentType, mediaUrl);
+  const filename = `reel.${inputExt}`;
+  const upload = new File([new Uint8Array(rawBuf)], filename, { type: contentType });
   const formFile = buildGroqFormData();
   formFile.append('file', upload);
 

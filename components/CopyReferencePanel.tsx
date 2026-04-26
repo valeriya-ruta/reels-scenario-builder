@@ -27,6 +27,11 @@ interface ReferenceResult {
   }>;
 }
 
+type ReferenceErrorKind = 'input' | 'content_unavailable' | 'system';
+
+const COPYREF_SYSTEM_ERROR_MESSAGE =
+  'Йой, щось пішло не так! Рута вже знає про це і біжить виправляти. Спробуй ще раз через хвилинку.';
+
 function formatDetectedLanguage(code: string): string {
   switch (code.toLowerCase()) {
     case 'uk':
@@ -54,6 +59,7 @@ export default function CopyReferencePanel({
   const [isGenerating, setIsGenerating] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorKind, setErrorKind] = useState<ReferenceErrorKind | null>(null);
   const [result, setResult] = useState<ReferenceResult | null>(null);
   const [isModeDialogOpen, setIsModeDialogOpen] = useState(false);
   const [showFullTranscript, setShowFullTranscript] = useState(false);
@@ -66,19 +72,22 @@ export default function CopyReferencePanel({
 
   const handleGenerate = async () => {
     setError(null);
+    setErrorKind(null);
     setIsGenerating(true);
     try {
       const response = await generateReferenceFromVideoLink(project.id, reelUrl);
       if (!response.ok) {
         setResult(null);
         setError(response.error);
+        setErrorKind(response.errorKind);
         return;
       }
       setResult(response.data);
       setShowFullTranscript(false);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Не вдалося обробити посилання.';
-      setError(message);
+      console.error('Copyref generate failed', err);
+      setError(COPYREF_SYSTEM_ERROR_MESSAGE);
+      setErrorKind('system');
     } finally {
       setIsGenerating(false);
     }
@@ -88,6 +97,7 @@ export default function CopyReferencePanel({
     if (!result) return;
     setIsImporting(true);
     setError(null);
+    setErrorKind(null);
 
     try {
       const importedScenes = await importReferenceScenes(
@@ -98,8 +108,9 @@ export default function CopyReferencePanel({
       onScenesUpdate(importedScenes);
       setIsModeDialogOpen(false);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Помилка під час імпорту.';
-      setError(message);
+      console.error('Copyref import failed', err);
+      setError(COPYREF_SYSTEM_ERROR_MESSAGE);
+      setErrorKind('system');
     } finally {
       setIsImporting(false);
     }
@@ -118,6 +129,7 @@ export default function CopyReferencePanel({
     if (!sceneText.trim()) return;
     setAddingSceneIndex(index);
     setError(null);
+    setErrorKind(null);
     try {
       const importedScenes = await importReferenceScenes(
         project.id,
@@ -130,8 +142,9 @@ export default function CopyReferencePanel({
         onSceneAdded?.(newestScene.id);
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Помилка під час додавання сцени.';
-      setError(message);
+      console.error('Copyref add single scene failed', err);
+      setError(COPYREF_SYSTEM_ERROR_MESSAGE);
+      setErrorKind('system');
     } finally {
       setAddingSceneIndex((current) => (current === index ? null : current));
     }
@@ -168,8 +181,25 @@ export default function CopyReferencePanel({
       </button>
 
       {error && (
-        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm leading-normal text-red-800">
+        <div
+          className={[
+            'mt-4 rounded-lg px-3 py-2 text-sm leading-normal',
+            errorKind === 'system'
+              ? 'border border-zinc-200 bg-zinc-50 text-zinc-700'
+              : 'border border-zinc-200 bg-zinc-50 text-zinc-700',
+          ].join(' ')}
+        >
           {error}
+          {errorKind === 'system' ? (
+            <button
+              type="button"
+              onClick={() => void handleGenerate()}
+              disabled={isGenerating || !reelUrl.trim()}
+              className="mt-2 inline-flex rounded-md border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Спробувати ще раз
+            </button>
+          ) : null}
         </div>
       )}
 

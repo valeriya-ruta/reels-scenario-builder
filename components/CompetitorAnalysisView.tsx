@@ -10,7 +10,9 @@ import {
 import { Eye, Heart, MessageCircle } from 'lucide-react';
 import {
   parseIdeaScanReelStringMap,
+  parseIdeaScanTranscriptMap,
   type IdeaScanRow,
+  type IdeaScanTranscriptEntry,
   type IdeaTopReelItem,
 } from '@/lib/ideaScanTypes';
 import {
@@ -155,6 +157,8 @@ export default function CompetitorAnalysisView() {
   const [transcriptLoading, setTranscriptLoading] = useState(false);
   const [transcriptError, setTranscriptError] = useState<string | null>(null);
   const [transcriptText, setTranscriptText] = useState<string | null>(null);
+  const [transcriptMeta, setTranscriptMeta] = useState<IdeaScanTranscriptEntry | null>(null);
+  const [retryBusy, setRetryBusy] = useState(false);
   const [reelPanelNote, setReelPanelNote] = useState('');
   const scanCancelledRef = useRef(false);
 
@@ -353,9 +357,15 @@ export default function CompetitorAnalysisView() {
   );
 
   const savedTranscriptsByShortCode = useMemo(
-    () => parseIdeaScanReelStringMap(currentScan?.reel_transcripts),
+    () => parseIdeaScanTranscriptMap(currentScan?.reel_transcripts),
     [currentScan?.reel_transcripts]
   );
+  const selectedTranscriptEntry = selectedReel
+    ? savedTranscriptsByShortCode[selectedReel.shortCode] ?? transcriptMeta
+    : null;
+  const saveBlockedByTranscriptFailure =
+    selectedTranscriptEntry?.transcript_status === 'failed' &&
+    selectedTranscriptEntry?.transcript_source === null;
 
   useEffect(() => {
     if (!selectedReel) {
@@ -370,11 +380,20 @@ export default function CompetitorAnalysisView() {
       setTranscriptText(null);
       setTranscriptError(null);
       setTranscriptLoading(false);
+      setTranscriptMeta(null);
       return;
     }
 
     const code = selectedReel.shortCode;
-    const stored = savedTranscriptsByShortCode[code]?.trim();
+    const storedEntry = savedTranscriptsByShortCode[code];
+    setTranscriptMeta(storedEntry ?? null);
+    const stored = storedEntry?.transcript?.trim();
+    if (storedEntry?.transcript_status === 'failed' && storedEntry.transcript_source === null) {
+      setTranscriptText(null);
+      setTranscriptError('Не вдалося розпізнати мову з відео. Спробуй ще раз або інший рілс.');
+      setTranscriptLoading(false);
+      return;
+    }
     if (stored) {
       setTranscriptText(stored);
       setTranscriptError(null);
@@ -388,6 +407,13 @@ export default function CompetitorAnalysisView() {
       setTranscriptText(mem);
       setTranscriptError(null);
       setTranscriptLoading(false);
+      setTranscriptMeta({
+        transcript: mem,
+        transcript_source: 'transcribed',
+        transcript_status: 'success',
+        transcript_attempts: 1,
+        last_transcript_error: null,
+      });
       return;
     }
 
@@ -413,14 +439,27 @@ export default function CompetitorAnalysisView() {
         transcriptCacheRef.current[code] = res.transcript;
         setTranscriptText(res.transcript);
         setTranscriptError(null);
+        setTranscriptMeta({
+          transcript: res.transcript,
+          transcript_source: res.transcript_source,
+          transcript_status: res.transcript_status,
+          transcript_attempts: res.transcript_attempts,
+          last_transcript_error: null,
+        });
         if (scanId) {
           setCurrentScan((prev) => {
             if (!prev || prev.id !== scanId) return prev;
             return {
               ...prev,
               reel_transcripts: {
-                ...parseIdeaScanReelStringMap(prev.reel_transcripts),
-                [code]: res.transcript,
+                ...parseIdeaScanTranscriptMap(prev.reel_transcripts),
+                [code]: {
+                  transcript: res.transcript,
+                  transcript_source: res.transcript_source,
+                  transcript_status: res.transcript_status,
+                  transcript_attempts: res.transcript_attempts,
+                  last_transcript_error: null,
+                },
               },
             };
           });
@@ -428,6 +467,13 @@ export default function CompetitorAnalysisView() {
       } else {
         setTranscriptError(res.error);
         setTranscriptText(null);
+        setTranscriptMeta({
+          transcript: null,
+          transcript_source: null,
+          transcript_status: 'failed',
+          transcript_attempts: res.transcript_attempts ?? 0,
+          last_transcript_error: res.last_transcript_error ?? null,
+        });
       }
       setTranscriptLoading(false);
     });
@@ -442,10 +488,99 @@ export default function CompetitorAnalysisView() {
     currentScan?.id,
   ]);
 
+  const onRetryTranscript = useCallback(async () => {
+    if (!currentScan?.id || !selectedReel?.shortCode) return;
+    setRetryBusy(true);
+    setTranscriptError(null);
+    try {
+      const res = await fetch('/api/ideas/retry-transcription', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          scan_id: currentScan.id,
+          reel_id: selectedReel.shortCode,
+        }),
+      });
+      const payload = (await res.json()) as
+        | {
+            ok?: boolean;
+            error?: string;
+            transcript?: string;
+            template_pattern?: string;
+            template_lines?: string[];
+            transcript_source?: 'transcribed' | 'caption_fallback';
+            transcript_status?: 'success';
+            transcript_attempts?: number;
+          }
+        | undefined;
+      if (!res.ok || !payload?.ok || !payload.transcript) {
+        setTranscriptError(payload?.error ?? 'Не вдалося повторити транскрипцію.');
+        return;
+      }
+      const entry: IdeaScanTranscriptEntry = {
+        transcript: payload.transcript,
+        transcript_source: payload.transcript_source ?? 'transcribed',
+        transcript_status: payload.transcript_status ?? 'success',
+        transcript_attempts: payload.transcript_attempts ?? 1,
+        last_transcript_error: null,
+      };
+      setTranscriptMeta(entry);
+      setTranscriptText(payload.transcript);
+      setTranscriptError(null);
+      transcriptCacheRef.current[selectedReel.shortCode] = payload.transcript;
+      const nextTemplateLines = Array.isArray(payload.template_lines) ? payload.template_lines : [];
+      const nextTemplatePattern = (payload.template_pattern ?? '').trim();
+      setReelItems((prev) =>
+        prev.map((item) =>
+          item.shortCode === selectedReel.shortCode
+            ? {
+                ...item,
+                templatePattern: nextTemplatePattern || item.templatePattern,
+                templateBody:
+                  nextTemplateLines.length > 0 ? nextTemplateLines.join('\n') : item.templateBody,
+              }
+            : item
+        )
+      );
+      setCurrentScan((prev) => {
+        if (!prev || prev.id !== currentScan.id) return prev;
+        const nextItems = prev.top_reels?.items?.map((item) =>
+          item.shortCode === selectedReel.shortCode
+            ? {
+                ...item,
+                templatePattern: nextTemplatePattern || item.templatePattern,
+                templateLines:
+                  nextTemplateLines.length > 0 ? nextTemplateLines : item.templateLines,
+              }
+            : item
+        );
+        return {
+          ...prev,
+          top_reels: nextItems
+            ? {
+                ...prev.top_reels,
+                items: nextItems,
+              }
+            : prev.top_reels,
+          reel_transcripts: {
+            ...parseIdeaScanTranscriptMap(prev.reel_transcripts),
+            [selectedReel.shortCode]: entry,
+          },
+        };
+      });
+    } catch {
+      setTranscriptError('Не вдалося повторити транскрипцію.');
+    } finally {
+      setRetryBusy(false);
+    }
+  }, [currentScan?.id, selectedReel?.shortCode]);
+
   const onSaveTemplate = useCallback(
     async (reel: DisplayReel) => {
       if (!currentScan?.id) return;
       if (savedShortCodes.includes(reel.shortCode)) return;
+      const tr = savedTranscriptsByShortCode[reel.shortCode] ?? transcriptMeta;
+      if (tr?.transcript_status === 'failed' && tr.transcript_source === null) return;
       setSaveError(null);
       setSaveBusy(true);
       try {
@@ -476,7 +611,7 @@ export default function CompetitorAnalysisView() {
         setSaveBusy(false);
       }
     },
-    [currentScan?.id, savedShortCodes, loadRecents, reelPanelNote]
+    [currentScan?.id, savedShortCodes, loadRecents, reelPanelNote, savedTranscriptsByShortCode, transcriptMeta]
   );
 
   const resultsUpdatedLabel = useMemo(() => {
@@ -521,7 +656,7 @@ export default function CompetitorAnalysisView() {
               </button>
             </form>
             {scanError && (
-              <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm leading-normal text-red-800">
+              <div className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm leading-normal text-zinc-700">
                 {scanError}
               </div>
             )}
@@ -532,7 +667,7 @@ export default function CompetitorAnalysisView() {
               Нещодавні
             </h2>
             {homeError && (
-              <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm leading-normal text-red-800">
+              <div className="mt-2 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm leading-normal text-zinc-700">
                 {homeError}
               </div>
             )}
@@ -929,8 +1064,26 @@ export default function CompetitorAnalysisView() {
                             <div className="h-4 w-4 animate-spin rounded-full border-2 border-[var(--color-border-primary)] border-t-[#004BA8]" />
                             Розпізнаємо мову…
                           </div>
+                        ) : transcriptMeta?.transcript_status === 'failed' &&
+                          transcriptMeta?.transcript_source === null ? (
+                          <div className="mt-3 rounded-lg border border-[var(--color-border-primary)] bg-[var(--color-background-secondary)] p-3">
+                            <p className="text-[13px] leading-relaxed text-[var(--color-text-secondary)]">
+                              Транскрипт потребує уваги.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => void onRetryTranscript()}
+                              disabled={retryBusy}
+                              className="mt-2 rounded-[var(--border-radius-md)] border border-[var(--color-border-primary)] bg-white px-3 py-1.5 text-xs font-medium text-[var(--color-text-primary)] transition hover:bg-[var(--color-background-secondary)] disabled:cursor-wait disabled:opacity-70"
+                            >
+                              {retryBusy ? 'Повторюємо…' : 'Спробувати ще раз'}
+                            </button>
+                            {transcriptError ? (
+                              <p className="mt-2 text-xs text-[var(--color-text-muted)]">{transcriptError}</p>
+                            ) : null}
+                          </div>
                         ) : transcriptError ? (
-                          <p className="mt-3 text-[13px] leading-relaxed text-red-600">
+                          <p className="mt-3 text-[13px] leading-relaxed text-[var(--color-text-muted)]">
                             {transcriptError}
                           </p>
                         ) : transcriptText ? (
@@ -969,7 +1122,9 @@ export default function CompetitorAnalysisView() {
                           className="mt-1.5 w-full min-h-[4.5rem] resize-y rounded-[var(--border-radius-md)] border border-[var(--color-border-primary)] bg-white px-3 py-2 text-[13px] leading-relaxed text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-link)] focus:outline-none focus:ring-2 focus:ring-[var(--color-link-soft)] read-only:bg-[var(--color-background-secondary)] read-only:text-[var(--color-text-secondary)]"
                         />
                         {saveError && (
-                          <p className="mb-2 mt-2 text-center text-xs text-red-600">{saveError}</p>
+                          <p className="mb-2 mt-2 text-center text-xs text-[var(--color-text-muted)]">
+                            {saveError}
+                          </p>
                         )}
                         {savedShortCodes.includes(selectedReel.shortCode) ? (
                           <button
@@ -982,8 +1137,13 @@ export default function CompetitorAnalysisView() {
                         ) : (
                           <button
                             type="button"
-                            disabled={saveBusy}
+                            disabled={saveBusy || saveBlockedByTranscriptFailure}
                             onClick={() => void onSaveTemplate(selectedReel)}
+                            title={
+                              saveBlockedByTranscriptFailure
+                                ? "спочатку натисни 'спробувати ще раз'"
+                                : undefined
+                            }
                             className="w-full cursor-pointer rounded-[var(--border-radius-lg)] bg-gradient-to-r from-[#004BA8] to-[#0d5bb8] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:from-[#0d5bb8] hover:to-[#1565c0] disabled:cursor-wait disabled:opacity-80"
                           >
                             {saveBusy

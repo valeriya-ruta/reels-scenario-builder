@@ -10,8 +10,6 @@ const nextConfig: NextConfig = {
   serverExternalPackages: [
     "sharp",
     "@napi-rs/canvas",
-    "@ffmpeg-installer/ffmpeg",
-    "fluent-ffmpeg",
   ],
 };
 

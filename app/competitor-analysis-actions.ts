@@ -1,8 +1,5 @@
 'use server';
 
-import { existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import type FluentFfmpeg from 'fluent-ffmpeg';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import { requireAuth } from '@/lib/auth';
 import { optionalServerEnv, requireServerEnv } from '@/lib/env';
@@ -16,10 +13,14 @@ import {
   getActorRun,
   startCompetitorActorRun,
 } from '@/lib/ai/competitorReelsApify';
+import { splitTranscriptIntoScenes } from '@/lib/ai/sceneSegmentation';
+import { templatizeTranscriptToScenes } from '@/lib/ai/transcriptToTemplate';
 import {
-  parseIdeaScanReelStringMap,
+  defaultTranscriptEntry,
+  parseIdeaScanTranscriptMap,
   type IdeaScanRow,
   type IdeaScanSummary,
+  type IdeaScanTranscriptEntry,
   type IdeaTopReelsPayload,
 } from '@/lib/ideaScanTypes';
 import { scanLimitFree, scanLimitPaid, transcribeLimit } from '@/lib/ratelimit';
@@ -27,166 +28,43 @@ import { userHasPaidScanAccess } from '@/lib/userScanTier';
 
 const APIFY_BASE = 'https://api.apify.com/v2';
 const FALLBACK_REEL_ACTOR_ID = 'xMc5Ga1oCONPmWJIa';
-const TRANSCRIBE_MAX_DURATION_SEC = 300;
-const FFMPEG_TIMEOUT_MS = 60_000;
-const MAX_AUDIO_BUFFER_BYTES = 25 * 1024 * 1024;
-const EXTRACT_AUDIO_ERROR = 'Не вдалося витягнути аудіо. Спробуй інший рілс.';
-const REEL_TOO_LONG_ERROR =
-  'Це відео задовге для транскрипції (ймовірно, запис трансляції). Спробуй інший рілс.';
-const REEL_NO_AUDIO_ERROR = 'Цей рілс без звуку — нічого транскрибувати.';
-
-/**
- * Fully lazy ffmpeg loader. Both `fluent-ffmpeg` and `@ffmpeg-installer/ffmpeg`
- * are imported dynamically — previously the top-level `import` of
- * `@ffmpeg-installer/ffmpeg` evaluated that package's body, which synchronously
- * `require()`s a platform-specific subpackage (e.g. `@ffmpeg-installer/linux-x64`).
- * When the subpackage couldn't be resolved on serverless hosts, the import
- * threw, which took down the *entire* server-actions module — breaking
- * unrelated flows like `listIdeaScansForUser`, `startCompetitorScan`, and
- * `pollCompetitorScan` that never touch ffmpeg. Now failures are contained
- * to the transcription call itself.
- */
-let ffmpegPromise: Promise<typeof FluentFfmpeg> | null = null;
-async function loadFfmpeg(): Promise<typeof FluentFfmpeg> {
-  if (ffmpegPromise) return ffmpegPromise;
-  ffmpegPromise = (async () => {
-    const ffmpegModule = (await import('fluent-ffmpeg')) as
-      | { default: typeof FluentFfmpeg }
-      | typeof FluentFfmpeg;
-    const ffmpeg = (
-      'default' in ffmpegModule ? ffmpegModule.default : ffmpegModule
-    ) as typeof FluentFfmpeg;
-    try {
-      const installerModule = (await import('@ffmpeg-installer/ffmpeg')) as
-        | { default?: { path?: string }; path?: string }
-        | { path?: string };
-      const installer =
-        'default' in installerModule && installerModule.default
-          ? installerModule.default
-          : (installerModule as { path?: string });
-      const installerPath = installer?.path;
-      if (typeof installerPath === 'string' && installerPath.length > 0) {
-        ffmpeg.setFfmpegPath(installerPath);
-        const ffprobePath = join(
-          dirname(installerPath),
-          process.platform === 'win32' ? 'ffprobe.exe' : 'ffprobe'
-        );
-        if (existsSync(ffprobePath)) {
-          ffmpeg.setFfprobePath(ffprobePath);
-        }
-      }
-    } catch (err) {
-      console.error('ffmpeg installer unavailable', err);
-    }
-    return ffmpeg;
-  })().catch((err) => {
-    ffmpegPromise = null;
-    throw err;
-  });
-  return ffmpegPromise;
-}
+const MAX_VIDEO_BUFFER_BYTES = 25 * 1024 * 1024;
+const TRANSCRIPTION_USER_ERROR =
+  'Не вдалося розпізнати мову з відео. Спробуй ще раз або інший рілс.';
+const TRANSCRIPTION_MAX_ATTEMPTS = 3;
+const TRANSCRIPTION_TIMEOUT_MS = 60_000;
+const TRANSCRIPTION_BACKOFF_MS = [1_000, 3_000, 7_000] as const;
+const TRANSCRIPTION_CONCURRENCY = 3;
+const IDEAS_TRANSCRIPTION_PROVIDER = 'groq:whisper-large-v3-turbo';
+const FALLBACK_TRANSCRIPT_MESSAGE =
+  'Йой, щось пішло не так! Рута вже знає про це і біжить виправляти. А поки ти чекаєш — ось текст під відео:';
 
 interface GroqTranscriptionResponse {
   text?: string;
 }
 
-async function probeReelMedia(url: string): Promise<{ durationSec: number; hasAudio: boolean }> {
-  const ffmpeg = await loadFfmpeg();
-  return new Promise((resolve, reject) => {
-    ffmpeg.ffprobe(url, (error, metadata) => {
-      if (error) {
-        reject(new Error(EXTRACT_AUDIO_ERROR));
-        return;
-      }
-
-      const hasAudio = (metadata.streams ?? []).some((stream) => stream.codec_type === 'audio');
-      const durationRaw = metadata.format?.duration;
-      const durationSec =
-        typeof durationRaw === 'number'
-          ? durationRaw
-          : typeof durationRaw === 'string'
-            ? Number(durationRaw)
-            : 0;
-      resolve({
-        durationSec: Number.isFinite(durationSec) && durationSec > 0 ? durationSec : 0,
-        hasAudio,
-      });
-    });
-  });
-}
-
-async function extractAudioMp3ToBuffer(url: string): Promise<Buffer> {
-  const ffmpeg = await loadFfmpeg();
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    let totalBytes = 0;
-    const chunks: Buffer[] = [];
-
-    const command = ffmpeg(url)
-      .noVideo()
-      .audioCodec('libmp3lame')
-      .audioFrequency(16000)
-      .audioChannels(1)
-      .audioBitrate('64k')
-      .format('mp3')
-      .duration(TRANSCRIBE_MAX_DURATION_SEC);
-
-    const fail = () => {
-      if (settled) return;
-      settled = true;
-      reject(new Error(EXTRACT_AUDIO_ERROR));
-    };
-
-    const timeout = setTimeout(() => {
-      command.kill('SIGKILL');
-      fail();
-    }, FFMPEG_TIMEOUT_MS);
-
-    command.on('error', () => {
-      clearTimeout(timeout);
-      fail();
-    });
-
-    const stream = command.pipe();
-    stream.on('data', (chunk: Buffer) => {
-      if (settled) return;
-      totalBytes += chunk.length;
-      if (totalBytes > MAX_AUDIO_BUFFER_BYTES) {
-        command.kill('SIGKILL');
-        clearTimeout(timeout);
-        fail();
-        return;
-      }
-      chunks.push(chunk);
-    });
-    stream.on('error', () => {
-      clearTimeout(timeout);
-      fail();
-    });
-    stream.on('end', () => {
-      clearTimeout(timeout);
-      if (settled) return;
-      settled = true;
-      const result = Buffer.concat(chunks);
-      if (result.length === 0) {
-        reject(new Error(EXTRACT_AUDIO_ERROR));
-        return;
-      }
-      resolve(result);
-    });
-  });
-}
-
 async function transcribeCompetitorMediaFromUrl(url: string): Promise<string> {
-  const { durationSec, hasAudio } = await probeReelMedia(url);
-  if (!hasAudio) {
-    throw new Error(REEL_NO_AUDIO_ERROR);
-  }
-  if (durationSec > TRANSCRIBE_MAX_DURATION_SEC) {
-    throw new Error(REEL_TOO_LONG_ERROR);
+  const mediaRes = await fetch(url, {
+    redirect: 'follow',
+    headers: {
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      Accept: '*/*',
+    },
+  });
+  if (!mediaRes.ok) {
+    throw new Error(`Не вдалося завантажити відео (HTTP ${mediaRes.status}).`);
   }
 
-  const audioBuffer = await extractAudioMp3ToBuffer(url);
+  const contentType = mediaRes.headers.get('content-type') || 'video/mp4';
+  const videoArrayBuffer = await mediaRes.arrayBuffer();
+  if (videoArrayBuffer.byteLength > MAX_VIDEO_BUFFER_BYTES) {
+    throw new Error(
+      'Відео завелике для розпізнавання (понад 25MB). Спробуй коротший рілс або інший ролик.'
+    );
+  }
+
+  const videoBuffer = Buffer.from(videoArrayBuffer);
   const apiKey = requireServerEnv('GROQ_API_KEY');
   const formData = new FormData();
   formData.append('model', 'whisper-large-v3-turbo');
@@ -194,7 +72,7 @@ async function transcribeCompetitorMediaFromUrl(url: string): Promise<string> {
   formData.append('temperature', '0');
   formData.append(
     'file',
-    new File([new Uint8Array(audioBuffer)], 'reel-audio.mp3', { type: 'audio/mpeg' })
+    new File([new Uint8Array(videoBuffer)], 'reel.mp4', { type: contentType })
   );
 
   const sttRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
@@ -215,6 +93,223 @@ async function transcribeCompetitorMediaFromUrl(url: string): Promise<string> {
     throw new Error('Transcript is empty. Try another reel URL.');
   }
   return transcript;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const id = setTimeout(() => reject(new Error('TRANSCRIPTION_TIMEOUT')), timeoutMs);
+    promise
+      .then((result) => {
+        clearTimeout(id);
+        resolve(result);
+      })
+      .catch((error) => {
+        clearTimeout(id);
+        reject(error);
+      });
+  });
+}
+
+let activeTranscriptions = 0;
+const transcriptionWaitQueue: Array<() => void> = [];
+
+async function runWithTranscriptionSlot<T>(job: () => Promise<T>): Promise<T> {
+  if (activeTranscriptions >= TRANSCRIPTION_CONCURRENCY) {
+    await new Promise<void>((resolve) => {
+      transcriptionWaitQueue.push(resolve);
+    });
+  }
+  activeTranscriptions += 1;
+  try {
+    return await job();
+  } finally {
+    activeTranscriptions = Math.max(0, activeTranscriptions - 1);
+    const next = transcriptionWaitQueue.shift();
+    if (next) next();
+  }
+}
+
+function parseHttpStatusFromErrorMessage(message: string): number | null {
+  const m = message.match(/\((\d{3})\)/);
+  if (!m) return null;
+  const status = Number(m[1]);
+  return Number.isFinite(status) ? status : null;
+}
+
+function isRetryableTranscriptionError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes('TRANSCRIPTION_TIMEOUT')) return true;
+
+  const status = parseHttpStatusFromErrorMessage(message);
+  if (status !== null) {
+    if (status === 429) return true;
+    if (status >= 500) return true;
+    if (status === 400 || status === 401 || status === 403 || status === 404) return false;
+  }
+
+  const lowered = message.toLowerCase();
+  if (
+    lowered.includes('network') ||
+    lowered.includes('fetch failed') ||
+    lowered.includes('econnreset') ||
+    lowered.includes('etimedout') ||
+    lowered.includes('timeout') ||
+    lowered.includes('temporar') ||
+    lowered.includes('rate limit')
+  ) {
+    return true;
+  }
+
+  return status === null;
+}
+
+function safeErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim().length > 0) return error.message;
+  return String(error);
+}
+
+function toJitter(baseMs: number): number {
+  const jitter = Math.floor(Math.random() * 250);
+  return baseMs + jitter;
+}
+
+async function transcribeWithRetry(
+  videoUrl: string
+): Promise<
+  | {
+      ok: true;
+      transcript: string;
+      attempts: number;
+      firstAttemptAt: string;
+      lastAttemptAt: string;
+    }
+  | {
+      ok: false;
+      attempts: number;
+      firstAttemptAt: string;
+      lastAttemptAt: string;
+      error: string;
+    }
+> {
+  const firstAttemptAt = new Date().toISOString();
+  let attempts = 0;
+  let lastError = 'Transcription failed';
+
+  for (let i = 0; i < TRANSCRIPTION_MAX_ATTEMPTS; i += 1) {
+    attempts += 1;
+    try {
+      const transcript = await runWithTranscriptionSlot(() =>
+        withTimeout(transcribeCompetitorMediaFromUrl(videoUrl), TRANSCRIPTION_TIMEOUT_MS)
+      );
+      return {
+        ok: true,
+        transcript,
+        attempts,
+        firstAttemptAt,
+        lastAttemptAt: new Date().toISOString(),
+      };
+    } catch (error) {
+      lastError = safeErrorMessage(error);
+      const retryable = isRetryableTranscriptionError(error);
+      if (!retryable || i === TRANSCRIPTION_MAX_ATTEMPTS - 1) {
+        return {
+          ok: false,
+          attempts,
+          firstAttemptAt,
+          lastAttemptAt: new Date().toISOString(),
+          error: lastError,
+        };
+      }
+      await sleep(toJitter(TRANSCRIPTION_BACKOFF_MS[i] ?? 1_000));
+    }
+  }
+
+  return {
+    ok: false,
+    attempts,
+    firstAttemptAt,
+    lastAttemptAt: new Date().toISOString(),
+    error: lastError,
+  };
+}
+
+function reelCaptionFromRaw(rawReels: unknown, shortCode: string): string | null {
+  if (!Array.isArray(rawReels)) return null;
+  for (const item of rawReels) {
+    if (!item || typeof item !== 'object') continue;
+    const row = item as Record<string, unknown>;
+    const code =
+      typeof row.shortCode === 'string'
+        ? row.shortCode
+        : typeof row.shortcode === 'string'
+          ? row.shortcode
+          : typeof row.id === 'string'
+            ? row.id
+            : '';
+    if (code !== shortCode) continue;
+    const caption = row.caption;
+    if (typeof caption === 'string' && caption.trim()) return caption.trim();
+    if (caption && typeof caption === 'object' && 'text' in caption) {
+      const text = (caption as { text?: unknown }).text;
+      if (typeof text === 'string' && text.trim()) return text.trim();
+    }
+    if (typeof row.title === 'string' && row.title.trim()) return row.title.trim();
+    if (typeof row.text === 'string' && row.text.trim()) return row.text.trim();
+  }
+  return null;
+}
+
+function findReelUrl(row: IdeaScanRow, shortCode: string): string | null {
+  const item = row.top_reels?.items?.find((r) => r.shortCode === shortCode);
+  return item?.url?.trim() || null;
+}
+
+function reportTranscriptionFailureWebhook(payload: {
+  scanId: string;
+  userId: string;
+  accountHandle: string;
+  reelUrl: string | null;
+  reelId: string;
+  errorMessage: string;
+  attemptCount: number;
+  trigger: 'auto' | 'manual_retry';
+  firstAttemptAt: string;
+  lastAttemptAt: string;
+}): void {
+  const webhookUrl = optionalServerEnv('RUTA_ERROR_WEBHOOK_URL');
+  const secret = optionalServerEnv('RUTA_ERROR_SECRET');
+  if (!webhookUrl || !secret) return;
+
+  void fetch(webhookUrl, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-ruta-error-secret': secret,
+    },
+    body: JSON.stringify({
+      source: 'ideas_transcription',
+      scan_id: payload.scanId,
+      user_id: payload.userId,
+      account_handle: payload.accountHandle,
+      reel_url: payload.reelUrl ?? '',
+      reel_id: payload.reelId,
+      error_message: payload.errorMessage,
+      attempt_count: payload.attemptCount,
+      trigger: payload.trigger,
+      timestamps: {
+        first_attempt_at: payload.firstAttemptAt,
+        last_attempt_at: payload.lastAttemptAt,
+      },
+      transcription_provider: IDEAS_TRANSCRIPTION_PROVIDER,
+    }),
+    signal: AbortSignal.timeout(5_000),
+  }).catch((error) => {
+    console.error('ideas transcription webhook failed', error);
+  });
 }
 
 function hasPlaysFieldInTopReels(row: IdeaScanRow | null | undefined): boolean {
@@ -521,42 +616,54 @@ export async function refetchReelVideoUrl(
 }
 
 export type TranscribeReelVideoResult =
-  | { ok: true; transcript: string }
-  | { ok: false; error: string };
+  | {
+      ok: true;
+      transcript: string;
+      transcript_source: 'transcribed';
+      transcript_status: 'success';
+      transcript_attempts: number;
+      last_transcript_error: null;
+    }
+  | {
+      ok: false;
+      error: string;
+      transcript_status?: 'failed';
+      transcript_attempts?: number;
+      last_transcript_error?: string;
+    };
 
-async function mergeIdeaScanReelTranscript(
+async function updateIdeaScanTranscriptEntry(
   scanId: string,
+  userId: string,
   shortCode: string,
-  transcript: string
+  entry: IdeaScanTranscriptEntry
 ): Promise<void> {
-  const user = await requireAuth();
-  if (!user) return;
   const supabase = await createServerSupabaseClient();
   const { data: row, error: fetchErr } = await supabase
     .from('idea_scans')
     .select('reel_transcripts')
     .eq('id', scanId)
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .maybeSingle();
 
   if (fetchErr) {
-    console.error('mergeIdeaScanReelTranscript fetch', fetchErr);
+    console.error('updateIdeaScanTranscriptEntry fetch', fetchErr);
     return;
   }
 
   const merged = {
-    ...parseIdeaScanReelStringMap(row?.reel_transcripts),
-    [shortCode]: transcript,
+    ...parseIdeaScanTranscriptMap(row?.reel_transcripts),
+    [shortCode]: entry,
   };
 
   const { error: updateErr } = await supabase
     .from('idea_scans')
     .update({ reel_transcripts: merged })
     .eq('id', scanId)
-    .eq('user_id', user.id);
+    .eq('user_id', userId);
 
   if (updateErr) {
-    console.error('mergeIdeaScanReelTranscript update', updateErr);
+    console.error('updateIdeaScanTranscriptEntry update', updateErr);
   }
 }
 
@@ -578,12 +685,216 @@ export async function transcribeCompetitorReelVideo(
       return { ok: false, error: 'Ліміт запитів вичерпано. Спробуй пізніше.' };
     }
 
-    const transcript = await transcribeCompetitorMediaFromUrl(url);
-    if (ctx) {
-      await mergeIdeaScanReelTranscript(ctx.scanId, ctx.shortCode, transcript);
+    const transcriptResult = await transcribeWithRetry(url);
+    if (!transcriptResult.ok) {
+      if (ctx) {
+        await updateIdeaScanTranscriptEntry(ctx.scanId, user.id, ctx.shortCode, {
+          ...defaultTranscriptEntry(),
+          transcript_status: 'failed',
+          transcript_attempts: transcriptResult.attempts,
+          last_transcript_error: transcriptResult.error,
+        });
+        const supabase = await createServerSupabaseClient();
+        const { data: scanRow } = await supabase
+          .from('idea_scans')
+          .select('id, user_id, handle, raw_reels, top_reels')
+          .eq('id', ctx.scanId)
+          .eq('user_id', user.id)
+          .maybeSingle();
+        if (scanRow) {
+          reportTranscriptionFailureWebhook({
+            scanId: ctx.scanId,
+            userId: user.id,
+            accountHandle: (scanRow as IdeaScanRow).handle,
+            reelUrl: findReelUrl(scanRow as IdeaScanRow, ctx.shortCode),
+            reelId: ctx.shortCode,
+            errorMessage: transcriptResult.error,
+            attemptCount: transcriptResult.attempts,
+            trigger: 'auto',
+            firstAttemptAt: transcriptResult.firstAttemptAt,
+            lastAttemptAt: transcriptResult.lastAttemptAt,
+          });
+        }
+      }
+      return {
+        ok: false,
+        error: TRANSCRIPTION_USER_ERROR,
+        transcript_status: 'failed',
+        transcript_attempts: transcriptResult.attempts,
+        last_transcript_error: transcriptResult.error,
+      };
     }
-    return { ok: true, transcript };
+    const transcript = transcriptResult.transcript;
+    if (ctx) {
+      await updateIdeaScanTranscriptEntry(ctx.scanId, user.id, ctx.shortCode, {
+        transcript,
+        transcript_source: 'transcribed',
+        transcript_status: 'success',
+        transcript_attempts: transcriptResult.attempts,
+        last_transcript_error: null,
+      });
+    }
+    return {
+      ok: true,
+      transcript,
+      transcript_source: 'transcribed',
+      transcript_status: 'success',
+      transcript_attempts: transcriptResult.attempts,
+      last_transcript_error: null,
+    };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    const raw = e instanceof Error ? e.message : String(e);
+    console.error('transcribeCompetitorReelVideo failed', raw);
+    return {
+      ok: false,
+      error: TRANSCRIPTION_USER_ERROR,
+      transcript_status: 'failed',
+      transcript_attempts: 0,
+      last_transcript_error: raw,
+    };
   }
+}
+
+export async function getIdeaScanTranscriptEntry(
+  scanId: string,
+  shortCode: string
+): Promise<IdeaScanTranscriptEntry | null> {
+  const user = await requireAuth();
+  if (!user) return null;
+  const supabase = await createServerSupabaseClient();
+  const { data } = await supabase
+    .from('idea_scans')
+    .select('reel_transcripts')
+    .eq('id', scanId)
+    .eq('user_id', user.id)
+    .maybeSingle();
+  if (!data) return null;
+  const map = parseIdeaScanTranscriptMap(data.reel_transcripts);
+  return map[shortCode] ?? null;
+}
+
+export type RetryIdeaReelTranscriptionResult =
+  | {
+      ok: true;
+      mode: 'transcribed' | 'caption_fallback';
+      transcript: string;
+      template_pattern: string;
+      template_lines: string[];
+      transcript_source: 'transcribed' | 'caption_fallback';
+      transcript_status: 'success';
+      transcript_attempts: number;
+    }
+  | { ok: false; error: string };
+
+async function buildTemplatePayloadFromTranscript(transcript: string): Promise<{
+  templatePattern: string;
+  templateLines: string[];
+}> {
+  const trimmed = transcript.trim();
+  if (!trimmed) {
+    return {
+      templatePattern: '',
+      templateLines: [],
+    };
+  }
+
+  try {
+    const templated = await templatizeTranscriptToScenes(trimmed);
+    const templateLines = templated.scenes
+      .map((scene) => scene.text.trim())
+      .filter(Boolean);
+    return {
+      templatePattern: templateLines[0] ?? trimmed.slice(0, 120),
+      templateLines,
+    };
+  } catch (templateError) {
+    console.warn('Manual retry template generation failed, using deterministic scene split.', templateError);
+    const fallbackDrafts = await splitTranscriptIntoScenes(trimmed, []);
+    const templateLines = fallbackDrafts
+      .map((draft) => draft.text.trim())
+      .filter(Boolean);
+    return {
+      templatePattern: templateLines[0] ?? trimmed.slice(0, 120),
+      templateLines: templateLines.length > 0 ? templateLines : [trimmed],
+    };
+  }
+}
+
+export async function retryIdeaReelTranscription(
+  scanId: string,
+  shortCode: string
+): Promise<RetryIdeaReelTranscriptionResult> {
+  const user = await requireAuth();
+  if (!user) return { ok: false, error: 'Потрібен вхід.' };
+  const supabase = await createServerSupabaseClient();
+  const { data: scanRow, error } = await supabase
+    .from('idea_scans')
+    .select('id, user_id, handle, raw_reels, top_reels, reel_transcripts')
+    .eq('id', scanId)
+    .eq('user_id', user.id)
+    .maybeSingle();
+  if (error || !scanRow) {
+    return { ok: false, error: 'Скан не знайдено.' };
+  }
+
+  const reel = (scanRow as IdeaScanRow).top_reels?.items?.find((item) => item.shortCode === shortCode);
+  if (!reel?.videoUrl) {
+    return { ok: false, error: 'Немає відео для повторної транскрипції.' };
+  }
+
+  const retryResult = await transcribeWithRetry(reel.videoUrl);
+  if (retryResult.ok) {
+    const templatePayload = await buildTemplatePayloadFromTranscript(retryResult.transcript);
+    await updateIdeaScanTranscriptEntry(scanId, user.id, shortCode, {
+      transcript: retryResult.transcript,
+      transcript_source: 'transcribed',
+      transcript_status: 'success',
+      transcript_attempts: retryResult.attempts,
+      last_transcript_error: null,
+    });
+    return {
+      ok: true,
+      mode: 'transcribed',
+      transcript: retryResult.transcript,
+      template_pattern: templatePayload.templatePattern,
+      template_lines: templatePayload.templateLines,
+      transcript_source: 'transcribed',
+      transcript_status: 'success',
+      transcript_attempts: retryResult.attempts,
+    };
+  }
+
+  reportTranscriptionFailureWebhook({
+    scanId,
+    userId: user.id,
+    accountHandle: (scanRow as IdeaScanRow).handle,
+    reelUrl: findReelUrl(scanRow as IdeaScanRow, shortCode),
+    reelId: shortCode,
+    errorMessage: retryResult.error,
+    attemptCount: retryResult.attempts,
+    trigger: 'manual_retry',
+    firstAttemptAt: retryResult.firstAttemptAt,
+    lastAttemptAt: retryResult.lastAttemptAt,
+  });
+
+  const caption = reelCaptionFromRaw((scanRow as IdeaScanRow).raw_reels, shortCode) || reel.hook || '';
+  const fallbackTranscript = `${FALLBACK_TRANSCRIPT_MESSAGE}\n\n${caption}`.trim();
+  const templatePayload = await buildTemplatePayloadFromTranscript(caption);
+  await updateIdeaScanTranscriptEntry(scanId, user.id, shortCode, {
+    transcript: fallbackTranscript,
+    transcript_source: 'caption_fallback',
+    transcript_status: 'success',
+    transcript_attempts: retryResult.attempts,
+    last_transcript_error: retryResult.error,
+  });
+  return {
+    ok: true,
+    mode: 'caption_fallback',
+    transcript: fallbackTranscript,
+    template_pattern: templatePayload.templatePattern,
+    template_lines: templatePayload.templateLines,
+    transcript_source: 'caption_fallback',
+    transcript_status: 'success',
+    transcript_attempts: retryResult.attempts,
+  };
 }

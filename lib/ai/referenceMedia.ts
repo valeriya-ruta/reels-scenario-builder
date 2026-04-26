@@ -1,5 +1,6 @@
 import { resolveInstagramMediaUrl } from '@/lib/ai/instagramMedia';
 import { resolveTiktokMediaUrl } from '@/lib/ai/tiktokMedia';
+import { parseInstagramReelUrl } from '@/lib/instagramUrl';
 
 const INSTAGRAM_HOSTS = new Set(['instagram.com', 'www.instagram.com']);
 
@@ -26,9 +27,16 @@ export interface ResolvedReferenceMedia {
  * Resolves a direct media URL for transcription from an Instagram Reel or TikTok post URL.
  */
 export async function resolveReferenceMediaUrl(pageUrl: string): Promise<ResolvedReferenceMedia> {
+  const instagramParsed = parseInstagramReelUrl(pageUrl);
+  if (instagramParsed.ok) {
+    return resolveInstagramMediaUrl(pageUrl);
+  }
+
   let parsed: URL;
+  const trimmed = pageUrl.trim();
+  const withProtocol = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
   try {
-    parsed = new URL(pageUrl.trim());
+    parsed = new URL(withProtocol);
   } catch {
     throw new Error(
       'Некоректне посилання. Встав посилання на публічний Instagram Reel або відео TikTok.'
