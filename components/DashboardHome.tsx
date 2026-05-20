@@ -27,12 +27,33 @@ const TREND_ITEMS = [
   { title: 'Топ звук зараз', url: 'https://www.instagram.com/reels/' },
 ] as const;
 
-const WORKSHOP_LESSONS = [
-  { label: 'Урок 1', embedUrl: 'https://www.youtube.com/embed/DWELuEoU2OE' },
-  { label: 'Урок 2', embedUrl: 'https://www.youtube.com/embed/Um-VOIeE1m4' },
-  { label: 'Урок 3', embedUrl: 'https://www.youtube.com/embed/iL7A4mOEaE0' },
-  { label: 'Урок 4', embedUrl: 'https://www.youtube.com/embed/HJLP13aqbKc' },
-  { label: 'Урок 5', embedUrl: 'https://www.youtube.com/embed/E0IK9fYM3Ow' },
+const WORKSHOP_MODULES = [
+  {
+    title: 'Модуль 1: де брати ідеї та воронка контенту',
+    lessons: [
+      { label: 'Урок 1', embedUrl: 'https://www.youtube.com/embed/DWELuEoU2OE' },
+      { label: 'Урок 2', embedUrl: 'https://www.youtube.com/embed/Um-VOIeE1m4' },
+      { label: 'Урок 3', embedUrl: 'https://www.youtube.com/embed/iL7A4mOEaE0' },
+      { label: 'Урок 4', embedUrl: 'https://www.youtube.com/embed/HJLP13aqbKc' },
+      { label: 'Урок 5', embedUrl: 'https://www.youtube.com/embed/E0IK9fYM3Ow' },
+    ],
+  },
+  {
+    title: 'Модуль 2: сторітелінг, вторинна вигода та правило 3 секунд',
+    lessons: [
+      { label: 'Сторітелінг', embedUrl: 'https://www.youtube.com/embed/nD0PL1rUhTA' },
+      { label: 'Вторинна вигода', embedUrl: 'https://www.youtube.com/embed/Rqqqb0u3ynY' },
+      { label: 'Правило 3 секунд', embedUrl: 'https://www.youtube.com/embed/CjclYYOm2t8' },
+    ],
+  },
+  {
+    title: 'Модуль 3: генерація та клонування',
+    lessons: [
+      { label: 'Генерація чи клонування', embedUrl: 'https://www.youtube.com/embed/EQIoyQuTXRs' },
+      { label: 'Що треба для клона', embedUrl: 'https://www.youtube.com/embed/4zPp-lkSEpw' },
+      { label: 'Демо клінг та хігсфілд', embedUrl: 'https://www.youtube.com/embed/QuerXQ1fETg' },
+    ],
+  },
 ] as const;
 
 type FormatId = 'reels' | 'stories' | 'carousel';
@@ -387,27 +408,31 @@ export default function DashboardHome() {
         </section>
       )}
 
-      <section className="mt-10 space-y-4">
+      <section className="mt-10 space-y-6">
         <h2 className="font-display text-lg font-semibold text-black">Воркшоп з ШІ-контенту</h2>
-        <h3 className="text-sm font-medium text-zinc-700">Модуль 1: де брати ідеї та воронка контенту</h3>
-        <div className="space-y-4">
-          {WORKSHOP_LESSONS.map((lesson) => (
-            <article
-              key={lesson.label}
-              className="card-shadow rounded-2xl border border-[color:var(--border)] bg-white p-4"
-            >
-              <p className="mb-3 text-sm font-semibold text-black">{lesson.label}</p>
-              <iframe
-                src={lesson.embedUrl}
-                title={lesson.label}
-                className="aspect-video w-full rounded-xl border border-[color:var(--border)]"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                referrerPolicy="strict-origin-when-cross-origin"
-                allowFullScreen
-              />
-            </article>
-          ))}
-        </div>
+        {WORKSHOP_MODULES.map((module) => (
+          <div key={module.title} className="space-y-4">
+            <h3 className="text-sm font-medium text-zinc-700">{module.title}</h3>
+            <div className="space-y-4">
+              {module.lessons.map((lesson) => (
+                <article
+                  key={lesson.label}
+                  className="card-shadow rounded-2xl border border-[color:var(--border)] bg-white p-4"
+                >
+                  <p className="mb-3 text-sm font-semibold text-black">{lesson.label}</p>
+                  <iframe
+                    src={lesson.embedUrl}
+                    title={lesson.label}
+                    className="aspect-video w-full rounded-xl border border-[color:var(--border)]"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    referrerPolicy="strict-origin-when-cross-origin"
+                    allowFullScreen
+                  />
+                </article>
+              ))}
+            </div>
+          </div>
+        ))}
       </section>
 
     </div>
