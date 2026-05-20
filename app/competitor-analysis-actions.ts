@@ -833,7 +833,18 @@ export async function retryIdeaReelTranscription(
     .eq('id', scanId)
     .eq('user_id', user.id)
     .maybeSingle();
-  if (error || !scanRow) {
+  if (error) {
+    const msg = error.message ?? '';
+    if (msg.includes('reel_transcripts')) {
+      return {
+        ok: false,
+        error:
+          'Потрібна міграція БД (колонка reel_transcripts на idea_scans). Запусти migration_idea_scans_reel_transcripts.sql у Supabase.',
+      };
+    }
+    return { ok: false, error: `Не вдалося отримати скан: ${msg}` };
+  }
+  if (!scanRow) {
     return { ok: false, error: 'Скан не знайдено.' };
   }
 

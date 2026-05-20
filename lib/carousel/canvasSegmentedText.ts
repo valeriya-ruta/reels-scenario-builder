@@ -104,6 +104,16 @@ export function drawMarkerHighlight(
 
 export type WordToken = { text: string; isAccent: boolean };
 
+/** Per-request resolved font family names. Each carousel request resolves its
+ *  own brand-specific names (e.g. `Brand_manrope_sans`) so that concurrent
+ *  exports against a warm worker do not inherit each other's fonts. */
+export type CarouselFonts = {
+  sans: string;
+  sansBold: string;
+  sansItalic: string;
+  serifItalic: string;
+};
+
 export function segmentsToWords(segments: AccentSegment[]): WordToken[] {
   const out: WordToken[] = [];
   for (const seg of segments) {
@@ -160,19 +170,22 @@ export function drawSegmentedLine(
   maxWidth: number,
   refinedNoAccent: boolean,
   seedBase: number,
+  fonts: CarouselFonts,
   plainBaseIsBold = false,
 ) {
   const measure = (txt: string, bold: boolean, italic: boolean) => {
     ctx.font = bold
-      ? `${italic ? 'italic ' : ''}bold ${fontSize}px NotoSansBold`
-      : `${italic ? 'italic ' : ''}${fontSize}px NotoSans`;
+      ? `${italic ? 'italic ' : ''}bold ${fontSize}px ${fonts.sansBold}`
+      : italic
+        ? `italic ${fontSize}px ${fonts.sansItalic}`
+        : `${fontSize}px ${fonts.sans}`;
     return ctx.measureText(txt).width;
   };
 
   const tokenWidth = (tok: WordToken) => {
     const useA = tok.isAccent && !refinedNoAccent;
     if (!useA && plainBaseIsBold) {
-      ctx.font = `${fontSize}px NotoSansBold`;
+      ctx.font = `${fontSize}px ${fonts.sansBold}`;
       return ctx.measureText(tok.text).width;
     }
     const b = useA && accentStyle === 'bold';
@@ -203,29 +216,29 @@ export function drawSegmentedLine(
       if (br > 0) roundRectPath(ctx, cx - padX, y - fontSize - padY + 4, w + padX * 2, fontSize + padY * 2, br);
       else ctx.fillRect(cx - padX, y - fontSize - padY + 4, w + padX * 2, fontSize + padY * 2);
       ctx.fill();
-      ctx.font = `${fontSize}px NotoSansBold`;
+      ctx.font = `${fontSize}px ${fonts.sansBold}`;
       ctx.fillStyle = '#ffffff';
       ctx.textBaseline = 'alphabetic';
       ctx.fillText(text, cx, y);
     } else if (useAccent && accentStyle === 'marker') {
       drawMarkerHighlight(ctx, seedBase + i * 17, cx - 2, y - fontSize * 0.85, w + 4, fontSize * 0.72, accentColor, 0.38);
-      ctx.font = `${fontSize}px NotoSans`;
+      ctx.font = `${fontSize}px ${fonts.sans}`;
       const { r, g, b } = hexToRgb(baseColor);
       ctx.fillStyle = `rgb(${r},${g},${b})`;
       ctx.textBaseline = 'alphabetic';
       ctx.fillText(text, cx, y);
     } else if (!useAccent && plainBaseIsBold) {
-      ctx.font = `${fontSize}px NotoSansBold`;
+      ctx.font = `${fontSize}px ${fonts.sansBold}`;
       const { r, g, b } = hexToRgb(baseColor);
       ctx.fillStyle = `rgb(${r},${g},${b})`;
       ctx.textBaseline = 'alphabetic';
       ctx.fillText(text, cx, y);
     } else {
       ctx.font = bold
-        ? `${italic ? 'italic ' : ''}bold ${fontSize}px NotoSansBold`
+        ? `${italic ? 'italic ' : ''}bold ${fontSize}px ${fonts.sansBold}`
         : italic
-          ? `italic ${fontSize}px NotoSansItalic`
-          : `${fontSize}px NotoSans`;
+          ? `italic ${fontSize}px ${fonts.sansItalic}`
+          : `${fontSize}px ${fonts.sans}`;
       const { r, g, b } = hexToRgb(useAccent ? accentColor : baseColor);
       if (refinedNoAccent && tok.isAccent) {
         const bb = hexToRgb(baseColor);

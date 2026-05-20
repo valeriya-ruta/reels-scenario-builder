@@ -1,6 +1,4 @@
-import { existsSync } from 'fs';
-import { join } from 'path';
-import { createCanvas, GlobalFonts, type SKRSContext2D, type Image } from '@napi-rs/canvas';
+import { createCanvas, type SKRSContext2D, type Image } from '@napi-rs/canvas';
 import {
   CANVAS_SIZE,
   CANVAS_HEIGHT,
@@ -19,90 +17,11 @@ import {
   layoutWords,
   roundRectPath,
   segmentsToWords,
+  type CarouselFonts,
 } from '@/lib/carousel/canvasSegmentedText';
+import { ensureCarouselFonts } from '@/lib/carousel/carouselFonts';
 import { rasterizePhosphorIcon } from '@/lib/carousel/phosphorIcon';
 import type { BrandAccentStyle } from '@/lib/brand';
-
-const FONT_DIR = join(process.cwd(), 'public', 'fonts');
-
-let fontsReady = false;
-let activeFontPairing: string | null = null;
-
-function resolveFontsourceFile(
-  fontsourceDir: string,
-  packageName: string,
-  weight: '400' | '700',
-  style: 'normal' | 'italic',
-): string | null {
-  const subsets = ['cyrillic', 'latin-ext', 'latin'];
-  const exts = ['woff2', 'woff', 'ttf', 'otf'];
-  for (const subset of subsets) {
-    for (const ext of exts) {
-      const filePath = join(fontsourceDir, packageName, 'files', `${packageName}-${subset}-${weight}-${style}.${ext}`);
-      if (existsSync(filePath)) {
-        return filePath;
-      }
-    }
-  }
-  return null;
-}
-
-function registerAliasFromFontsource(
-  fontsourceDir: string,
-  packageName: string,
-  alias: string,
-  weight: '400' | '700',
-  style: 'normal' | 'italic',
-): boolean {
-  const resolved = resolveFontsourceFile(fontsourceDir, packageName, weight, style);
-  if (!resolved) return false;
-  return Boolean(GlobalFonts.registerFromPath(resolved, alias));
-}
-
-function ensureCarouselFonts(fontPairing?: string | null): void {
-  const requestedFontId = (fontPairing ?? '').trim().toLowerCase();
-  const fontsourceDir = join(process.cwd(), 'node_modules', '@fontsource');
-  if (fontsReady && activeFontPairing === requestedFontId) return;
-  try {
-    GlobalFonts.registerFromPath(join(FONT_DIR, 'NotoSans-Bold.ttf'), 'NotoSansBold');
-    GlobalFonts.registerFromPath(join(FONT_DIR, 'NotoSans-Regular.ttf'), 'NotoSans');
-    GlobalFonts.registerFromPath(join(FONT_DIR, 'NotoSans-Italic.ttf'), 'NotoSansItalic');
-    GlobalFonts.registerFromPath(join(FONT_DIR, 'NotoSerif-Italic.ttf'), 'NotoSerifItalic');
-    // Keep all drawing code unchanged by swapping font aliases to selected brand font.
-    let packageName: string | null = null;
-    if (requestedFontId === 'google_sans') packageName = 'google-sans';
-    else if (requestedFontId === 'manrope') packageName = 'manrope';
-    else if (requestedFontId === 'cormorant') packageName = 'cormorant-garamond';
-    else if (requestedFontId === 'days_one') packageName = 'days-one';
-    else if (requestedFontId === 'climate_crisis') packageName = 'climate-crisis';
-    else if (requestedFontId === 'inter') packageName = 'inter';
-    else if (requestedFontId === 'montserrat') packageName = 'montserrat';
-
-    if (packageName) {
-      const bodyRegistered = registerAliasFromFontsource(fontsourceDir, packageName, 'NotoSans', '400', 'normal');
-      const titleRegistered =
-        registerAliasFromFontsource(fontsourceDir, packageName, 'NotoSansBold', '700', 'normal') ||
-        registerAliasFromFontsource(fontsourceDir, packageName, 'NotoSansBold', '400', 'normal');
-      const sansItalicRegistered =
-        registerAliasFromFontsource(fontsourceDir, packageName, 'NotoSansItalic', '400', 'italic') ||
-        registerAliasFromFontsource(fontsourceDir, packageName, 'NotoSansItalic', '400', 'normal');
-      const serifItalicRegistered =
-        registerAliasFromFontsource(fontsourceDir, packageName, 'NotoSerifItalic', '700', 'italic') ||
-        registerAliasFromFontsource(fontsourceDir, packageName, 'NotoSerifItalic', '400', 'italic') ||
-        registerAliasFromFontsource(fontsourceDir, packageName, 'NotoSerifItalic', '400', 'normal');
-
-      if (!bodyRegistered || !titleRegistered || !sansItalicRegistered || !serifItalicRegistered) {
-        console.warn(
-          `[carousel] Partial font alias registration for "${requestedFontId}". Falling back to bundled defaults for missing variants.`,
-        );
-      }
-    }
-    fontsReady = true;
-    activeFontPairing = requestedFontId;
-  } catch (e) {
-    console.warn('[carousel] font registration:', e);
-  }
-}
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
   const h = hex.replace(/^#/, '');
@@ -131,11 +50,12 @@ function drawParagraphSegmented(
   align: 'left' | 'center' | 'right',
   refinedNoAccent: boolean,
   seed: number,
+  fonts: CarouselFonts,
 ): number {
   const segments = parseAccentSpans(text);
   const words = segmentsToWords(segments);
   const measurePlain = (t: string) => {
-    ctx.font = `${fontSize}px NotoSans`;
+    ctx.font = `${fontSize}px ${fonts.sans}`;
     return ctx.measureText(t).width;
   };
   const lines = layoutWords(measurePlain, words, maxWidth);
@@ -155,6 +75,7 @@ function drawParagraphSegmented(
       maxWidth,
       refinedNoAccent,
       seed + i * 31,
+      fonts,
     );
     y += lineHeight;
     i++;
@@ -172,16 +93,17 @@ function drawPlainParagraph(
   lineHeight: number,
   color: string,
   align: 'left' | 'center' | 'right',
+  fonts: CarouselFonts,
   fontFamily: 'sans' | 'serif' | 'sansBold' = 'sans',
 ): number {
   const trimmed = text.trim();
   if (!trimmed) return yStart;
   const fontFace =
     fontFamily === 'serif'
-      ? `italic ${fontSize}px NotoSerifItalic`
+      ? `italic ${fontSize}px ${fonts.serifItalic}`
       : fontFamily === 'sansBold'
-        ? `bold ${fontSize}px NotoSansBold`
-        : `${fontSize}px NotoSans`;
+        ? `bold ${fontSize}px ${fonts.sansBold}`
+        : `${fontSize}px ${fonts.sans}`;
   ctx.font = fontFace;
   const words = trimmed.split(/\s+/);
   const lines: string[] = [];
@@ -228,11 +150,12 @@ function drawWatermark(
   domain: string,
   vibe: 'bold' | 'refined',
   lightText: boolean,
+  fonts: CarouselFonts,
 ) {
   const h = handle.trim() || '';
   const d = domain.trim() || '';
   const size = vibe === 'refined' ? 22 : 24;
-  ctx.font = `${size}px NotoSans`;
+  ctx.font = `${size}px ${fonts.sans}`;
   ctx.fillStyle = lightText ? 'rgba(255,255,255,0.55)' : 'rgba(150,150,150,0.6)';
   ctx.textBaseline = 'alphabetic';
   if (vibe === 'refined') {
@@ -320,6 +243,7 @@ async function renderCover(
   ctx: SKRSContext2D,
   input: CarouselTemplateInput,
   refined: boolean,
+  fonts: CarouselFonts,
 ): Promise<void> {
   const { brand, title, body, label, designNote } = input;
   const accent = brand.accentColor || DEFAULT_ACCENT;
@@ -336,16 +260,16 @@ async function renderCover(
       input.gradientEndColor,
     );
     const [l1, l2] = splitEditorialTitle(stripAccentMarkers(title));
-    ctx.font = '22px NotoSansBold';
+    ctx.font = `22px ${fonts.sansBold}`;
     ctx.fillStyle = '#aaaaaa';
     ctx.textBaseline = 'alphabetic';
     const eyebrow = (label || 'Карусель').toUpperCase();
     ctx.fillText(eyebrow, PADDING, WATERMARK_Y + 56);
     let y = WATERMARK_Y + 120;
-    y = drawPlainParagraph(ctx, l1, PADDING, y, CANVAS_SIZE - PADDING * 2, 96, 102, '#1a1a1a', 'left', 'serif');
+    y = drawPlainParagraph(ctx, l1, PADDING, y, CANVAS_SIZE - PADDING * 2, 96, 102, '#1a1a1a', 'left', fonts, 'serif');
     if (l2) {
       const u = l2.toUpperCase();
-      y = drawPlainParagraph(ctx, u, PADDING, y + 8, CANVAS_SIZE - PADDING * 2, 44, 52, '#1a1a1a', 'left', 'sansBold');
+      y = drawPlainParagraph(ctx, u, PADDING, y + 8, CANVAS_SIZE - PADDING * 2, 44, 52, '#1a1a1a', 'left', fonts, 'sansBold');
     }
     ctx.strokeStyle = '#c8c0b4';
     ctx.lineWidth = 1;
@@ -354,10 +278,10 @@ async function renderCover(
     ctx.lineTo(CANVAS_SIZE - PADDING, y);
     ctx.stroke();
     y += 40;
-    ctx.font = '22px NotoSans';
+    ctx.font = `22px ${fonts.sans}`;
     ctx.fillStyle = '#bbbbbb';
     const meta = stripAccentMarkers(body).trim() ? stripAccentMarkers(body) : designNote || '';
-    if (meta) drawPlainParagraph(ctx, meta, PADDING, y, CANVAS_SIZE - PADDING * 2, 22, 28, '#bbbbbb', 'left');
+    if (meta) drawPlainParagraph(ctx, meta, PADDING, y, CANVAS_SIZE - PADDING * 2, 22, 28, '#bbbbbb', 'left', fonts);
   } else {
     fillCoverBackground(
       ctx,
@@ -372,11 +296,11 @@ async function renderCover(
     const barH = 6;
     const contentW = CANVAS_SIZE - PADDING * 2;
     let blockH = 0;
-    ctx.font = '88px NotoSansBold';
+    ctx.font = `88px ${fonts.sansBold}`;
     const titleSeg = parseAccentSpans(title);
     const words = segmentsToWords(titleSeg);
     const measure = (t: string) => {
-      ctx.font = `88px NotoSans`;
+      ctx.font = `88px ${fonts.sans}`;
       return ctx.measureText(t).width;
     };
     const lines = layoutWords(measure, words, contentW);
@@ -406,12 +330,13 @@ async function renderCover(
         contentW,
         false,
         900 + li,
+        fonts,
       );
       yy += 98;
     }
     if (sub) {
       yy += 16;
-      ctx.font = '26px NotoSans';
+      ctx.font = `26px ${fonts.sans}`;
       ctx.fillStyle = bodyColor;
       ctx.textBaseline = 'alphabetic';
       ctx.fillText(sub, PADDING, yy);
@@ -423,6 +348,7 @@ async function renderContent(
   ctx: SKRSContext2D,
   input: CarouselTemplateInput,
   refined: boolean,
+  fonts: CarouselFonts,
 ): Promise<void> {
   const { brand, title, body, label, icon, items, handle, domain } = input;
   const accent = brand.accentColor || DEFAULT_ACCENT;
@@ -434,19 +360,19 @@ async function renderContent(
     ctx.strokeStyle = '#e8e3dc';
     ctx.lineWidth = 0.5;
     ctx.strokeRect(0.25, 0.25, CANVAS_SIZE - 0.5, CANVAS_HEIGHT - 0.5);
-    drawWatermark(ctx, handle, domain, 'refined', false);
+    drawWatermark(ctx, handle, domain, 'refined', false, fonts);
     const [l1, l2] = splitEditorialTitle(stripAccentMarkers(title));
     let y = WATERMARK_Y + 48;
-    ctx.font = '22px NotoSansBold';
+    ctx.font = `22px ${fonts.sansBold}`;
     ctx.fillStyle = '#bbbbbb';
     const eyebrow = (label || '').trim().toUpperCase() || 'ФРАГМЕНТ';
     ctx.fillText(eyebrow, PADDING, y);
     y += 40;
-    ctx.font = '72px NotoSerifItalic';
-    y = drawPlainParagraph(ctx, l1, PADDING, y, CANVAS_SIZE - PADDING * 2, 72, 78, '#1a1a1a', 'left');
+    ctx.font = `72px ${fonts.serifItalic}`;
+    y = drawPlainParagraph(ctx, l1, PADDING, y, CANVAS_SIZE - PADDING * 2, 72, 78, '#1a1a1a', 'left', fonts);
     y += 8;
     if (l2) {
-      y = drawPlainParagraph(ctx, l2.toUpperCase(), PADDING, y, CANVAS_SIZE - PADDING * 2, 38, 44, '#1a1a1a', 'left');
+      y = drawPlainParagraph(ctx, l2.toUpperCase(), PADDING, y, CANVAS_SIZE - PADDING * 2, 38, 44, '#1a1a1a', 'left', fonts);
       y += 8;
     }
     ctx.strokeStyle = '#1a1a1a';
@@ -456,18 +382,18 @@ async function renderContent(
     ctx.lineTo(PADDING + 44, y);
     ctx.stroke();
     y += 28;
-    drawPlainParagraph(ctx, stripAccentMarkers(body), PADDING, y, CANVAS_SIZE - PADDING * 2, 32, 40, '#777777', 'left');
+    drawPlainParagraph(ctx, stripAccentMarkers(body), PADDING, y, CANVAS_SIZE - PADDING * 2, 32, 40, '#777777', 'left', fonts);
   } else {
     ctx.fillStyle = input.backgroundColor || DEFAULT_BG;
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
-    drawWatermark(ctx, handle, domain, 'bold', false);
+    drawWatermark(ctx, handle, domain, 'bold', false, fonts);
     const contentW = CANVAS_SIZE - PADDING * 2;
     let y = PADDING + 40;
     const lab = (label || '').trim();
     let pillH = 0;
     if (lab) {
       pillH = 44;
-      ctx.font = '22px NotoSansBold';
+      ctx.font = `22px ${fonts.sansBold}`;
       const padX = 20;
       const inner = lab.toUpperCase();
       let iconW = 0;
@@ -506,6 +432,7 @@ async function renderContent(
       'left',
       false,
       120,
+      fonts,
     );
     y += 20;
     ctx.strokeStyle = input.gradientEndColor || DEFAULT_DARK;
@@ -515,12 +442,12 @@ async function renderContent(
     ctx.lineTo(PADDING + 32, y);
     ctx.stroke();
     y += 28;
-    y = drawPlainParagraph(ctx, stripAccentMarkers(body), PADDING, y, contentW, 34, 54, bodyColor, 'left');
+    y = drawPlainParagraph(ctx, stripAccentMarkers(body), PADDING, y, contentW, 34, 54, bodyColor, 'left', fonts);
     const chipItems = items && items.length > 0 && items.length <= 4 ? items : null;
     if (chipItems) {
       y += 24;
       let cx = PADDING;
-      ctx.font = '22px NotoSans';
+      ctx.font = `22px ${fonts.sans}`;
       const rowY = y;
       for (const ch of chipItems) {
         const t = ch.trim();
@@ -544,6 +471,7 @@ async function renderStatement(
   ctx: SKRSContext2D,
   input: CarouselTemplateInput,
   refined: boolean,
+  fonts: CarouselFonts,
 ): Promise<void> {
   const { brand, title, handle, domain, icon } = input;
   const accent = brand.accentColor || DEFAULT_ACCENT;
@@ -551,9 +479,9 @@ async function renderStatement(
   if (refined) {
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
-    drawWatermark(ctx, handle, domain, 'refined', true);
+    drawWatermark(ctx, handle, domain, 'refined', true, fonts);
     let y = CANVAS_HEIGHT / 2 - 80;
-    ctx.font = '100px NotoSerifItalic';
+    ctx.font = `100px ${fonts.serifItalic}`;
     y = drawPlainParagraph(
       ctx,
       stripAccentMarkers(title),
@@ -564,6 +492,7 @@ async function renderStatement(
       105,
       '#ffffff',
       'center',
+      fonts,
       'serif',
     );
     y += 36;
@@ -574,7 +503,7 @@ async function renderStatement(
     ctx.lineTo((CANVAS_SIZE + 44) / 2, y);
     ctx.stroke();
     y += 40;
-    ctx.font = '22px NotoSansBold';
+    ctx.font = `22px ${fonts.sansBold}`;
     ctx.fillStyle = 'rgba(255,255,255,0.35)';
     const sub = (input.label || '').trim().toUpperCase();
     if (sub) {
@@ -586,7 +515,7 @@ async function renderStatement(
     ctx.fillStyle = `rgb(${r},${g},${b})`;
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
     const statementTextColor = titleColor;
-    drawWatermark(ctx, handle, domain, 'bold', true);
+    drawWatermark(ctx, handle, domain, 'bold', true, fonts);
     const img = await rasterizePhosphorIcon(icon || 'sparkle', 120, '#ffffff');
     if (img) {
       ctx.drawImage(img, (CANVAS_SIZE - 120) / 2, CANVAS_SIZE * 0.2, 120, 120);
@@ -594,7 +523,7 @@ async function renderStatement(
     const y0 = CANVAS_SIZE * 0.2 + 140;
     const lines = layoutWords(
       (t) => {
-        ctx.font = `88px NotoSans`;
+        ctx.font = `88px ${fonts.sans}`;
         return ctx.measureText(t).width;
       },
       segmentsToWords(parseAccentSpans(title)),
@@ -615,6 +544,7 @@ async function renderStatement(
         CANVAS_SIZE - PADDING * 2,
         false,
         400 + i,
+        fonts,
       );
       yy += 96;
     }
@@ -625,6 +555,7 @@ async function renderBullets(
   ctx: SKRSContext2D,
   input: CarouselTemplateInput,
   refined: boolean,
+  fonts: CarouselFonts,
 ): Promise<void> {
   const { brand, title, body, items, handle, domain } = input;
   const accent = brand.accentColor || DEFAULT_ACCENT;
@@ -634,7 +565,7 @@ async function renderBullets(
   if (refined) {
     ctx.fillStyle = DEFAULT_CREAM;
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
-    drawWatermark(ctx, handle, domain, 'refined', false);
+    drawWatermark(ctx, handle, domain, 'refined', false, fonts);
     let y = PADDING + 40;
     y = drawPlainParagraph(
       ctx,
@@ -646,18 +577,19 @@ async function renderBullets(
       78,
       '#1a1a1a',
       'left',
+      fonts,
     );
     y += 28;
     let n = 1;
     for (const row of list.slice(0, 8)) {
-      ctx.font = '52px NotoSerifItalic';
+      ctx.font = `52px ${fonts.serifItalic}`;
       ctx.fillStyle = '#c8c0b4';
       ctx.textBaseline = 'alphabetic';
       ctx.fillText(String(n), PADDING, y + 32);
-      ctx.font = '32px NotoSans';
+      ctx.font = `32px ${fonts.sans}`;
       ctx.fillStyle = '#555555';
       const colX = PADDING + 56;
-      const yy = drawPlainParagraph(ctx, row, colX, y + 32, CANVAS_SIZE - colX - PADDING, 32, 38, '#555555', 'left');
+      const yy = drawPlainParagraph(ctx, row, colX, y + 32, CANVAS_SIZE - colX - PADDING, 32, 38, '#555555', 'left', fonts);
       y = yy + 16;
       ctx.strokeStyle = '#ddd8d0';
       ctx.lineWidth = 1;
@@ -670,7 +602,7 @@ async function renderBullets(
   } else {
     ctx.fillStyle = input.backgroundColor || DEFAULT_BG;
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
-    drawWatermark(ctx, handle, domain, 'bold', false);
+    drawWatermark(ctx, handle, domain, 'bold', false, fonts);
     let y = PADDING + 32;
     y = drawParagraphSegmented(
       ctx,
@@ -686,6 +618,7 @@ async function renderBullets(
       'left',
       false,
       500,
+      fonts,
     );
     y += 32;
     const chk = await rasterizePhosphorIcon('check', 24, '#ffffff');
@@ -695,7 +628,7 @@ async function renderBullets(
       ctx.fillStyle = `rgb(${r},${g},${b})`;
       ctx.fill();
       if (chk) ctx.drawImage(chk, PADDING + 6, y + 6, 24, 24);
-      drawPlainParagraph(ctx, row, PADDING + 36 + 16, y + 28, CANVAS_SIZE - PADDING * 2 - 52, 34, 40, bodyColor, 'left');
+      drawPlainParagraph(ctx, row, PADDING + 36 + 16, y + 28, CANVAS_SIZE - PADDING * 2 - 52, 34, 40, bodyColor, 'left', fonts);
       y += 36 + 20;
     }
   }
@@ -705,6 +638,7 @@ async function renderCta(
   ctx: SKRSContext2D,
   input: CarouselTemplateInput,
   refined: boolean,
+  fonts: CarouselFonts,
 ): Promise<void> {
   const { brand, title, body, label, handle, domain } = input;
   const accent = brand.accentColor || DEFAULT_ACCENT;
@@ -716,14 +650,14 @@ async function renderCta(
     ctx.strokeStyle = '#e8e3dc';
     ctx.lineWidth = 0.5;
     ctx.strokeRect(0.25, 0.25, CANVAS_SIZE - 0.5, CANVAS_HEIGHT - 0.5);
-    drawWatermark(ctx, handle, domain, 'refined', false);
+    drawWatermark(ctx, handle, domain, 'refined', false, fonts);
     let y = WATERMARK_Y + 56;
-    ctx.font = '22px NotoSansBold';
+    ctx.font = `22px ${fonts.sansBold}`;
     ctx.fillStyle = '#bbbbbb';
     ctx.fillText((label || 'ЗАКЛИК').toUpperCase(), PADDING, y);
     y += 48;
     const [l1, l2] = splitEditorialTitle(stripAccentMarkers(title));
-    y = drawPlainParagraph(ctx, l1, PADDING, y, CANVAS_SIZE - PADDING * 2, 96, 102, '#1a1a1a', 'left', 'serif');
+    y = drawPlainParagraph(ctx, l1, PADDING, y, CANVAS_SIZE - PADDING * 2, 96, 102, '#1a1a1a', 'left', fonts, 'serif');
     y += 8;
     if (l2) {
       y = drawPlainParagraph(
@@ -736,6 +670,7 @@ async function renderCta(
         52,
         '#1a1a1a',
         'left',
+        fonts,
         'sansBold',
       );
     }
@@ -747,7 +682,7 @@ async function renderCta(
     ctx.lineTo(CANVAS_SIZE - PADDING, y);
     ctx.stroke();
     y += 36;
-    ctx.font = '28px NotoSans';
+    ctx.font = `28px ${fonts.sans}`;
     ctx.fillStyle = '#888888';
     const action = stripAccentMarkers(body);
     const yAfterAction = drawPlainParagraph(
@@ -760,6 +695,7 @@ async function renderCta(
       34,
       '#888888',
       'left',
+      fonts,
     );
     const circleY = yAfterAction - 20;
     ctx.beginPath();
@@ -768,15 +704,15 @@ async function renderCta(
     ctx.lineWidth = 1;
     ctx.stroke();
     ctx.fillStyle = '#1a1a1a';
-    ctx.font = '18px NotoSans';
+    ctx.font = `18px ${fonts.sans}`;
     ctx.fillText('→', CANVAS_SIZE - PADDING - 30, circleY + 6);
   } else {
     ctx.fillStyle = input.backgroundColor || DEFAULT_DARK;
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
-    drawWatermark(ctx, handle, domain, 'bold', true);
+    drawWatermark(ctx, handle, domain, 'bold', true, fonts);
     let y = PADDING + 60;
     const { r, g, b } = hexToRgb(accent);
-    ctx.font = '24px NotoSansBold';
+    ctx.font = `24px ${fonts.sansBold}`;
     ctx.fillStyle = `rgb(${r},${g},${b})`;
     ctx.textBaseline = 'alphabetic';
     const eyebrow = (label || '').trim().toUpperCase();
@@ -787,7 +723,7 @@ async function renderCta(
     y += 36;
     const lines = layoutWords(
       (t) => {
-        ctx.font = `88px NotoSans`;
+        ctx.font = `88px ${fonts.sans}`;
         return ctx.measureText(t).width;
       },
       segmentsToWords(parseAccentSpans(title)),
@@ -808,6 +744,7 @@ async function renderCta(
         CANVAS_SIZE - PADDING * 2,
         false,
         700 + i,
+        fonts,
       );
       yy += 96;
     }
@@ -817,7 +754,7 @@ async function renderCta(
     const bodyText = stripAccentMarkers(body);
     const bodyLines = layoutWords(
       (t) => {
-        ctx.font = '36px NotoSansBold';
+        ctx.font = `36px ${fonts.sansBold}`;
         return ctx.measureText(t).width;
       },
       segmentsToWords(parseAccentSpans(bodyText)),
@@ -831,7 +768,7 @@ async function renderCta(
     let iy = boxY + innerPad + 36;
     for (const bl of bodyLines) {
       const lineText = bl.map((w) => w.text).join('');
-      ctx.font = '36px NotoSansBold';
+      ctx.font = `36px ${fonts.sansBold}`;
       const tw = ctx.measureText(lineText).width;
       ctx.fillStyle = bodyColor;
       ctx.textBaseline = 'alphabetic';
@@ -842,19 +779,20 @@ async function renderCta(
 }
 
 export async function renderCarouselTemplatePng(input: CarouselTemplateInput): Promise<Buffer> {
-  ensureCarouselFonts(input.brand.fontPairing);
+  const fonts = ensureCarouselFonts(input.brand.fontPairing);
   const canvas = createCanvas(CANVAS_SIZE, CANVAS_HEIGHT);
   const ctx = canvas.getContext('2d');
   const refined = input.brand.vibe === 'refined';
   const preset = input.layoutPreset ?? (input.slideType === 'final' ? 'goal' : 'text');
   if (input.slideType === 'cover') {
-    await renderCover(ctx, { ...input, label: null, body: '' }, refined);
+    await renderCover(ctx, { ...input, label: null, body: '' }, refined, fonts);
   } else if (input.slideType === 'slide') {
     if (preset === 'quote') {
       await renderStatement(
         ctx,
         { ...input, title: input.title.trim() || input.body.trim(), body: '', label: null },
         refined,
+        fonts,
       );
     }
     else if (preset === 'testimonial') {
@@ -862,6 +800,7 @@ export async function renderCarouselTemplatePng(input: CarouselTemplateInput): P
         ctx,
         { ...input, title: input.title.trim() || input.body.trim(), body: '', label: null },
         refined,
+        fonts,
       );
       const y = refined ? CANVAS_HEIGHT * 0.73 : CANVAS_HEIGHT * 0.66;
       if (refined) {
@@ -876,9 +815,9 @@ export async function renderCarouselTemplatePng(input: CarouselTemplateInput): P
       const name = author?.name?.trim() || 'Автор';
       const handle = author?.handle?.trim() || '@handle';
       ctx.fillStyle = refined ? '#ffffff' : '#ffffff';
-      ctx.font = 'bold 28px NotoSansBold';
+      ctx.font = `bold 28px ${fonts.sansBold}`;
       ctx.fillText(name, PADDING + 66, y);
-      ctx.font = '24px NotoSans';
+      ctx.font = `24px ${fonts.sans}`;
       ctx.fillStyle = 'rgba(255,255,255,0.75)';
       ctx.fillText(handle, PADDING + 66, y + 30);
       ctx.beginPath();
@@ -886,22 +825,22 @@ export async function renderCarouselTemplatePng(input: CarouselTemplateInput): P
       ctx.fillStyle = 'rgba(255,255,255,0.2)';
       ctx.fill();
     } else if (preset === 'list') {
-      await renderBullets(ctx, { ...input, body: '', items: input.items }, refined);
+      await renderBullets(ctx, { ...input, body: '', items: input.items }, refined, fonts);
     } else {
-      await renderContent(ctx, { ...input, label: input.label ?? input.designNote }, refined);
+      await renderContent(ctx, { ...input, label: input.label ?? input.designNote }, refined, fonts);
     }
   } else {
     if (preset === 'reaction') {
-      await renderCta(ctx, { ...input, title: input.ctaTitle || input.title, body: '' }, refined);
+      await renderCta(ctx, { ...input, title: input.ctaTitle || input.title, body: '' }, refined, fonts);
       const kw = (input.ctaKeyword || '').trim() || 'РУТА';
       ctx.textBaseline = 'alphabetic';
-      ctx.font = refined ? 'italic 128px NotoSerifItalic' : '900 128px NotoSansBold';
+      ctx.font = refined ? `italic 128px ${fonts.serifItalic}` : `900 128px ${fonts.sansBold}`;
       ctx.fillStyle = refined ? '#1a1a1a' : '#ffffff';
       const tw = ctx.measureText(kw).width;
       ctx.fillText(kw, (CANVAS_SIZE - tw) / 2, CANVAS_HEIGHT * 0.62);
     } else {
       const cta = CTA_WORD[(input.ctaAction || 'follow') as keyof typeof CTA_WORD] ?? CTA_WORD.follow;
-      await renderCta(ctx, { ...input, body: cta }, refined);
+      await renderCta(ctx, { ...input, body: cta }, refined, fonts);
     }
   }
 

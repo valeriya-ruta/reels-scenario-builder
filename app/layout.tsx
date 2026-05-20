@@ -3,6 +3,9 @@ import { headers } from "next/headers";
 import "./globals.css";
 import AppShell from "@/components/AppShell";
 import { getCurrentUser } from "@/lib/auth";
+import { PostHogProvider } from "@/components/PostHogProvider";
+import { PostHogPageView } from "@/components/PostHogPageView";
+import { Suspense } from "react";
 
 export const metadata: Metadata = {
   title: "Планувальник Рілів",
@@ -28,18 +31,23 @@ export default async function RootLayout({
   return (
     <html lang="uk">
       <body className="antialiased bg-white text-zinc-900">
-        {user && !isAuthRoute ? (
-          <AppShell
-            userName={user.user_metadata?.full_name ?? null}
-            userEmail={user.email ?? null}
-          >
-            {children}
-          </AppShell>
-        ) : (
-          <div className="flex min-h-screen items-center justify-center bg-white px-4">
-            {children}
-          </div>
-        )}
+        <PostHogProvider>
+          <Suspense>
+            <PostHogPageView />
+          </Suspense>
+          {user && !isAuthRoute ? (
+            <AppShell
+              userName={user.user_metadata?.full_name ?? null}
+              userEmail={user.email ?? null}
+            >
+              {children}
+            </AppShell>
+          ) : (
+            <div className="flex min-h-screen items-center justify-center bg-white px-4">
+              {children}
+            </div>
+          )}
+        </PostHogProvider>
       </body>
     </html>
   );

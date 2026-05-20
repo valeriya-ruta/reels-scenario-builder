@@ -884,6 +884,7 @@ export default function CompetitorAnalysisView() {
                   <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
                     {reelItems.map((reel, index) => {
                       const active = activeIdx === index;
+                      const saved = savedShortCodes.includes(reel.shortCode);
                       return (
                         <li key={reel.shortCode}>
                           <button
@@ -892,6 +893,8 @@ export default function CompetitorAnalysisView() {
                             className={`w-full cursor-pointer border-l-[3px] text-left shadow-sm transition-colors ${
                               active
                                 ? 'border-[color:var(--accent)] bg-white'
+                                : saved
+                                  ? 'border-[#10b981] bg-[#f0fdf8]'
                                 : 'border-transparent bg-white hover:bg-[#fafbfd]'
                             }`}
                             style={{
@@ -901,6 +904,8 @@ export default function CompetitorAnalysisView() {
                                 : 'var(--border-radius-lg)',
                               boxShadow: active
                                 ? 'var(--shadow-card-sm)'
+                                : saved
+                                  ? '0 1px 2px rgba(16, 185, 129, 0.16), 0 0 0 1px rgba(16, 185, 129, 0.2)'
                                 : '0 1px 2px rgba(26, 28, 46, 0.04)',
                             }}
                           >
@@ -908,6 +913,11 @@ export default function CompetitorAnalysisView() {
                               <span className="text-[11px] text-[var(--color-text-muted)]">
                                 #{reel.rank}
                               </span>
+                              {saved && (
+                                <span className="rounded-full bg-[#e7f9f1] px-2 py-0.5 text-[10px] font-semibold text-[#0f8a60]">
+                                  Збережено
+                                </span>
+                              )}
                               <span
                                 className="rounded-full px-2 py-0.5 text-[10px] font-medium"
                                 style={

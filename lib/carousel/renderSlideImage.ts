@@ -1,6 +1,4 @@
-import { existsSync } from 'fs';
-import { join } from 'path';
-import { createCanvas, GlobalFonts, loadImage, type SKRSContext2D } from '@napi-rs/canvas';
+import { createCanvas, loadImage, type SKRSContext2D } from '@napi-rs/canvas';
 import sharp from 'sharp';
 import type { BrandAccentStyle } from '@/lib/brand';
 import { normalizeAccentStyle } from '@/lib/brand';
@@ -9,7 +7,9 @@ import {
   drawSegmentedLine,
   layoutWords,
   segmentsToWords,
+  type CarouselFonts,
 } from '@/lib/carousel/canvasSegmentedText';
+import { ensureCarouselFonts } from '@/lib/carousel/carouselFonts';
 import { getBgPhotoTransform, type BgPhotoTransform } from '@/lib/carousel/bgPhotoTransform';
 
 const CANVAS_W = 1080;
@@ -21,80 +21,6 @@ const BODY_SIZE = 44;
 const TITLE_BODY_GAP = 32;
 const TITLE_SCALE: Record<'L' | 'M', number> = { L: 1, M: 0.8 };
 const BODY_SCALE: Record<'M' | 'S', number> = { M: 1, S: 0.8 };
-
-let fontsRegistered = false;
-let activeFontId: string | null = null;
-
-function resolveFontsourceFile(
-  fontsourceDir: string,
-  packageName: string,
-  weight: '400' | '700',
-  style: 'normal' | 'italic',
-): string | null {
-  const subsets = ['cyrillic', 'latin-ext', 'latin'];
-  const exts = ['woff2', 'woff', 'ttf', 'otf'];
-  for (const subset of subsets) {
-    for (const ext of exts) {
-      const filePath = join(fontsourceDir, packageName, 'files', `${packageName}-${subset}-${weight}-${style}.${ext}`);
-      if (existsSync(filePath)) {
-        return filePath;
-      }
-    }
-  }
-  return null;
-}
-
-function registerAliasFromFontsource(
-  fontsourceDir: string,
-  packageName: string,
-  alias: string,
-  weight: '400' | '700',
-  style: 'normal' | 'italic',
-): boolean {
-  const resolved = resolveFontsourceFile(fontsourceDir, packageName, weight, style);
-  if (!resolved) return false;
-  return Boolean(GlobalFonts.registerFromPath(resolved, alias));
-}
-
-function ensureFonts(fontId?: string | null) {
-  const fontDir = join(process.cwd(), 'public', 'fonts');
-  const requestedFontId = (fontId ?? '').trim().toLowerCase();
-  const fontsourceDir = join(process.cwd(), 'node_modules', '@fontsource');
-
-  if (fontsRegistered && activeFontId === requestedFontId) return;
-  try {
-    GlobalFonts.registerFromPath(join(fontDir, 'NotoSans-Bold.ttf'), 'NotoSansBold');
-    GlobalFonts.registerFromPath(join(fontDir, 'NotoSans-Regular.ttf'), 'NotoSans');
-    GlobalFonts.registerFromPath(join(fontDir, 'NotoSans-Italic.ttf'), 'NotoSansItalic');
-    // Override aliases with the selected Brand DNA font so downloaded PNGs match preview typography.
-    let packageName: string | null = null;
-    if (requestedFontId === 'google_sans') packageName = 'google-sans';
-    else if (requestedFontId === 'manrope') packageName = 'manrope';
-    else if (requestedFontId === 'cormorant') packageName = 'cormorant-garamond';
-    else if (requestedFontId === 'days_one') packageName = 'days-one';
-    else if (requestedFontId === 'climate_crisis') packageName = 'climate-crisis';
-    else if (requestedFontId === 'inter') packageName = 'inter';
-    else if (requestedFontId === 'montserrat') packageName = 'montserrat';
-
-    if (packageName) {
-      const bodyRegistered = registerAliasFromFontsource(fontsourceDir, packageName, 'NotoSans', '400', 'normal');
-      const titleRegistered =
-        registerAliasFromFontsource(fontsourceDir, packageName, 'NotoSansBold', '700', 'normal') ||
-        registerAliasFromFontsource(fontsourceDir, packageName, 'NotoSansBold', '400', 'normal');
-      const italicRegistered =
-        registerAliasFromFontsource(fontsourceDir, packageName, 'NotoSansItalic', '400', 'italic') ||
-        registerAliasFromFontsource(fontsourceDir, packageName, 'NotoSansItalic', '400', 'normal');
-
-      if (!bodyRegistered || !titleRegistered || !italicRegistered) {
-        console.warn(`[carousel] Partial font alias registration for "${requestedFontId}". Falling back to bundled defaults for missing variants.`);
-      }
-    }
-    fontsRegistered = true;
-    activeFontId = requestedFontId;
-  } catch (e) {
-    console.warn('[carousel] Failed to register Noto fonts:', e);
-  }
-}
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
   const h = hex.replace(/^#/, '');
@@ -109,8 +35,8 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } {
   return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
 }
 
-function fontSpec(fontSize: number, plainBaseIsBold: boolean): string {
-  return plainBaseIsBold ? `${fontSize}px NotoSansBold` : `${fontSize}px NotoSans`;
+function fontSpec(fontSize: number, plainBaseIsBold: boolean, fonts: CarouselFonts): string {
+  return plainBaseIsBold ? `${fontSize}px ${fonts.sansBold}` : `${fontSize}px ${fonts.sans}`;
 }
 
 /** Alphabetic baseline Y for the first line when the line box top is `topY` (matches former textBaseline: top layout). */
@@ -119,8 +45,9 @@ function firstAlphabeticBaseline(
   fontSize: number,
   plainBaseIsBold: boolean,
   topY: number,
+  fonts: CarouselFonts,
 ): number {
-  ctx.font = fontSpec(fontSize, plainBaseIsBold);
+  ctx.font = fontSpec(fontSize, plainBaseIsBold, fonts);
   const m = ctx.measureText('Mg');
   const ascent =
     typeof m.actualBoundingBoxAscent === 'number' && m.actualBoundingBoxAscent > 0
@@ -136,13 +63,14 @@ function segmentedBlockHeight(
   fontSize: number,
   lineHeight: number,
   plainBaseIsBold: boolean,
+  fonts: CarouselFonts,
 ): number {
   const trimmed = text.trim();
   if (!trimmed) return 0;
   const segments = parseAccentSpans(text);
   const words = segmentsToWords(segments);
   const measure = (t: string) => {
-    ctx.font = fontSpec(fontSize, plainBaseIsBold);
+    ctx.font = fontSpec(fontSize, plainBaseIsBold, fonts);
     return ctx.measureText(t).width;
   };
   const lines = layoutWords(measure, words, maxWidth);
@@ -164,17 +92,18 @@ function drawSegmentedBlock(
   align: 'left' | 'center' | 'right',
   plainBaseIsBold: boolean,
   seed: number,
+  fonts: CarouselFonts,
 ): number {
   const trimmed = text.trim();
   if (!trimmed) return firstLineTopY;
   const segments = parseAccentSpans(text);
   const words = segmentsToWords(segments);
   const measure = (t: string) => {
-    ctx.font = fontSpec(fontSize, plainBaseIsBold);
+    ctx.font = fontSpec(fontSize, plainBaseIsBold, fonts);
     return ctx.measureText(t).width;
   };
   const lines = layoutWords(measure, words, maxWidth);
-  let baselineY = firstAlphabeticBaseline(ctx, fontSize, plainBaseIsBold, firstLineTopY);
+  let baselineY = firstAlphabeticBaseline(ctx, fontSize, plainBaseIsBold, firstLineTopY, fonts);
   let i = 0;
   for (const line of lines) {
     drawSegmentedLine(
@@ -190,6 +119,7 @@ function drawSegmentedBlock(
       maxWidth,
       false,
       seed + i * 31,
+      fonts,
       plainBaseIsBold,
     );
     baselineY += lineHeight;
@@ -228,7 +158,7 @@ function normalizeMultiline(input: string): string {
 }
 
 export async function renderSlideImagePng(input: GenerateSlideInput): Promise<Buffer> {
-  ensureFonts(input.font_id);
+  const fonts = ensureCarouselFonts(input.font_id);
   const canvas = createCanvas(CANVAS_W, CANVAS_H);
   const ctx = canvas.getContext('2d');
 
@@ -324,6 +254,7 @@ export async function renderSlideImagePng(input: GenerateSlideInput): Promise<Bu
     titleSizePx,
     titleLineHeight,
     true,
+    fonts,
   );
   const bodyBlockH = segmentedBlockHeight(
     ctx,
@@ -332,6 +263,7 @@ export async function renderSlideImagePng(input: GenerateSlideInput): Promise<Bu
     bodySizePx,
     bodyLineHeight,
     false,
+    fonts,
   );
 
   const betweenGap = titleBlockH && bodyBlockH ? TITLE_BODY_GAP : 0;
@@ -363,6 +295,7 @@ export async function renderSlideImagePng(input: GenerateSlideInput): Promise<Bu
     align,
     true,
     100,
+    fonts,
   );
   if (titleBlockH && bodyBlockH) {
     nextTopY += TITLE_BODY_GAP;
@@ -381,6 +314,7 @@ export async function renderSlideImagePng(input: GenerateSlideInput): Promise<Bu
     align,
     false,
     300,
+    fonts,
   );
 
   return canvas.toBuffer('image/png');

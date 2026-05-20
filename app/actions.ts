@@ -739,6 +739,13 @@ export async function saveCompetitorReelToScenario(
             'Потрібна міграція БД (колонки user_note / reference_url на idea_scans). Запусти migration_idea_scans_reel_notes_and_projects_reference.sql у Supabase.',
         };
       }
+      if (msg.includes('reel_transcripts')) {
+        return {
+          ok: false,
+          error:
+            'Потрібна міграція БД (колонка reel_transcripts на idea_scans). Запусти migration_idea_scans_reel_transcripts.sql у Supabase.',
+        };
+      }
       return { ok: false, error: `Не вдалося отримати скан: ${msg}` };
     }
 
