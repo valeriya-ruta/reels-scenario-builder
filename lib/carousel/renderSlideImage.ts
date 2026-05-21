@@ -214,6 +214,31 @@ export async function renderSlideImagePng(input: GenerateSlideInput): Promise<Bu
       const top = Math.round((CANVAS_H - nextH) / 2 + offsetPxY);
 
       const resized = await oriented.resize(nextW, nextH, { fit: 'fill' }).png().toBuffer();
+
+      // Crop the resized image to the visible canvas window so sharp.composite
+      // never receives a layer larger than the destination — otherwise it
+      // throws "Image to composite must have same dimensions or smaller".
+      const cropX = Math.max(0, -left);
+      const cropY = Math.max(0, -top);
+      const cropRight = Math.min(nextW, CANVAS_W - left);
+      const cropBottom = Math.min(nextH, CANVAS_H - top);
+      const cropW = Math.max(0, cropRight - cropX);
+      const cropH = Math.max(0, cropBottom - cropY);
+      const compositeLeft = Math.max(0, left);
+      const compositeTop = Math.max(0, top);
+
+      const layers: sharp.OverlayOptions[] = [];
+      if (cropW > 0 && cropH > 0) {
+        const visible =
+          cropX === 0 && cropY === 0 && cropW === nextW && cropH === nextH
+            ? resized
+            : await sharp(resized)
+                .extract({ left: cropX, top: cropY, width: cropW, height: cropH })
+                .png()
+                .toBuffer();
+        layers.push({ input: visible, left: compositeLeft, top: compositeTop });
+      }
+
       const transformed = await sharp({
         create: {
           width: CANVAS_W,
@@ -222,7 +247,7 @@ export async function renderSlideImagePng(input: GenerateSlideInput): Promise<Bu
           background: { r: 0, g: 0, b: 0 },
         },
       })
-        .composite([{ input: resized, left, top }])
+        .composite(layers)
         .png()
         .toBuffer();
       const img = await loadImage(transformed);
