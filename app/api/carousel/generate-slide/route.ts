@@ -279,7 +279,26 @@ export async function POST(req: Request) {
     });
     return NextResponse.json({ image_base64: png.toString('base64') });
   } catch (e) {
-    console.error('[carousel/generate-slide]', e);
-    return NextResponse.json({ error: 'Generation failed' }, { status: 500 });
+    const err = e as Error;
+    const errMsg = err?.message ?? String(e);
+    const errStack = err?.stack ?? null;
+    console.error(
+      '[carousel/generate-slide] failed',
+      JSON.stringify({
+        message: errMsg,
+        stack: errStack,
+        slideIndex: slide_index,
+        totalSlides: total_slides,
+        slideType: json.slide_type ?? null,
+        layoutPreset: json.layout_preset ?? null,
+        backgroundType: json.background_type ?? null,
+        useLegacy,
+        fontId,
+      }),
+    );
+    return NextResponse.json(
+      { error: `Generation failed: ${errMsg}` },
+      { status: 500 },
+    );
   }
 }
