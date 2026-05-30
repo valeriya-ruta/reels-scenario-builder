@@ -69,6 +69,8 @@ export async function middleware(request: NextRequest) {
     if (
       pathname.startsWith('/dashboard') ||
       pathname.startsWith('/projects') ||
+      pathname.startsWith('/profile') ||
+      pathname.startsWith('/plan') ||
       pathname.startsWith('/settings') ||
       pathname.startsWith('/carousel') ||
       pathname.startsWith('/competitor-analysis') ||
