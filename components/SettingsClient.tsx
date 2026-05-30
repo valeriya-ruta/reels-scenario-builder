@@ -20,8 +20,14 @@ interface SubscriptionRow {
   plan_price: number | null;
 }
 
-export default function SettingsClient({ initialBrandSettings }: { initialBrandSettings: BrandSettings | null }) {
-  const [tab, setTab] = useState<TabId>('account');
+export default function SettingsClient({
+  initialBrandSettings,
+  initialTab = 'account',
+}: {
+  initialBrandSettings: BrandSettings | null;
+  initialTab?: TabId;
+}) {
+  const [tab, setTab] = useState<TabId>(initialTab);
   const { brandSettings, refetchBrand } = useBrandStore();
   const router = useRouter();
   const toast = useToast();

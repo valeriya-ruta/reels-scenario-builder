@@ -32,11 +32,18 @@ function mapRow(row: BrandSettingsRow, accentFromProfile: string | null | undefi
   };
 }
 
-export default async function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
   const user = await requireAuth();
   if (!user) {
     redirect('/');
   }
+
+  const { tab } = await searchParams;
+  const initialTab = tab === 'brand' ? 'brand' : 'account';
 
   const supabase = await createServerSupabaseClient();
   const [{ data: brandData }, { data: profileData }] = await Promise.all([
@@ -53,6 +60,7 @@ export default async function SettingsPage() {
   return (
     <SettingsClient
       initialBrandSettings={brandData ? mapRow(brandData, profileData?.accent_style) : null}
+      initialTab={initialTab}
     />
   );
 }
