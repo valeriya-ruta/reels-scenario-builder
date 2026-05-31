@@ -58,16 +58,19 @@ test.describe('floating bottom nav', () => {
     }
   });
 
-  test('center Create FAB opens the create menu (placeholder)', async ({ page }) => {
+  test('center Create FAB opens the create menu', async ({ page }) => {
     await page.goto('/dashboard');
     const nav = page.getByRole('navigation', { name: 'Основна навігація' });
     const fab = nav.getByTestId('create-fab');
 
     await expect(fab).toBeVisible();
-    await expect(page.getByTestId('create-menu-placeholder')).toHaveCount(0);
+    await expect(page.getByTestId('create-menu')).toHaveCount(0);
 
     await fab.click();
-    await expect(page.getByTestId('create-menu-placeholder')).toBeVisible();
+    const menu = page.getByTestId('create-menu');
+    await expect(menu).toBeVisible();
+    // Interim menu keeps mobile access to the content lists.
+    await expect(menu.getByRole('menuitem', { name: 'Рілси' })).toBeVisible();
   });
 
   test('navigating across destinations produces no console errors', async ({ page }) => {

@@ -1,8 +1,8 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import { useEffect, useState, type ComponentType } from 'react';
-import { Home, CalendarDays, Plus, BarChart3, User } from 'lucide-react';
+import { useEffect, useRef, useState, type ComponentType } from 'react';
+import { Home, CalendarDays, Plus, BarChart3, User, FileText, LayoutGrid } from 'lucide-react';
 
 /**
  * Floating bottom navigation: 4 destination tabs + a center Create FAB.
@@ -42,6 +42,30 @@ const rightTabs: DestinationTab[] = [
   { label: 'Профіль', href: '/profile', matchPrefixes: ['/profile'], Icon: User },
 ];
 
+/** Stories glyph (lucide@1.8 has no dedicated stories icon). */
+function StoriesGlyph({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="8" y="3" width="8" height="18" rx="2" stroke="currentColor" strokeWidth="1.7" />
+      <rect x="4" y="5" width="3" height="14" rx="1.5" stroke="currentColor" strokeWidth="1.7" opacity="0.5" />
+      <rect x="17" y="5" width="3" height="14" rx="1.5" stroke="currentColor" strokeWidth="1.7" opacity="0.5" />
+    </svg>
+  );
+}
+
+// Interim Create menu: until the radial-menu task (86d35yfxw) ships, the FAB
+// opens this simple menu so mobile users keep access to their Рілси / Карусель
+// / Сторіс lists (each list page also hosts its "create new" entry point).
+const createItems: {
+  label: string;
+  href: string;
+  Icon: ComponentType<{ className?: string }>;
+}[] = [
+  { label: 'Рілси', href: '/projects', Icon: FileText },
+  { label: 'Карусель', href: '/carousel', Icon: LayoutGrid },
+  { label: 'Сторіс', href: '/storytellings', Icon: StoriesGlyph },
+];
+
 function TabLink({ tab, active }: { tab: DestinationTab; active: boolean }) {
   const { label, href, Icon } = tab;
   return (
@@ -61,11 +85,24 @@ function TabLink({ tab, active }: { tab: DestinationTab; active: boolean }) {
 export default function BottomNav() {
   const pathname = usePathname();
   const [createOpen, setCreateOpen] = useState(false);
+  const barRef = useRef<HTMLDivElement>(null);
 
-  // Close the placeholder create menu on navigation.
+  // Close the create menu on navigation.
   useEffect(() => {
     setCreateOpen(false);
   }, [pathname]);
+
+  // Close the create menu on outside tap.
+  useEffect(() => {
+    if (!createOpen) return;
+    function onPointerDown(e: PointerEvent) {
+      if (barRef.current && !barRef.current.contains(e.target as Node)) {
+        setCreateOpen(false);
+      }
+    }
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [createOpen]);
 
   // Keep the full-screen carousel editor uncovered (matches prior behaviour).
   const isCarouselEditor = pathname.startsWith('/carousel/') && pathname !== '/carousel';
@@ -79,7 +116,10 @@ export default function BottomNav() {
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       aria-label="Основна навігація"
     >
-      <div className="relative mx-3 mb-3 flex items-end justify-around gap-1 rounded-2xl border border-gray-100 bg-white px-2 pb-1.5 pt-1.5 shadow-[0_2px_6px_rgba(26,28,46,0.08),0_10px_28px_rgba(26,28,46,0.14)]">
+      <div
+        ref={barRef}
+        className="relative mx-3 mb-3 flex items-end justify-around gap-1 rounded-2xl border border-gray-100 bg-white px-2 pb-1.5 pt-1.5 shadow-[0_2px_6px_rgba(26,28,46,0.08),0_10px_28px_rgba(26,28,46,0.14)]"
+      >
         {leftTabs.map((tab) => (
           <TabLink key={tab.href} tab={tab} active={isActive(tab.matchPrefixes)} />
         ))}
@@ -104,16 +144,27 @@ export default function BottomNav() {
           <TabLink key={tab.href} tab={tab} active={isActive(tab.matchPrefixes)} />
         ))}
 
-        {/* Placeholder for the Create radial menu (separate task). Wired to a
-            no-op popover until that component lands. */}
+        {/* Interim Create menu (replaced by the radial-menu task 86d35yfxw). */}
         {createOpen && (
           <div
             role="menu"
-            data-testid="create-menu-placeholder"
-            className="absolute bottom-full left-1/2 mb-3 w-48 -translate-x-1/2 rounded-xl border border-gray-100 bg-white p-3 text-center shadow-xl"
+            data-testid="create-menu"
+            className="absolute bottom-full left-1/2 mb-3 w-52 -translate-x-1/2 rounded-2xl border border-gray-100 bg-white p-1.5 shadow-xl"
           >
-            <p className="text-sm font-medium text-zinc-800">Меню створення</p>
-            <p className="mt-1 text-xs text-zinc-500">Скоро</p>
+            <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+              Створити
+            </p>
+            {createItems.map(({ label, href, Icon }) => (
+              <a
+                key={href}
+                href={href}
+                role="menuitem"
+                className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-zinc-800 transition-colors hover:bg-[color:var(--surface)]"
+              >
+                <Icon className="h-5 w-5 shrink-0 text-zinc-500" />
+                {label}
+              </a>
+            ))}
           </div>
         )}
       </div>
