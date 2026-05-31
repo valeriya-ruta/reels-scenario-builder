@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback } from 'react';
 import Sidebar from './Sidebar';
-import MobileTabBar from './MobileTabBar';
+import BottomNav from './BottomNav';
 import { NavBadgeProvider, NavBadgePathSync } from './NavBadgeContext';
 import { RantResultsProvider } from './RantResultsContext';
 import { ToastProvider } from './ToastProvider';
@@ -131,7 +131,7 @@ export default function AppShell({ children, userName, userEmail }: AppShellProp
                   {children}
                 </main>
               </div>
-              <MobileTabBar />
+              <BottomNav />
             </div>
           </BrandProvider>
         </ToastProvider>
