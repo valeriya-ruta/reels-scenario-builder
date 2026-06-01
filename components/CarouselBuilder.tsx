@@ -286,6 +286,7 @@ export default function CarouselBuilder({
   const { setBadge, clearBadge } = useNavBadges();
   const { state: rantResultsState, clearResult: clearRantResult } = useRantResults();
   const skipPersistRef = useRef(true);
+  const dirtyRef = useRef(false);
 
   useEffect(() => {
     if (!slides.length) return;
@@ -308,20 +309,44 @@ export default function CarouselBuilder({
     }
   }, [projectNameDraft, projectName, projectId]);
 
+  // Persist the latest slides immediately, bypassing the debounce. Used when the
+  // editor unmounts (client-side navigation) or the tab/app is hidden/unloaded,
+  // so the last edits made within the debounce window are never lost.
+  const flushSlidesNow = useCallback(() => {
+    if (saveSlidesTimerRef.current) {
+      clearTimeout(saveSlidesTimerRef.current);
+      saveSlidesTimerRef.current = null;
+    }
+    if (!dirtyRef.current) return;
+    dirtyRef.current = false;
+    const currentSlides = slidesRef.current;
+    void (async () => {
+      try {
+        await saveCarouselSlides(projectId, currentSlides);
+      } catch (error) {
+        dirtyRef.current = true;
+        console.error('saveCarouselSlides flush failed', error);
+      }
+    })();
+  }, [projectId]);
+
   useEffect(() => {
     if (skipPersistRef.current) {
       skipPersistRef.current = false;
       return;
     }
+    dirtyRef.current = true;
     if (saveSlidesTimerRef.current) {
       clearTimeout(saveSlidesTimerRef.current);
     }
     saveSlidesTimerRef.current = setTimeout(() => {
       const currentSlides = slidesRef.current;
+      dirtyRef.current = false;
       void (async () => {
         try {
           await saveCarouselSlides(projectId, currentSlides);
         } catch (error) {
+          dirtyRef.current = true;
           console.error('saveCarouselSlides failed', error);
         }
       })();
@@ -332,6 +357,22 @@ export default function CarouselBuilder({
       }
     };
   }, [projectId, slides]);
+
+  // Guarantee the pending debounced save is flushed when the user leaves the
+  // editor: client-side navigation (unmount), backgrounding the app / switching
+  // tabs (visibilitychange -> hidden), or unloading the page (pagehide).
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') flushSlidesNow();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('pagehide', flushSlidesNow);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('pagehide', flushSlidesNow);
+      flushSlidesNow();
+    };
+  }, [flushSlidesNow]);
 
   useEffect(() => {
     if (hasGenerated && !hasDownloaded) {
