@@ -23,35 +23,49 @@ const FONT_PACKAGE_BY_ID: Record<string, string> = {
   montserrat: 'montserrat',
 };
 
-function resolveFontsourceFile(
+/**
+ * Register EVERY available subset (latin + latin-ext + cyrillic) for a given
+ * weight/style, EACH under its own unique family name, and return a CSS font
+ * fallback STACK (comma-separated, quoted) covering them.
+ *
+ * @fontsource ships one file per subset. @napi-rs/canvas does NOT merge glyph
+ * coverage across faces sharing a family name (the first registration wins), so
+ * registering all subsets under one family left either latin OR cyrillic as
+ * tofu. A comma-separated font stack, however, IS honored for per-glyph
+ * fallback — so we register each subset separately and join them. Returns an
+ * empty array when no subset file is present (caller falls back to NotoSans).
+ */
+function registerSubsetStack(
   fontsourceDir: string,
   packageName: string,
+  aliasPrefix: string,
   weight: '400' | '700',
   style: 'normal' | 'italic',
-): string | null {
-  const subsets = ['cyrillic', 'latin-ext', 'latin'];
+): string[] {
+  const subsets = ['latin', 'latin-ext', 'cyrillic'];
   const exts = ['woff2', 'woff', 'ttf', 'otf'];
+  const families: string[] = [];
   for (const subset of subsets) {
     for (const ext of exts) {
-      const filePath = join(fontsourceDir, packageName, 'files', `${packageName}-${subset}-${weight}-${style}.${ext}`);
+      const filePath = join(
+        fontsourceDir,
+        packageName,
+        'files',
+        `${packageName}-${subset}-${weight}-${style}.${ext}`,
+      );
       if (existsSync(filePath)) {
-        return filePath;
+        const family = `${aliasPrefix}_${subset.replace(/-/g, '')}`;
+        if (GlobalFonts.registerFromPath(filePath, family)) families.push(family);
+        break; // one extension per subset is enough
       }
     }
   }
-  return null;
+  return families;
 }
 
-function registerAliasFromFontsource(
-  fontsourceDir: string,
-  packageName: string,
-  alias: string,
-  weight: '400' | '700',
-  style: 'normal' | 'italic',
-): boolean {
-  const resolved = resolveFontsourceFile(fontsourceDir, packageName, weight, style);
-  if (!resolved) return false;
-  return Boolean(GlobalFonts.registerFromPath(resolved, alias));
+/** Build a quoted CSS family stack, always ending in the bundled fallback. */
+function toFontStack(families: string[], fallbackFamily: string): string {
+  return [...families, fallbackFamily].map((f) => `"${f}"`).join(', ');
 }
 
 function ensureFallbackFonts(): CarouselFonts {
@@ -78,6 +92,15 @@ export function ensureCarouselFonts(fontPairing?: string | null): CarouselFonts 
   const fallback = ensureFallbackFonts();
   const packageName = FONT_PACKAGE_BY_ID[requestedFontId] ?? null;
   if (!packageName) {
+    // A real brand font was requested but we have no mapping for it — exported
+    // text will render in the WRONG (fallback) face. Surface loudly.
+    if (requestedFontId) {
+      console.error(
+        `[carousel][fonts] No @fontsource package mapped for brand font "${requestedFontId}". ` +
+          `Falling back to NotoSans — exported text will NOT match the editor. ` +
+          `Add it to FONT_PACKAGE_BY_ID.`,
+      );
+    }
     fontsByPairing.set(cacheKey, fallback);
     return fallback;
   }
@@ -85,39 +108,58 @@ export function ensureCarouselFonts(fontPairing?: string | null): CarouselFonts 
   try {
     const fontsourceDir = join(process.cwd(), 'node_modules', '@fontsource');
     const safe = packageName.replace(/[^a-zA-Z0-9]/g, '_');
-    const candidate = {
-      sans: `Brand_${safe}_sans`,
-      sansBold: `Brand_${safe}_sansBold`,
-      sansItalic: `Brand_${safe}_sansItalic`,
-      serifItalic: `Brand_${safe}_serifItalic`,
-    };
+    const prefix = `Brand_${safe}`;
 
-    const body = registerAliasFromFontsource(fontsourceDir, packageName, candidate.sans, '400', 'normal');
-    const title =
-      registerAliasFromFontsource(fontsourceDir, packageName, candidate.sansBold, '700', 'normal') ||
-      registerAliasFromFontsource(fontsourceDir, packageName, candidate.sansBold, '400', 'normal');
-    const sansItalic =
-      registerAliasFromFontsource(fontsourceDir, packageName, candidate.sansItalic, '400', 'italic') ||
-      registerAliasFromFontsource(fontsourceDir, packageName, candidate.sansItalic, '400', 'normal');
-    const serifItalic =
-      registerAliasFromFontsource(fontsourceDir, packageName, candidate.serifItalic, '700', 'italic') ||
-      registerAliasFromFontsource(fontsourceDir, packageName, candidate.serifItalic, '400', 'italic') ||
-      registerAliasFromFontsource(fontsourceDir, packageName, candidate.serifItalic, '400', 'normal');
+    const bodyFams = registerSubsetStack(fontsourceDir, packageName, `${prefix}_sans`, '400', 'normal');
+    const titleFams = (() => {
+      const w700 = registerSubsetStack(fontsourceDir, packageName, `${prefix}_sansBold`, '700', 'normal');
+      return w700.length ? w700 : registerSubsetStack(fontsourceDir, packageName, `${prefix}_sansBold`, '400', 'normal');
+    })();
+    const sansItalicFams = (() => {
+      const it = registerSubsetStack(fontsourceDir, packageName, `${prefix}_sansItalic`, '400', 'italic');
+      return it.length ? it : registerSubsetStack(fontsourceDir, packageName, `${prefix}_sansItalic`, '400', 'normal');
+    })();
+    const serifItalicFams = (() => {
+      const a = registerSubsetStack(fontsourceDir, packageName, `${prefix}_serifItalic`, '700', 'italic');
+      if (a.length) return a;
+      const b = registerSubsetStack(fontsourceDir, packageName, `${prefix}_serifItalic`, '400', 'italic');
+      if (b.length) return b;
+      return registerSubsetStack(fontsourceDir, packageName, `${prefix}_serifItalic`, '400', 'normal');
+    })();
 
+    const body = bodyFams.length > 0;
+    const title = titleFams.length > 0;
+    const sansItalic = sansItalicFams.length > 0;
+    const serifItalic = serifItalicFams.length > 0;
+
+    // Each role is a CSS fallback STACK: brand subsets first, NotoSans last so a
+    // missing glyph (or a missing subset) still renders rather than tofu.
     const resolved: CarouselFonts = {
-      sans: body ? candidate.sans : fallback.sans,
-      sansBold: title ? candidate.sansBold : fallback.sansBold,
-      sansItalic: sansItalic ? candidate.sansItalic : fallback.sansItalic,
-      serifItalic: serifItalic ? candidate.serifItalic : fallback.serifItalic,
+      sans: toFontStack(bodyFams, fallback.sans),
+      sansBold: toFontStack(titleFams, fallback.sansBold),
+      sansItalic: toFontStack(sansItalicFams, fallback.sansItalic),
+      serifItalic: toFontStack(serifItalicFams, fallback.serifItalic),
     };
 
-    console.info(
-      `[carousel] fonts ready for "${requestedFontId}" (body=${body} title=${title} sansItalic=${sansItalic} serifItalic=${serifItalic})`,
-    );
-    if (!body || !title || !sansItalic || !serifItalic) {
-      console.warn(
-        `[carousel] Partial font alias registration for "${requestedFontId}". Falling back to bundled defaults for missing variants.`,
+    // The primary faces (body 400 + title 700/400) are what most slides use.
+    // If they failed to register, the @fontsource files almost certainly did
+    // not ship to this environment (e.g. not traced into the serverless
+    // bundle) — that means a silent wrong-font export, so make it LOUD.
+    if (!body || !title) {
+      const fontsourceExists = existsSync(join(fontsourceDir, packageName, 'files'));
+      console.error(
+        `[carousel][fonts] FAILED to register brand font "${requestedFontId}" (package "${packageName}"). ` +
+          `body=${body} title=${title} sansItalic=${sansItalic} serifItalic=${serifItalic}. ` +
+          `@fontsource files present on disk: ${fontsourceExists}. ` +
+          `Exported text is falling back to NotoSans and will NOT match the editor.`,
       );
+    } else if (!sansItalic || !serifItalic) {
+      console.warn(
+        `[carousel][fonts] Partial registration for "${requestedFontId}" (italic/serif missing): ` +
+          `sansItalic=${sansItalic} serifItalic=${serifItalic}. Using NotoSans for those variants only.`,
+      );
+    } else {
+      console.info(`[carousel][fonts] ready for "${requestedFontId}" (all variants registered)`);
     }
     fontsByPairing.set(cacheKey, resolved);
     return resolved;

@@ -3,55 +3,23 @@ import { renderCarouselTemplatePng } from '@/lib/carousel/carouselTemplateRender
 import { sanitizeBgPhotoTransform } from '@/lib/carousel/bgPhotoTransform';
 import { normalizeAccentStyle, type BrandAccentStyle } from '@/lib/brand';
 import { getCarouselBrandPalette, resolveSlideVisualColors } from '@/lib/carousel/colorSystem';
+import { normalizeSlidesFromDb } from '@/lib/carouselSlides';
 import type { Slide } from '@/lib/carouselTypes';
+import { resolveSlideType } from '@/lib/carouselTypes';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
 
-type LegacyBody = {
-  title?: string;
-  body?: string;
-  placement?: 'top' | 'center' | 'bottom';
-  text_align?: 'left' | 'center' | 'right';
-  background_type?: 'color' | 'gradient' | 'image';
-  has_background_override?: boolean;
-  background_color?: string;
-  gradient_mid_color?: string | null;
-  gradient_end_color?: string | null;
-  background_image_url?: string | null;
-  background_image_base64?: string | null;
-  title_color?: string;
-  body_color?: string;
+/**
+ * The export renders from the SAME persisted slide model the editor uses
+ * (single canonical source of truth). The client only identifies WHICH slide
+ * to render via `project_id` + `slide_index`; it no longer ships a lossy copy
+ * of the slide's visual state. Brand/profile are still fetched server-side.
+ */
+type ExportBody = {
+  project_id?: string;
   slide_index?: number;
-  total_slides?: number;
-  title_size?: 'L' | 'M';
-  body_size?: 'M' | 'S';
-  bg_photo_transform?: {
-    offset_x?: number;
-    offset_y?: number;
-    scale?: number;
-  } | null;
-};
-
-type TemplateBody = LegacyBody & {
-  slide_type?: 'cover' | 'slide' | 'final';
-  layout_preset?: 'text' | 'quote' | 'testimonial' | 'list' | 'goal' | 'reaction' | null;
-  label?: string | null;
-  items?: string[] | null;
-  icon?: string | null;
-  bullet_style?: 'numbered-padded' | 'numbered-simple' | 'dots' | 'dashes' | 'checks' | 'cross-check' | null;
-  testimonial_author?: { name: string; handle: string; avatar_url: string | null } | null;
-  cta_action?: 'follow' | 'save' | 'share' | 'comment' | 'link' | null;
-  cta_title?: string | null;
-  cta_keyword?: string | null;
-  design_note?: string | null;
-  /** Skip template system and use legacy canvas renderer */
-  use_legacy_renderer?: boolean;
-  /** Passed through for Pillow / image pipeline (Prompt 1); optional on client. */
-  overlay_type?: 'full' | 'backdrop' | 'frost' | 'gradient' | null;
-  overlay_color?: string;
-  overlay_opacity?: number;
 };
 
 function appDomainFromEnv(): string {
@@ -65,26 +33,32 @@ function appDomainFromEnv(): string {
   }
 }
 
+function slideHasPhoto(slide: Slide): boolean {
+  return (
+    slide.backgroundType === 'image' &&
+    Boolean(
+      (slide.backgroundImageUrl && slide.backgroundImageUrl.trim().length > 0) ||
+        (slide.backgroundImageBase64 && slide.backgroundImageBase64.trim().length > 0),
+    )
+  );
+}
+
 export async function POST(req: Request) {
-  let json: TemplateBody;
+  let json: ExportBody;
   try {
-    json = (await req.json()) as TemplateBody;
+    json = (await req.json()) as ExportBody;
   } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  void json.overlay_type;
-  void json.overlay_color;
-  void json.overlay_opacity;
-
+  const projectId = typeof json.project_id === 'string' ? json.project_id.trim() : '';
   const slide_index = Number(json.slide_index);
-  const total_slides = Number(json.total_slides);
 
+  if (!projectId) {
+    return NextResponse.json({ error: 'Missing project_id' }, { status: 400 });
+  }
   if (!Number.isFinite(slide_index) || slide_index < 1) {
     return NextResponse.json({ error: 'Invalid slide_index' }, { status: 400 });
-  }
-  if (!Number.isFinite(total_slides) || total_slides < 1) {
-    return NextResponse.json({ error: 'Invalid total_slides' }, { status: 400 });
   }
 
   const supabase = await createServerSupabaseClient();
@@ -92,6 +66,11 @@ export async function POST(req: Request) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // ---- Brand / profile (server-side source of truth, unchanged) ----
   let watermarkHandle = '';
   const watermarkDomain = appDomainFromEnv();
   let vibe: 'bold' | 'refined' = 'bold';
@@ -102,81 +81,60 @@ export async function POST(req: Request) {
   let darkColor = '#141414';
   let accent2Color = '#5D6B9F';
 
-  if (user) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('display_name,accent_style')
-      .eq('id', user.id)
-      .maybeSingle<{ display_name: string | null; accent_style: string | null }>();
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('display_name,accent_style')
+    .eq('id', user.id)
+    .maybeSingle<{ display_name: string | null; accent_style: string | null }>();
 
-    const dn = profile?.display_name?.trim();
-    if (dn) {
-      const slug = dn.replace(/\s+/g, '').replace(/^@+/, '');
-      watermarkHandle = slug ? `@${slug}` : dn;
-    }
-    accentStyle = normalizeAccentStyle(profile?.accent_style);
+  const dn = profile?.display_name?.trim();
+  if (dn) {
+    const slug = dn.replace(/\s+/g, '').replace(/^@+/, '');
+    watermarkHandle = slug ? `@${slug}` : dn;
+  }
+  accentStyle = normalizeAccentStyle(profile?.accent_style);
 
-    const { data: brand } = await supabase
-      .from('brand_settings')
-      .select('vibe,color_light_bg,color_dark_bg,color_accent1,color_accent2,font_id')
-      .eq('user_id', user.id)
-      .maybeSingle<{
-        vibe: string | null;
-        color_light_bg: string | null;
-        color_dark_bg: string | null;
-        color_accent1: string | null;
-        color_accent2: string | null;
-        font_id: string | null;
-      }>();
+  const { data: brand } = await supabase
+    .from('brand_settings')
+    .select('vibe,color_light_bg,color_dark_bg,color_accent1,color_accent2,font_id')
+    .eq('user_id', user.id)
+    .maybeSingle<{
+      vibe: string | null;
+      color_light_bg: string | null;
+      color_dark_bg: string | null;
+      color_accent1: string | null;
+      color_accent2: string | null;
+      font_id: string | null;
+    }>();
 
-    if (brand) {
-      if (brand.vibe === 'refined') vibe = 'refined';
-      if (brand.color_accent1?.trim()) accentColor = brand.color_accent1.trim();
-      if (brand.color_accent2?.trim()) accent2Color = brand.color_accent2.trim();
-      if (brand.color_light_bg?.trim()) primaryColor = brand.color_light_bg.trim();
-      if (brand.color_dark_bg?.trim()) darkColor = brand.color_dark_bg.trim();
-      if (brand.font_id?.trim()) fontId = brand.font_id.trim();
-    }
+  if (brand) {
+    if (brand.vibe === 'refined') vibe = 'refined';
+    if (brand.color_accent1?.trim()) accentColor = brand.color_accent1.trim();
+    if (brand.color_accent2?.trim()) accent2Color = brand.color_accent2.trim();
+    if (brand.color_light_bg?.trim()) primaryColor = brand.color_light_bg.trim();
+    if (brand.color_dark_bg?.trim()) darkColor = brand.color_dark_bg.trim();
+    if (brand.font_id?.trim()) fontId = brand.font_id.trim();
   }
 
-  const pseudoSlide: Slide = {
-    id: 'render',
-    title: json.title ?? '',
-    body: json.body ?? '',
-    placement: json.placement ?? 'center',
-    textAlign: json.text_align ?? 'left',
-    layout: 'title_and_text',
-    design_note: json.design_note ?? null,
-    slideKind: undefined,
-    label: json.label ?? null,
-    items: json.items ?? null,
-    icon: json.icon ?? null,
-    backgroundType: json.background_type ?? 'color',
-    hasBackgroundOverride: json.has_background_override === true,
-    backgroundColor: json.background_color ?? primaryColor,
-    gradientMidColor: json.gradient_mid_color ?? undefined,
-    gradientEndColor: json.gradient_end_color ?? undefined,
-    backgroundImageUrl: json.background_image_url ?? null,
-    backgroundImageBase64: json.background_image_base64 ?? null,
-    bgPhotoTransform: sanitizeBgPhotoTransform(json.bg_photo_transform) ?? undefined,
-    titleColor: json.title_color ?? accentColor,
-    bodyColor: json.body_color ?? '#000000',
-    generatedImageBase64: null,
-    overlayType: json.overlay_type ?? null,
-    overlayColor: json.overlay_color ?? darkColor,
-    overlayOpacity: typeof json.overlay_opacity === 'number' ? json.overlay_opacity : 50,
-    slideType: json.slide_type ?? (slide_index === 1 ? 'cover' : slide_index === total_slides ? 'final' : 'slide'),
-    layoutPreset: json.layout_preset ?? (slide_index === total_slides ? 'goal' : 'text'),
-    optionalLabel: json.label ?? '',
-    listItems: json.items ?? null,
-    bulletStyle: json.bullet_style ?? 'numbered-padded',
-    testimonialAuthor: json.testimonial_author ?? null,
-    ctaAction: json.cta_action ?? 'follow',
-    ctaTitle: json.cta_title ?? '',
-    ctaKeyword: json.cta_keyword ?? '',
-    titleSize: json.title_size ?? 'L',
-    bodySize: json.body_size ?? 'M',
-  };
+  // ---- Load the PERSISTED slide model (canonical source of truth) ----
+  const { data: projectRow, error: projectError } = await supabase
+    .from('carousel_projects')
+    .select('slides')
+    .eq('id', projectId)
+    .eq('user_id', user.id)
+    .single<{ slides: unknown }>();
+
+  if (projectError || !projectRow) {
+    return NextResponse.json({ error: 'Carousel not found' }, { status: 404 });
+  }
+
+  const slides = normalizeSlidesFromDb(projectRow.slides);
+  const total_slides = slides.length;
+  if (slide_index > total_slides) {
+    return NextResponse.json({ error: 'slide_index out of range' }, { status: 400 });
+  }
+  const slide = slides[slide_index - 1];
+
   const palette = getCarouselBrandPalette({
     theme: 'light',
     vibe,
@@ -190,44 +148,51 @@ export async function POST(req: Request) {
     fontId,
     accentStyle,
   });
-  const resolvedVisual = resolveSlideVisualColors(pseudoSlide, slide_index - 1, total_slides, palette);
+  // resolveSlideVisualColors honours the slide's stored title/body color when
+  // textColorUserSet/textColorAutoSet is set (now present on the persisted
+  // model) — so the export no longer recomputes/overrides the editor's color.
+  const resolvedVisual = resolveSlideVisualColors(slide, slide_index - 1, total_slides, palette);
 
-  const useLegacy =
-    json.use_legacy_renderer === true ||
-    (json.background_type === 'image' && Boolean(json.background_image_url || json.background_image_base64));
+  const hasPhoto = slideHasPhoto(slide);
+  const useLegacy = slide.backgroundType === 'image' && hasPhoto;
+  const slideType = resolveSlideType(slide, slide_index - 1, total_slides);
 
   try {
     if (!useLegacy) {
-      const slideType =
-        json.slide_type ??
-        (slide_index === 1 ? 'cover' : slide_index === total_slides ? 'final' : 'slide');
       const layoutPreset =
-        json.layout_preset ?? (slideType === 'final' ? 'goal' : slideType === 'cover' ? null : 'text');
+        slide.layoutPreset ?? (slideType === 'final' ? 'goal' : slideType === 'cover' ? null : 'text');
 
       const png = await renderCarouselTemplatePng({
         slideType,
         layoutPreset,
-        title: json.title ?? '',
-        body: json.body ?? '',
-        label: json.label ?? null,
-        items: json.items ?? null,
-        icon: json.icon ?? null,
-        bulletStyle: json.bullet_style ?? null,
-        testimonialAuthor: json.testimonial_author ?? null,
-        ctaAction: json.cta_action ?? null,
-        ctaTitle: json.cta_title ?? null,
-        ctaKeyword: json.cta_keyword ?? null,
-        titleSize: json.title_size ?? 'L',
-        bodySize: json.body_size ?? 'M',
-        backgroundType: json.background_type ?? 'color',
+        title: slide.title ?? '',
+        body: slide.body ?? '',
+        textAlign: slide.textAlign ?? 'left',
+        label: slide.optionalLabel ?? null,
+        items: slide.listItems ?? slide.items ?? null,
+        icon: slide.icon ?? null,
+        bulletStyle: slide.bulletStyle ?? null,
+        testimonialAuthor: slide.testimonialAuthor ?? null,
+        ctaAction: slide.ctaAction ?? null,
+        ctaTitle: slide.ctaTitle ?? null,
+        ctaKeyword: slide.ctaKeyword ?? null,
+        titleSize: slide.titleSize ?? 'L',
+        bodySize: slide.bodySize ?? 'M',
+        backgroundType: slide.backgroundType ?? 'color',
         backgroundColor: resolvedVisual.backgroundColor,
-        gradientMidColor: json.gradient_mid_color ?? undefined,
-        gradientEndColor: json.gradient_end_color ?? undefined,
+        gradientMidColor: slide.gradientMidColor ?? undefined,
+        gradientEndColor: slide.gradientEndColor ?? undefined,
         titleColor: resolvedVisual.titleColor,
         bodyColor: resolvedVisual.bodyColor,
-        designNote: json.design_note ?? null,
+        designNote: slide.design_note ?? null,
         slideIndex: slide_index,
         totalSlides: total_slides,
+        palette: {
+          light: palette.light,
+          accent1: palette.accent1,
+          accent2: palette.accent2,
+          dark: palette.dark,
+        },
         brand: {
           vibe,
           primaryColor,
@@ -241,31 +206,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ image_base64: png.toString('base64') });
     }
 
-    const placement = json.placement ?? 'center';
-    const text_align = json.text_align ?? 'left';
-    const background_type = json.background_type ?? 'color';
-
-    if (!['top', 'center', 'bottom'].includes(placement)) {
-      return NextResponse.json({ error: 'Invalid placement' }, { status: 400 });
-    }
-    if (!['left', 'center', 'right'].includes(text_align)) {
-      return NextResponse.json({ error: 'Invalid text_align' }, { status: 400 });
-    }
-    if (!['color', 'gradient', 'image'].includes(background_type)) {
-      return NextResponse.json({ error: 'Invalid background_type' }, { status: 400 });
-    }
-
     const png = await renderSlideImagePng({
-      title: json.title ?? '',
-      body: json.body ?? '',
-      placement,
-      text_align,
-      background_type,
+      title: slide.title ?? '',
+      body: slide.body ?? '',
+      placement: slide.placement ?? 'center',
+      text_align: slide.textAlign ?? 'left',
+      background_type: 'image',
       background_color: resolvedVisual.backgroundColor,
-      gradient_mid_color: json.gradient_mid_color ?? null,
-      gradient_end_color: json.gradient_end_color ?? null,
-      background_image_url: json.background_image_url ?? null,
-      background_image_base64: json.background_image_base64 ?? null,
+      gradient_mid_color: slide.gradientMidColor ?? null,
+      gradient_end_color: slide.gradientEndColor ?? null,
+      background_image_url: slide.backgroundImageUrl ?? null,
+      background_image_base64: slide.backgroundImageBase64 ?? null,
       title_color: resolvedVisual.titleColor,
       body_color: resolvedVisual.bodyColor,
       slide_index,
@@ -273,9 +224,12 @@ export async function POST(req: Request) {
       accent_color: accentColor,
       accent_style: accentStyle,
       font_id: fontId,
-      title_size: json.title_size ?? 'L',
-      body_size: json.body_size ?? 'M',
-      bg_photo_transform: sanitizeBgPhotoTransform(json.bg_photo_transform) ?? null,
+      title_size: slide.titleSize ?? 'L',
+      body_size: slide.bodySize ?? 'M',
+      bg_photo_transform: sanitizeBgPhotoTransform(slide.bgPhotoTransform) ?? null,
+      overlay_type: slide.overlayType ?? null,
+      overlay_color: slide.overlayColor ?? darkColor,
+      overlay_opacity: typeof slide.overlayOpacity === 'number' ? slide.overlayOpacity : 50,
     });
     return NextResponse.json({ image_base64: png.toString('base64') });
   } catch (e) {
@@ -287,11 +241,12 @@ export async function POST(req: Request) {
       JSON.stringify({
         message: errMsg,
         stack: errStack,
+        projectId,
         slideIndex: slide_index,
         totalSlides: total_slides,
-        slideType: json.slide_type ?? null,
-        layoutPreset: json.layout_preset ?? null,
-        backgroundType: json.background_type ?? null,
+        slideType,
+        layoutPreset: slide.layoutPreset ?? null,
+        backgroundType: slide.backgroundType ?? null,
         useLegacy,
         fontId,
       }),
