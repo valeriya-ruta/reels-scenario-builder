@@ -35,6 +35,56 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } {
   return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
 }
 
+function rgba(hex: string, alpha: number): string {
+  const { r, g, b } = hexToRgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${Math.max(0, Math.min(1, alpha))})`;
+}
+
+function roundRect(
+  ctx: SKRSContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+): void {
+  const radius = Math.max(0, Math.min(r, Math.min(w, h) / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.arcTo(x + w, y, x + w, y + h, radius);
+  ctx.arcTo(x + w, y + h, x, y + h, radius);
+  ctx.arcTo(x, y + h, x, y, radius);
+  ctx.arcTo(x, y, x + w, y, radius);
+  ctx.closePath();
+}
+
+/**
+ * Configurable full-frame photo overlay matching the editor's ImageOverlays:
+ * - `full`     → solid tint at the chosen opacity
+ * - `gradient` → tint at the bottom fading to transparent ~60% up
+ * - `backdrop`/`frost`/null → no full-frame wash (a text plate is drawn instead)
+ */
+function drawPhotoOverlay(
+  ctx: SKRSContext2D,
+  overlayType: GenerateSlideInput['overlay_type'],
+  overlayColor: string,
+  overlayOpacity: number,
+): void {
+  const oc = overlayColor || '#141414';
+  const op = Math.max(0, Math.min(1, (overlayOpacity ?? 50) / 100));
+  if (overlayType === 'full') {
+    ctx.fillStyle = rgba(oc, op);
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  } else if (overlayType === 'gradient') {
+    const grad = ctx.createLinearGradient(0, CANVAS_H, 0, 0);
+    grad.addColorStop(0, rgba(oc, op));
+    grad.addColorStop(0.6, rgba(oc, 0));
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  }
+  // backdrop / frost / null: handled by the text plate (or no overlay at all).
+}
+
 function fontSpec(fontSize: number, plainBaseIsBold: boolean, fonts: CarouselFonts): string {
   return plainBaseIsBold ? `${fontSize}px ${fonts.sansBold}` : `${fontSize}px ${fonts.sans}`;
 }
@@ -151,6 +201,11 @@ export type GenerateSlideInput = {
   title_size?: 'L' | 'M';
   body_size?: 'M' | 'S';
   bg_photo_transform?: BgPhotoTransform | null;
+  /** Configurable photo overlay (matches the editor). `null` = no overlay. */
+  overlay_type?: 'full' | 'backdrop' | 'frost' | 'gradient' | null;
+  overlay_color?: string;
+  /** 0–100. Not used for `frost`. */
+  overlay_opacity?: number;
 };
 
 function normalizeMultiline(input: string): string {
@@ -256,8 +311,8 @@ export async function renderSlideImagePng(input: GenerateSlideInput): Promise<Bu
       ctx.fillStyle = '#1A1A2E';
       ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
     }
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
-    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    // Configurable overlay (replaces the old hardcoded 55% black scrim).
+    drawPhotoOverlay(ctx, input.overlay_type ?? 'full', input.overlay_color ?? '#141414', input.overlay_opacity ?? 50);
   }
 
   const titleSizePx = Math.round(TITLE_SIZE * TITLE_SCALE[input.title_size ?? 'L']);
@@ -267,10 +322,11 @@ export async function renderSlideImagePng(input: GenerateSlideInput): Promise<Bu
   const normalizedTitle = normalizeMultiline(input.title || '');
   const normalizedBody = normalizeMultiline(input.body || '');
 
-  const tc = hexToRgb(input.title_color || '#FFFFFF');
-  const bc = hexToRgb(input.body_color || '#FFFFFF');
-  const titleColorCss = `rgb(${tc.r},${tc.g},${tc.b})`;
-  const bodyColorCss = `rgb(${bc.r},${bc.g},${bc.b})`;
+  // drawSegmentedLine expects HEX (it runs hexToRgb internally). Passing an
+  // `rgb(...)` string here produced NaN → black text on photos — the
+  // near-invisible-title bug. Pass the hex straight through.
+  const titleColorCss = input.title_color || '#FFFFFF';
+  const bodyColorCss = input.body_color || '#FFFFFF';
 
   const titleBlockH = segmentedBlockHeight(
     ctx,
@@ -304,6 +360,27 @@ export async function renderSlideImagePng(input: GenerateSlideInput): Promise<Bu
   }
 
   const align = input.text_align ?? 'left';
+
+  // Backdrop / frost text plate behind the text block (matches the editor's
+  // TextPanelChrome). Only for photo backgrounds with backdrop/frost overlay.
+  if (
+    input.background_type === 'image' &&
+    (input.overlay_type === 'backdrop' || input.overlay_type === 'frost') &&
+    textBlockHeight > 0
+  ) {
+    const panelPadX = 28;
+    const panelPadY = 24;
+    const oc = input.overlay_color || '#141414';
+    const op = Math.max(0, Math.min(1, (input.overlay_opacity ?? 50) / 100));
+    const panelAlpha = input.overlay_type === 'backdrop' ? op : Math.max(0.18, op * 0.45);
+    const panelX = MARGIN_X - panelPadX;
+    const panelW = CANVAS_W - 2 * (MARGIN_X - panelPadX);
+    const panelY = textBlockY - panelPadY;
+    const panelH = textBlockHeight + panelPadY * 2;
+    ctx.fillStyle = rgba(oc, panelAlpha);
+    roundRect(ctx, panelX, panelY, panelW, panelH, 28);
+    ctx.fill();
+  }
 
   let nextTopY = textBlockY;
   nextTopY = drawSegmentedBlock(

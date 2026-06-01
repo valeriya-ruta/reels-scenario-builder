@@ -19,6 +19,7 @@ import { BODY_FALLBACK_FONT } from '@/lib/brandFonts';
 import {
   getCarouselBrandPalette,
   resolveSlideVisualColors,
+  resolveTitleAndBodyColors,
 } from '@/lib/carousel/colorSystem';
 import {
   getBgPhotoTransform,
@@ -501,7 +502,7 @@ export default function CarouselSlidePreview({
                     <AccentRuns text={slide.title} accentStyle={brand.accentStyle} accentColor={accent} />
                   </p>
                   <div className="mt-10 rounded-2xl px-8 py-6" style={{ backgroundColor: accent }}>
-                    <p className="text-center text-[36px] font-bold" style={{ color: resolvedBodyColor, fontFamily: titleFont }}>
+                    <p className="text-[36px] font-bold" style={{ color: resolveTitleAndBodyColors('color', accent, brandPalette).bodyColor, fontFamily: titleFont }}>
                       {bodyClean || 'Підпишись'}
                     </p>
                   </div>

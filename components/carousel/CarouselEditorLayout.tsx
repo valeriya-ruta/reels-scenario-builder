@@ -73,6 +73,9 @@ function SortableThumb({
   brandSettings,
   brandFont,
   totalSlides,
+  /** When true (mobile), the whole tile is the long-press drag handle so the
+   *  strip can scroll freely; reorder starts on long-press, tap selects. */
+  wholeTileDrag = false,
 }: {
   slide: Slide;
   index: number;
@@ -83,6 +86,7 @@ function SortableThumb({
   brandSettings: BrandSettings;
   brandFont: BrandFont;
   totalSlides: number;
+  wholeTileDrag?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: slide.id,
@@ -91,6 +95,8 @@ function SortableThumb({
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.85 : 1,
+    // Allow horizontal panning of the strip; long-press still initiates drag.
+    touchAction: wholeTileDrag ? 'pan-x' : undefined,
   };
   const thumbHeight = size === 'sm' ? 58 : 78;
   const thumbWidth = Math.round((thumbHeight * CANVAS_WIDTH) / CANVAS_HEIGHT);
@@ -102,6 +108,7 @@ function SortableThumb({
       style={{ ...style, width: thumbWidth, height: thumbHeight }}
       type="button"
       onClick={onSelect}
+      {...(wholeTileDrag ? { ...attributes, ...listeners } : {})}
       className={[
         'relative shrink-0 overflow-hidden rounded-md transition-[border-color] duration-150 ease-out',
         active ? 'ring-2' : 'ring-1 ring-black/10',
@@ -123,13 +130,15 @@ function SortableThumb({
         className="pointer-events-none absolute inset-0"
         style={{ borderRadius: 6, border: active ? `2px solid ${accentColor}` : '1px solid rgba(0,0,0,0.08)' }}
       />
-      <span
-        {...attributes}
-        {...listeners}
-        className="absolute left-0 top-0 z-[1] flex h-full w-6 cursor-grab touch-none select-none items-center justify-center bg-gradient-to-r from-black/25 to-transparent text-white opacity-0 hover:opacity-100"
-      >
-        <GripVertical className="h-3 w-3" />
-      </span>
+      {wholeTileDrag ? null : (
+        <span
+          {...attributes}
+          {...listeners}
+          className="absolute left-0 top-0 z-[1] flex h-full w-6 cursor-grab touch-none select-none items-center justify-center bg-gradient-to-r from-black/25 to-transparent text-white opacity-0 hover:opacity-100"
+        >
+          <GripVertical className="h-3 w-3" />
+        </span>
+      )}
     </button>
   );
 }
@@ -491,12 +500,22 @@ export default function CarouselEditorLayout({
 
   const mobilePreviewScale = previewScale;
 
-  const sensors = useSensors(
+  // Mobile: long-press to pick up a thumbnail (a horizontal swipe that moves
+  // before the delay aborts the drag, so the strip scrolls instead). Tap selects.
+  const mobileSensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { delay: 220, tolerance: 8 },
     }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
+  // Desktop: drag the grip handle after a small movement (snappy, no delay).
+  const desktopSensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 6 },
+    }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const sensors = isDesktopLayout ? desktopSensors : mobileSensors;
   const dragModifiers = useMemo(
     () => [isDesktopLayout ? restrictToVerticalAxis : restrictToHorizontalAxis],
     [isDesktopLayout],
@@ -1132,6 +1151,7 @@ export default function CarouselEditorLayout({
                         brandSettings={brandSettings}
                         brandFont={brandFont}
                         totalSlides={slides.length}
+                        wholeTileDrag
                       />
                     ))}
                     <button

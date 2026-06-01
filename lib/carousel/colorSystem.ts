@@ -31,6 +31,22 @@ function pickBestContrast(colors: string[], background: string): string {
   return sorted[0];
 }
 
+/**
+ * Perceived luminance (0–1) used as an auto-contrast threshold. We deliberately
+ * use a luminance threshold rather than raw max-WCAG-contrast: on a saturated
+ * mid-dark color (e.g. brand red) black can technically out-contrast white, but
+ * the design intent (and the auto-contrast spec) is light text on dark/red
+ * backgrounds and dark text on light backgrounds.
+ */
+function isDarkBackground(hex: string): boolean {
+  const h = normalizeHex(hex).replace('#', '');
+  const r = Number.parseInt(h.slice(0, 2), 16);
+  const g = Number.parseInt(h.slice(2, 4), 16);
+  const b = Number.parseInt(h.slice(4, 6), 16);
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum < 0.55;
+}
+
 function getSlideContext(slide: Slide, index: number, total: number): ResolvedSlideContext {
   return {
     slideType: resolveSlideType(slide, index, total),
@@ -58,6 +74,8 @@ export function getAutomaticBackgroundColor(
   return palette.accent1;
 }
 
+const WHITE = '#FFFFFF';
+
 export function resolveTitleAndBodyColors(
   backgroundType: Slide['backgroundType'],
   backgroundColor: string,
@@ -68,40 +86,22 @@ export function resolveTitleAndBodyColors(
     return { titleColor: palette.light, bodyColor: palette.light };
   }
 
-  if (bg === palette.light) {
-    const title =
-      pickFirstPassing([palette.accent1, palette.accent2, BLACK], bg, TITLE_TEXT_MIN) ??
-      pickBestContrast([palette.accent1, palette.accent2, BLACK], bg);
-    return { titleColor: title, bodyColor: BLACK };
+  // Dark / saturated (e.g. brand red) backgrounds → light text.
+  if (isDarkBackground(bg)) {
+    // Prefer the brand light color when it reads cleanly, else pure white.
+    const lightTitle =
+      pickFirstPassing([palette.light, WHITE], bg, TITLE_TEXT_MIN) ?? WHITE;
+    const lightBody =
+      pickFirstPassing([palette.light, WHITE], bg, BODY_TEXT_MIN) ?? WHITE;
+    return { titleColor: lightTitle, bodyColor: lightBody };
   }
 
-  if (bg === palette.accent1) {
-    const title =
-      pickFirstPassing([palette.accent2, BLACK], bg, TITLE_TEXT_MIN) ??
-      pickBestContrast([palette.accent2, BLACK], bg);
-    const body = contrastRatio(BLACK, bg) >= BODY_TEXT_MIN ? BLACK : palette.light;
-    return { titleColor: title, bodyColor: body };
-  }
-
-  if (bg === palette.accent2) {
-    const title =
-      pickFirstPassing([palette.accent1, BLACK], bg, TITLE_TEXT_MIN) ??
-      pickBestContrast([palette.accent1, BLACK], bg);
-    const body = contrastRatio(BLACK, bg) >= BODY_TEXT_MIN ? BLACK : palette.light;
-    return { titleColor: title, bodyColor: body };
-  }
-
-  if (bg === palette.dark) {
-    const title =
-      pickFirstPassing([palette.light, palette.accent2], bg, TITLE_TEXT_MIN) ??
-      pickBestContrast([palette.light, palette.accent2], bg);
-    return { titleColor: title, bodyColor: palette.light };
-  }
-
-  const titleCandidates = [palette.accent1, palette.accent2, palette.light, BLACK];
+  // Light backgrounds → dark text. Titles may use a brand accent when it
+  // contrasts (keeps the branded look); body stays black for readability.
   const title =
-    pickFirstPassing(titleCandidates, bg, TITLE_TEXT_MIN) ?? pickBestContrast(titleCandidates, bg);
-  const body = contrastRatio(BLACK, bg) >= BODY_TEXT_MIN ? BLACK : palette.light;
+    pickFirstPassing([palette.accent1, palette.accent2, palette.dark, BLACK], bg, TITLE_TEXT_MIN) ??
+    pickBestContrast([palette.accent1, palette.accent2, palette.dark, BLACK], bg);
+  const body = contrastRatio(BLACK, bg) >= BODY_TEXT_MIN ? BLACK : palette.dark;
   return { titleColor: title, bodyColor: body };
 }
 

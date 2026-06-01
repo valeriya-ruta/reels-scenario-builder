@@ -286,6 +286,7 @@ export default function CarouselBuilder({
   const { setBadge, clearBadge } = useNavBadges();
   const { state: rantResultsState, clearResult: clearRantResult } = useRantResults();
   const skipPersistRef = useRef(true);
+  const dirtyRef = useRef(false);
 
   useEffect(() => {
     if (!slides.length) return;
@@ -308,26 +309,44 @@ export default function CarouselBuilder({
     }
   }, [projectNameDraft, projectName, projectId]);
 
+  // Persist the latest slides immediately, bypassing the debounce. Used when the
+  // editor unmounts (client-side navigation) or the tab/app is hidden/unloaded,
+  // so the last edits made within the debounce window are never lost.
+  const flushSlidesNow = useCallback(() => {
+    if (saveSlidesTimerRef.current) {
+      clearTimeout(saveSlidesTimerRef.current);
+      saveSlidesTimerRef.current = null;
+    }
+    if (!dirtyRef.current) return;
+    dirtyRef.current = false;
+    const currentSlides = slidesRef.current;
+    void (async () => {
+      try {
+        await saveCarouselSlides(projectId, currentSlides);
+      } catch (error) {
+        dirtyRef.current = true;
+        console.error('saveCarouselSlides flush failed', error);
+      }
+    })();
+  }, [projectId]);
+
   useEffect(() => {
     if (skipPersistRef.current) {
       skipPersistRef.current = false;
       return;
     }
+    dirtyRef.current = true;
     if (saveSlidesTimerRef.current) {
       clearTimeout(saveSlidesTimerRef.current);
     }
     saveSlidesTimerRef.current = setTimeout(() => {
       const currentSlides = slidesRef.current;
-      console.log('saveCarouselSlides called', currentSlides.length, Date.now());
+      dirtyRef.current = false;
       void (async () => {
         try {
-          const result = await saveCarouselSlides(projectId, currentSlides);
-          console.log('saveCarouselSlides result', {
-            ok: result?.ok ?? false,
-            projectId,
-            slidesCount: currentSlides.length,
-          });
+          await saveCarouselSlides(projectId, currentSlides);
         } catch (error) {
+          dirtyRef.current = true;
           console.error('saveCarouselSlides failed', error);
         }
       })();
@@ -338,6 +357,22 @@ export default function CarouselBuilder({
       }
     };
   }, [projectId, slides]);
+
+  // Guarantee the pending debounced save is flushed when the user leaves the
+  // editor: client-side navigation (unmount), backgrounding the app / switching
+  // tabs (visibilitychange -> hidden), or unloading the page (pagehide).
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') flushSlidesNow();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('pagehide', flushSlidesNow);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('pagehide', flushSlidesNow);
+      flushSlidesNow();
+    };
+  }, [flushSlidesNow]);
 
   useEffect(() => {
     if (hasGenerated && !hasDownloaded) {
@@ -379,15 +414,9 @@ export default function CarouselBuilder({
             getBgPhotoTransform(nextPatch.bgPhotoTransform ?? undefined),
           );
         }
-        const textColorWasManuallySet =
+        const isManualColorPick =
           nextPatch.titleColor !== undefined || nextPatch.bodyColor !== undefined;
-        const next = {
-          ...s,
-          ...nextPatch,
-          textColorUserSet: textColorWasManuallySet ? true : s.textColorUserSet,
-        };
         const slideIndex = prev.findIndex((x) => x.id === s.id);
-        const resolved = resolveSlideVisualColors(next, slideIndex, prev.length, brandPalette);
         const visualPatchChanged =
           nextPatch.backgroundType !== undefined ||
           nextPatch.backgroundColor !== undefined ||
@@ -399,6 +428,20 @@ export default function CarouselBuilder({
           nextPatch.overlayColor !== undefined ||
           nextPatch.overlayOpacity !== undefined ||
           nextPatch.hasBackgroundOverride !== undefined;
+        // Single per-slide manual flag: a manual color pick sets it; ANY
+        // background change resets it so auto-contrast re-snaps. (Task: auto
+        // contrast on background change + manual override until next bg change.)
+        const nextUserSet = isManualColorPick
+          ? true
+          : visualPatchChanged
+            ? false
+            : s.textColorUserSet;
+        const next = {
+          ...s,
+          ...nextPatch,
+          textColorUserSet: nextUserSet,
+        };
+        const resolved = resolveSlideVisualColors(next, slideIndex, prev.length, brandPalette);
         const hasActualImage =
           next.backgroundType === 'image' &&
           Boolean(
@@ -407,8 +450,8 @@ export default function CarouselBuilder({
           );
         const canAutoContrast =
           visualPatchChanged &&
+          !isManualColorPick &&
           next.textColorUserSet !== true &&
-          next.textColorAutoSet !== true &&
           (next.backgroundType !== 'image' || hasActualImage);
         if (canAutoContrast) {
           const auto = resolveTitleAndBodyColors(
@@ -454,10 +497,34 @@ export default function CarouselBuilder({
 
   const addSlide = () => {
     if (slides.length >= MAX_SLIDES) return;
+    // New slide starting state (per spec): quote layout, white background,
+    // "Новий слайд" placeholder text, left alignment, auto-contrast text color.
     const s = createEmptySlide({ overlayColor: overlayDefault });
+    s.slideType = 'slide';
+    s.layoutPreset = 'quote';
+    s.title = 'Новий слайд';
+    s.backgroundType = 'color';
+    s.hasBackgroundOverride = true;
+    s.backgroundColor = '#FFFFFF';
+    s.textAlign = 'left';
+    s.textColorUserSet = false;
     setSlides((prev) => {
-      const nextSlide = { ...s, ...resolveSlideVisualColors(s, prev.length, prev.length + 1, brandPalette) };
-      return [...prev, nextSlide];
+      // Insert right AFTER the currently selected slide (not appended).
+      const activeIdx = prev.findIndex((x) => x.id === activeSlideId);
+      const insertAt = activeIdx >= 0 ? activeIdx + 1 : prev.length;
+      const total = prev.length + 1;
+      const resolved = resolveSlideVisualColors(s, insertAt, total, brandPalette);
+      const auto = resolveTitleAndBodyColors('color', resolved.backgroundColor, brandPalette);
+      const nextSlide = {
+        ...s,
+        ...resolved,
+        titleColor: auto.titleColor,
+        bodyColor: auto.bodyColor,
+        textColorAutoSet: true,
+      };
+      const copy = [...prev];
+      copy.splice(insertAt, 0, nextSlide);
+      return copy;
     });
     setActiveSlideId(s.id);
   };
@@ -490,53 +557,20 @@ export default function CarouselBuilder({
     setHasGenerated(false);
     let currentSlideIndex = 0;
 
-    const total = snapshot.length;
     try {
+      // Flush the persisted slide model first so the server-side export renders
+      // from exactly what the editor holds (no race with the debounced autosave).
+      await saveCarouselSlides(projectId, snapshot);
       for (let i = 0; i < snapshot.length; i++) {
         currentSlideIndex = i;
         setGeneratingIndex(i);
-        const s = snapshot[i];
-        const body: Record<string, unknown> = {
-          title: s.title,
-          body: s.body,
-          placement: s.placement,
-          text_align: s.textAlign,
-          background_type: s.backgroundType,
-          has_background_override: s.hasBackgroundOverride ?? false,
-          background_color: s.backgroundColor,
-          gradient_mid_color: s.gradientMidColor ?? null,
-          gradient_end_color: s.gradientEndColor ?? null,
-          background_image_url: s.backgroundType === 'image' ? s.backgroundImageUrl : null,
-          title_color: s.titleColor,
-          body_color: s.bodyColor,
-          slide_index: i + 1,
-          total_slides: total,
-          slide_type: resolveSlideType(s, i, total),
-          layout_preset: s.layoutPreset ?? null,
-          label: s.optionalLabel ?? null,
-          items: s.listItems ?? s.items ?? null,
-          icon: s.icon ?? null,
-          bullet_style: s.bulletStyle ?? null,
-          testimonial_author: s.testimonialAuthor ?? null,
-          cta_action: s.ctaAction ?? null,
-          cta_title: s.ctaTitle ?? null,
-          cta_keyword: s.ctaKeyword ?? null,
-          title_size: s.titleSize ?? 'L',
-          body_size: s.bodySize ?? 'M',
-          design_note: s.design_note ?? null,
-          overlay_type: s.backgroundType === 'image' ? s.overlayType : null,
-          overlay_color: s.overlayColor,
-          overlay_opacity: s.overlayOpacity,
-          bg_photo_transform: s.backgroundType === 'image' ? s.bgPhotoTransform ?? DEFAULT_BG_PHOTO_TRANSFORM : null,
-        };
-        if (s.backgroundType === 'image' && s.backgroundImageBase64) {
-          body.background_image_base64 = s.backgroundImageBase64;
-        }
 
+        // The export reads the slide's full visual state from the persisted
+        // model; the client only identifies which slide to render.
         const res = await fetch('/api/carousel/generate-slide', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(body),
+          body: JSON.stringify({ project_id: projectId, slide_index: i + 1 }),
         });
         const responseText = await res.text();
         let data: { image_base64?: string; error?: string } = {};

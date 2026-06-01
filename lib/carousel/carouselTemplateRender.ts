@@ -22,6 +22,7 @@ import {
 import { ensureCarouselFonts } from '@/lib/carousel/carouselFonts';
 import { rasterizePhosphorIcon } from '@/lib/carousel/phosphorIcon';
 import type { BrandAccentStyle } from '@/lib/brand';
+import { resolveTitleAndBodyColors, type CarouselBrandPalette } from '@/lib/carousel/colorSystem';
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
   const h = hex.replace(/^#/, '');
@@ -34,6 +35,14 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } {
       : h.slice(0, 6);
   const n = parseInt(full, 16);
   return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+
+/** True when the given hex color is dark enough that light text reads best on it. */
+function isDarkColor(hex: string): boolean {
+  const { r, g, b } = hexToRgb(hex);
+  // Perceived luminance (sRGB approximation).
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum < 0.55;
 }
 
 function drawParagraphSegmented(
@@ -180,6 +189,8 @@ export type CarouselTemplateInput = {
   layoutPreset?: 'text' | 'quote' | 'testimonial' | 'list' | 'goal' | 'reaction' | null;
   title: string;
   body: string;
+  /** Single shared alignment for title + body (defaults to left). */
+  textAlign?: 'left' | 'center' | 'right';
   label: string | null;
   items: string[] | null;
   icon: string | null;
@@ -199,6 +210,8 @@ export type CarouselTemplateInput = {
   designNote: string | null;
   slideIndex: number;
   totalSlides: number;
+  /** Brand DNA palette, so renderers can resolve text contrast against a plate/box color. */
+  palette: CarouselBrandPalette;
   brand: BrandDnaForRender;
   handle: string;
   domain: string;
@@ -384,9 +397,10 @@ async function renderContent(
     y += 28;
     drawPlainParagraph(ctx, stripAccentMarkers(body), PADDING, y, CANVAS_SIZE - PADDING * 2, 32, 40, '#777777', 'left', fonts);
   } else {
+    const align = input.textAlign ?? 'left';
     ctx.fillStyle = input.backgroundColor || DEFAULT_BG;
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
-    drawWatermark(ctx, handle, domain, 'bold', false, fonts);
+    drawWatermark(ctx, handle, domain, 'bold', isDarkColor(input.backgroundColor || DEFAULT_BG), fonts);
     const contentW = CANVAS_SIZE - PADDING * 2;
     let y = PADDING + 40;
     const lab = (label || '').trim();
@@ -429,7 +443,7 @@ async function renderContent(
       titleColor,
       accent,
       brand.accentStyle,
-      'left',
+      align,
       false,
       120,
       fonts,
@@ -438,11 +452,12 @@ async function renderContent(
     ctx.strokeStyle = input.gradientEndColor || DEFAULT_DARK;
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(PADDING, y);
-    ctx.lineTo(PADDING + 32, y);
+    const dividerStart = align === 'right' ? CANVAS_SIZE - PADDING - 32 : align === 'center' ? (CANVAS_SIZE - 32) / 2 : PADDING;
+    ctx.moveTo(dividerStart, y);
+    ctx.lineTo(dividerStart + 32, y);
     ctx.stroke();
     y += 28;
-    y = drawPlainParagraph(ctx, stripAccentMarkers(body), PADDING, y, contentW, 34, 54, bodyColor, 'left', fonts);
+    y = drawPlainParagraph(ctx, stripAccentMarkers(body), PADDING, y, contentW, 34, 54, bodyColor, align, fonts);
     const chipItems = items && items.length > 0 && items.length <= 4 ? items : null;
     if (chipItems) {
       y += 24;
@@ -511,16 +526,28 @@ async function renderStatement(
       ctx.fillText(sub, (CANVAS_SIZE - tw) / 2, y);
     }
   } else {
-    const { r, g, b } = hexToRgb(accent);
+    // Use the slide's real background color (matches the editor's quote bg:
+    // the chosen color for `color` backgrounds, otherwise the brand accent).
+    const quoteBg =
+      input.backgroundType === 'color' && input.backgroundColor ? input.backgroundColor : accent;
+    const { r, g, b } = hexToRgb(quoteBg);
     ctx.fillStyle = `rgb(${r},${g},${b})`;
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
     const statementTextColor = titleColor;
-    drawWatermark(ctx, handle, domain, 'bold', true, fonts);
-    const img = await rasterizePhosphorIcon(icon || 'sparkle', 120, '#ffffff');
-    if (img) {
-      ctx.drawImage(img, (CANVAS_SIZE - 120) / 2, CANVAS_SIZE * 0.2, 120, 120);
+    const align = input.textAlign ?? 'left';
+    drawWatermark(ctx, handle, domain, 'bold', isDarkColor(quoteBg), fonts);
+    // Only draw an icon the slide actually specifies — no default sparkle.
+    let textTop = CANVAS_SIZE * 0.2;
+    if (icon) {
+      const img = await rasterizePhosphorIcon(icon, 120, statementTextColor);
+      if (img) {
+        ctx.drawImage(img, (CANVAS_SIZE - 120) / 2, textTop, 120, 120);
+        textTop += 140;
+      }
+    } else {
+      // Center the text block vertically when there is no icon.
+      textTop = CANVAS_SIZE * 0.32;
     }
-    const y0 = CANVAS_SIZE * 0.2 + 140;
     const lines = layoutWords(
       (t) => {
         ctx.font = `88px ${fonts.sans}`;
@@ -529,7 +556,7 @@ async function renderStatement(
       segmentsToWords(parseAccentSpans(title)),
       CANVAS_SIZE - PADDING * 2,
     );
-    let yy = y0;
+    let yy = textTop;
     for (let i = 0; i < lines.length; i++) {
       drawSegmentedLine(
         ctx,
@@ -540,7 +567,7 @@ async function renderStatement(
         statementTextColor,
         accent,
         brand.accentStyle,
-        'center',
+        align,
         CANVAS_SIZE - PADDING * 2,
         false,
         400 + i,
@@ -643,7 +670,6 @@ async function renderCta(
   const { brand, title, body, label, handle, domain } = input;
   const accent = brand.accentColor || DEFAULT_ACCENT;
   const titleColor = input.titleColor || '#000000';
-  const bodyColor = input.bodyColor || '#000000';
   if (refined) {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
@@ -707,9 +733,10 @@ async function renderCta(
     ctx.font = `18px ${fonts.sans}`;
     ctx.fillText('→', CANVAS_SIZE - PADDING - 30, circleY + 6);
   } else {
+    const align = input.textAlign ?? 'left';
     ctx.fillStyle = input.backgroundColor || DEFAULT_DARK;
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
-    drawWatermark(ctx, handle, domain, 'bold', true, fonts);
+    drawWatermark(ctx, handle, domain, 'bold', isDarkColor(input.backgroundColor || DEFAULT_DARK), fonts);
     let y = PADDING + 60;
     const { r, g, b } = hexToRgb(accent);
     ctx.font = `24px ${fonts.sansBold}`;
@@ -718,7 +745,8 @@ async function renderCta(
     const eyebrow = (label || '').trim().toUpperCase();
     if (eyebrow) {
       const tw = ctx.measureText(eyebrow).width;
-      ctx.fillText(eyebrow, (CANVAS_SIZE - tw) / 2, y);
+      const ex = align === 'left' ? PADDING : align === 'right' ? CANVAS_SIZE - PADDING - tw : (CANVAS_SIZE - tw) / 2;
+      ctx.fillText(eyebrow, ex, y);
     }
     y += 36;
     const lines = layoutWords(
@@ -740,7 +768,7 @@ async function renderCta(
         titleColor,
         accent,
         brand.accentStyle,
-        'center',
+        align,
         CANVAS_SIZE - PADDING * 2,
         false,
         700 + i,
@@ -765,14 +793,20 @@ async function renderCta(
     roundRectPath(ctx, PADDING, boxY, CANVAS_SIZE - PADDING * 2, boxH, 16);
     ctx.fillStyle = `rgb(${r},${g},${b})`;
     ctx.fill();
+    // The body sits on the ACCENT box, so its text must contrast with the box
+    // color (not the slide background) — prevents black-on-red.
+    const ctaBoxTextColor = resolveTitleAndBodyColors('color', accent, input.palette).bodyColor;
     let iy = boxY + innerPad + 36;
+    const boxLeft = PADDING + innerPad;
+    const boxRight = CANVAS_SIZE - PADDING - innerPad;
     for (const bl of bodyLines) {
       const lineText = bl.map((w) => w.text).join('');
       ctx.font = `36px ${fonts.sansBold}`;
       const tw = ctx.measureText(lineText).width;
-      ctx.fillStyle = bodyColor;
+      const lx = align === 'left' ? boxLeft : align === 'right' ? boxRight - tw : (CANVAS_SIZE - tw) / 2;
+      ctx.fillStyle = ctaBoxTextColor;
       ctx.textBaseline = 'alphabetic';
-      ctx.fillText(lineText, (CANVAS_SIZE - tw) / 2, iy);
+      ctx.fillText(lineText, lx, iy);
       iy += 42;
     }
   }
