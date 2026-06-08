@@ -34,6 +34,14 @@
   --accent: #004ba8;
   --accent-soft: rgba(0, 75, 168, 0.12);
   --accent-rgb: 0, 75, 168;
+  /* Semantic content-type palette (icons/tags only — blue stays the functional
+     UI accent). Kept soft. Shared by Home, Create radial menu, Braindump. */
+  --type-reels: #004ba8;
+  --type-reels-soft: rgba(0, 75, 168, 0.1);
+  --type-carousel: #7850a0;
+  --type-carousel-soft: rgba(120, 80, 160, 0.12);
+  --type-stories: #c08c28;
+  --type-stories-soft: rgba(192, 140, 40, 0.12);
   --border: #e5e5e5;
   --success: #22c55e;
   --muted: #a3a3a3;
