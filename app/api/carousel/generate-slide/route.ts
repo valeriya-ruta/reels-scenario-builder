@@ -207,11 +207,33 @@ export async function POST(req: Request) {
       return NextResponse.json({ image_base64: png.toString('base64') });
     }
 
+    // Match the editor's per-type text sizing / pill on photo slides so the legacy
+    // photo renderer agrees with CarouselSlidePreview (same as the template path).
+    const tSize = slide.titleSize ?? 'L';
+    const bSize = slide.bodySize ?? 'M';
+    const legacyTitlePx =
+      slideType === 'cover'
+        ? tSize === 'M'
+          ? 70
+          : 88
+        : slideType === 'final'
+          ? tSize === 'M'
+            ? 58
+            : 72
+          : tSize === 'M'
+            ? 52
+            : 64;
+    const legacyBodyPx = slideType === 'cover' ? 26 : bSize === 'S' ? 27 : 34;
+    const isContentSlide =
+      slideType === 'slide' && (slide.layoutPreset === 'text' || !slide.layoutPreset);
+    const legacyLabel = isContentSlide ? slide.optionalLabel ?? null : null;
+
     const png = await renderSlideImagePng({
       title: slide.title ?? '',
       body: slide.body ?? '',
       placement: slide.placement ?? 'center',
-      text_align: slide.textAlign ?? 'left',
+      // The editor force-centres the cover; mirror that for a cover photo slide.
+      text_align: slideType === 'cover' ? 'center' : slide.textAlign ?? 'left',
       background_type: 'image',
       background_color: resolvedVisual.backgroundColor,
       gradient_mid_color: slide.gradientMidColor ?? null,
@@ -227,6 +249,9 @@ export async function POST(req: Request) {
       font_id: fontId,
       title_size: slide.titleSize ?? 'L',
       body_size: slide.bodySize ?? 'M',
+      title_px: legacyTitlePx,
+      body_px: legacyBodyPx,
+      label: legacyLabel,
       bg_photo_transform: sanitizeBgPhotoTransform(slide.bgPhotoTransform) ?? null,
       overlay_type: slide.overlayType ?? null,
       overlay_color: slide.overlayColor ?? darkColor,

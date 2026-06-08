@@ -278,13 +278,6 @@ export type CarouselTemplateInput = {
   domain: string;
 };
 
-const CTA_WORD: Record<'follow' | 'save' | 'share' | 'comment' | 'link', string> = {
-  follow: 'Підпишись',
-  save: 'Збережи',
-  share: 'Поділись',
-  comment: 'Коментуй',
-  link: 'Перейди',
-};
 
 function fillCoverBackground(
   ctx: SKRSContext2D,
@@ -1013,8 +1006,10 @@ export async function renderCarouselTemplatePng(input: CarouselTemplateInput): P
       const tw = ctx.measureText(kw).width;
       ctx.fillText(kw, (CANVAS_SIZE - tw) / 2, CANVAS_HEIGHT * 0.62);
     } else {
-      const cta = CTA_WORD[(input.ctaAction || 'follow') as keyof typeof CTA_WORD] ?? CTA_WORD.follow;
-      await renderCta(ctx, { ...input, body: cta }, refined, fonts);
+      // Match the editor's goal slide: the accent box shows the slide's body
+      // (else the «Підпишись» default), NOT a CTA-action word. renderCta falls
+      // back to «Підпишись» when body is empty.
+      await renderCta(ctx, input, refined, fonts);
     }
   }
 
