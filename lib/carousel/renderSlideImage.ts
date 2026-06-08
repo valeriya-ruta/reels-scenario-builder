@@ -200,6 +200,11 @@ export type GenerateSlideInput = {
   font_id?: string | null;
   title_size?: 'L' | 'M';
   body_size?: 'M' | 'S';
+  /** Exact px sizes (match the editor per slide type). Override title_size/body_size scaling when set. */
+  title_px?: number;
+  body_px?: number;
+  /** Eyebrow/label pill (content slides) — rendered above the title like the editor. */
+  label?: string | null;
   bg_photo_transform?: BgPhotoTransform | null;
   /** Configurable photo overlay (matches the editor). `null` = no overlay. */
   overlay_type?: 'full' | 'backdrop' | 'frost' | 'gradient' | null;
@@ -315,8 +320,10 @@ export async function renderSlideImagePng(input: GenerateSlideInput): Promise<Bu
     drawPhotoOverlay(ctx, input.overlay_type ?? 'full', input.overlay_color ?? '#141414', input.overlay_opacity ?? 50);
   }
 
-  const titleSizePx = Math.round(TITLE_SIZE * TITLE_SCALE[input.title_size ?? 'L']);
-  const bodySizePx = Math.round(BODY_SIZE * BODY_SCALE[input.body_size ?? 'M']);
+  const titleSizePx =
+    input.title_px ?? Math.round(TITLE_SIZE * TITLE_SCALE[input.title_size ?? 'L']);
+  const bodySizePx =
+    input.body_px ?? Math.round(BODY_SIZE * BODY_SCALE[input.body_size ?? 'M']);
   const titleLineHeight = Math.round(titleSizePx * 1.25);
   const bodyLineHeight = Math.round(bodySizePx * 1.25);
   const normalizedTitle = normalizeMultiline(input.title || '');
@@ -347,8 +354,18 @@ export async function renderSlideImagePng(input: GenerateSlideInput): Promise<Bu
     fonts,
   );
 
+  const align = input.text_align ?? 'left';
+
+  // Label pill (content slides) — matches the editor's rounded-full white-text
+  // chip above the title. Included in the block so vertical placement centres it.
+  const pillLabel = (input.label ?? '').trim();
+  const PILL_TEXT = 22;
+  const PILL_PAD_X = 20;
+  const PILL_H = pillLabel ? 40 : 0;
+  const PILL_GAP = pillLabel ? 32 : 0; // mt-8 to the title
+
   const betweenGap = titleBlockH && bodyBlockH ? TITLE_BODY_GAP : 0;
-  const textBlockHeight = titleBlockH + betweenGap + bodyBlockH;
+  const textBlockHeight = PILL_H + PILL_GAP + titleBlockH + betweenGap + bodyBlockH;
 
   let textBlockY: number;
   if (input.placement === 'center') {
@@ -358,8 +375,6 @@ export async function renderSlideImagePng(input: GenerateSlideInput): Promise<Bu
   } else {
     textBlockY = CANVAS_H - textBlockHeight - 100;
   }
-
-  const align = input.text_align ?? 'left';
 
   // Backdrop / frost text plate behind the text block (matches the editor's
   // TextPanelChrome). Only for photo backgrounds with backdrop/frost overlay.
@@ -383,6 +398,26 @@ export async function renderSlideImagePng(input: GenerateSlideInput): Promise<Bu
   }
 
   let nextTopY = textBlockY;
+  if (pillLabel) {
+    ctx.font = `${PILL_TEXT}px ${fonts.sansBold}`;
+    const textW = ctx.measureText(pillLabel).width;
+    const pillW = PILL_PAD_X * 2 + textW;
+    const pillX =
+      align === 'right'
+        ? MARGIN_X + MAX_TEXT_WIDTH - pillW
+        : align === 'center'
+          ? MARGIN_X + (MAX_TEXT_WIDTH - pillW) / 2
+          : MARGIN_X;
+    const { r, g, b } = hexToRgb(accentColor);
+    roundRect(ctx, pillX, nextTopY, pillW, PILL_H, PILL_H / 2);
+    ctx.fillStyle = `rgb(${r},${g},${b})`;
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(pillLabel, pillX + PILL_PAD_X, nextTopY + PILL_H / 2 + 1);
+    ctx.textBaseline = 'alphabetic';
+    nextTopY += PILL_H + PILL_GAP;
+  }
   nextTopY = drawSegmentedBlock(
     ctx,
     normalizedTitle,

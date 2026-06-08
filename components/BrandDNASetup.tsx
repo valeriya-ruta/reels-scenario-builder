@@ -19,10 +19,13 @@ import {
 } from '@/lib/brand';
 import { parseAccentSegments } from '@/lib/accentBracketText';
 import { AccentSpan } from '@/components/carousel/AccentStyledSpans';
-import { BODY_FALLBACK_FONT, getDefaultFontForVibe, resolveBrandFont } from '@/lib/brandFonts';
+import { getDefaultFontForVibe, resolveBrandFont } from '@/lib/brandFonts';
 import { loadBrandFontsCatalog, loadGoogleFont } from '@/lib/loadGoogleFont';
 import { FontSelector } from '@/components/FontSelector';
 import { useToast } from '@/components/ToastProvider';
+import CarouselSlidePreview from '@/components/carousel/CarouselSlidePreview';
+import { createEmptySlide } from '@/lib/carouselSlides';
+import type { Slide } from '@/lib/carouselTypes';
 
 type ScreenStep = 1 | 2;
 type PaletteKey = 'lightBg' | 'darkBg' | 'accent1' | 'accent2';
@@ -347,6 +350,37 @@ export default function BrandDNASetup({
   );
   const brandFont = useMemo(() => resolveBrandFont(fontId), [fontId]);
 
+  // Live preview brand model fed to the REAL carousel renderer (CarouselSlidePreview),
+  // so the font-pairing preview is 1:1 with an actual slide — same title AND body
+  // font, weights and sizes — instead of a separate approximation.
+  const previewBrand: BrandSettings = useMemo(
+    () => ({
+      theme,
+      vibe,
+      favColorHex: favHex,
+      colors: {
+        lightBg: palette.lightBg,
+        darkBg: palette.darkBg,
+        accent1: palette.accent1,
+        accent2: palette.accent2,
+      },
+      fontId,
+      accentStyle,
+    }),
+    [theme, vibe, favHex, palette, fontId, accentStyle],
+  );
+  const previewSlide: Slide = useMemo(() => {
+    const s = createEmptySlide();
+    s.slideType = 'slide';
+    s.layoutPreset = 'text';
+    s.optionalLabel = 'Бренд';
+    s.title = 'Твій бренд готовий';
+    s.body = 'Так виглядатимуть заголовки й основний текст у твоїх каруселях.';
+    s.backgroundType = 'color';
+    s.hasBackgroundOverride = false;
+    return s;
+  }, []);
+
   const persistRef = useRef({
     theme,
     vibe,
@@ -581,42 +615,23 @@ export default function BrandDNASetup({
         </button>
       )}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="flex justify-center">
-          <div
-            className="relative w-full max-w-[360px] overflow-hidden rounded-2xl border border-[color:var(--border)] p-6 shadow-sm"
-            style={{ aspectRatio: '4 / 5', backgroundColor: palette.bg }}
-          >
-            <div className="mb-4 h-1.5 w-16 rounded-full" style={{ backgroundColor: palette.accent2Safe }} />
-            <h3
-              className="text-2xl leading-tight"
-              style={{
-                color: vibe === 'bold' ? palette.accent1Safe : palette.mainText,
-                fontFamily: `'${brandFont.label}', sans-serif`,
-                fontWeight: brandFont.titleWeight,
-                fontStyle: brandFont.titleStyle,
-              }}
-            >
-              Твій бренд готовий
-            </h3>
-            <p
-              className="mt-3 text-sm leading-relaxed"
-              style={{
-                color: palette.mainText,
-                fontFamily: brandFont.bodyAvailable
-                  ? `'${brandFont.label}', sans-serif`
-                  : `'${BODY_FALLBACK_FONT}', sans-serif`,
-                fontWeight: '400',
-              }}
-            >
-              Це превʼю того, як виглядатимуть твої каруселі в Ruta.
-            </p>
-            <div
-              className="absolute bottom-5 right-5 flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold"
-              style={{ backgroundColor: palette.accent2Safe, color: palette.bg }}
-            >
-              01
-            </div>
+        <div className="flex flex-col items-center gap-2">
+          {/* Compact 1:1 carousel render (the canonical CarouselSlidePreview),
+              just big enough to judge the pairing: pill + title + a couple of body
+              lines. Small height to avoid excessive scrolling. */}
+          <div className="overflow-hidden rounded-xl">
+            <CarouselSlidePreview
+              slide={previewSlide}
+              brand={previewBrand}
+              brandFont={brandFont}
+              scale={0.24}
+              slideIndex={2}
+              totalSlides={3}
+            />
           </div>
+          <p className="text-center text-[11px] leading-tight text-zinc-400">
+            Превʼю шрифтів на справжньому слайді
+          </p>
         </div>
 
         <div className="space-y-5">

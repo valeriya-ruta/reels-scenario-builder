@@ -1,8 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import {
   DndContext,
   closestCenter,
@@ -74,7 +73,10 @@ function SortableCarouselRow({
         </svg>
       </button>
 
-      <Link href={`/carousel/${project.id}`} prefetch className="flex-1 p-2.5 md:p-5">
+      {/* prefetch={false}: avoid forcing a full dynamic prefetch of the heavy
+          editor route (full slides JSONB). The route has a loading.tsx skeleton,
+          so navigation still feels instant and the model streams on click. */}
+      <Link href={`/carousel/${project.id}`} prefetch={false} className="flex-1 p-2.5 md:p-5">
         <h2 className="font-display font-medium text-zinc-900">{project.name}</h2>
         <p className="mt-1 text-sm text-zinc-600">
           Оновлено {new Date(project.updated_at).toLocaleDateString('uk-UA')}
@@ -121,17 +123,16 @@ function SortableCarouselRow({
 }
 
 export default function CarouselProjectsList({ projects }: Props) {
-  const router = useRouter();
   const [items, setItems] = useState(projects);
   const [projectToDelete, setProjectToDelete] = useState<CarouselProject | null>(null);
   const [projectToEdit, setProjectToEdit] = useState<CarouselProject | null>(null);
   const [editName, setEditName] = useState('');
 
-  useEffect(() => {
-    items.slice(0, 6).forEach((project) => {
-      router.prefetch(`/carousel/${project.id}`);
-    });
-  }, [items, router]);
+  // NOTE (perf): we deliberately do NOT eagerly prefetch the editor route here.
+  // The editor route (/carousel/[id]) is force-dynamic and select('*') pulls the
+  // full slides JSONB (avg ~80 KB, up to ~711 KB per carousel). Eagerly
+  // full-prefetching several of those on list mount was the real cause of the
+  // slow «Всі каруселі» experience — not the (already light + indexed) list query.
 
   const sensors = useSensors(
     useSensor(PointerSensor),

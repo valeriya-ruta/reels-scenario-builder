@@ -42,8 +42,10 @@ export default async function SettingsPage({
     redirect('/');
   }
 
-  const { tab } = await searchParams;
-  const initialTab = tab === 'brand' ? 'brand' : 'account';
+  // /settings is now the Branding page only (the old "Акаунт" setup flow moved to
+  // the dedicated Profile page). We intentionally ignore ?tab and always show
+  // branding, so old ?tab=account links no longer reach the deprecated setup.
+  await searchParams;
 
   const supabase = await createServerSupabaseClient();
   const [{ data: brandData }, { data: profileData }] = await Promise.all([
@@ -60,7 +62,6 @@ export default async function SettingsPage({
   return (
     <SettingsClient
       initialBrandSettings={brandData ? mapRow(brandData, profileData?.accent_style) : null}
-      initialTab={initialTab}
     />
   );
 }
