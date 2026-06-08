@@ -39,21 +39,16 @@ export function FontSelector({ selectedFontId, onChange, accentColor }: FontSele
               >
                 {font.label}
               </p>
+              {/* Description renders in the app's body/UI font (Google Sans via
+                  --font-sans), NOT the pairing's own face — the human-language
+                  explanation should read in the UI font; only the NAME above is a
+                  sample of the pairing. */}
               <p
                 className="mt-1 text-sm text-zinc-600"
-                style={{
-                  fontFamily: `'${font.label}', sans-serif`,
-                  fontWeight: font.bodyAvailable ? font.bodyWeight : '400',
-                  fontStyle: 'normal',
-                }}
+                style={{ fontFamily: 'var(--font-sans)', fontWeight: 400 }}
               >
                 {font.previewText}
               </p>
-              {!font.bodyAvailable && (
-                <span className="mt-2 inline-block rounded-md bg-zinc-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-600">
-                  лише заголовки
-                </span>
-              )}
             </button>
           );
         })}

@@ -57,8 +57,10 @@ import {
   zoomAroundPoint,
   type BgPhotoTransform,
 } from '@/lib/carousel/bgPhotoTransform';
+import { useBrandStore } from '@/components/BrandProvider';
+import BrandDNASetup from '@/components/BrandDNASetup';
 
-type EditorTab = 'type' | 'text' | 'position' | 'bg' | 'style';
+type EditorTab = 'type' | 'text' | 'position' | 'bg' | 'brand';
 const MOBILE_EDITOR_BAR_HEIGHT_PX = 72;
 /** Max slide width as a fraction of the mobile canvas content width (matches ~85vw intent). */
 const MOBILE_SLIDE_MAX_WIDTH_FRAC = 0.85;
@@ -182,6 +184,10 @@ export default function CarouselEditorLayout({
   validationErrorDetail: string | null;
 }) {
   const [tab, setTab] = useState<EditorTab | null>(null);
+  // The «Бренд» tab edits the SAME global brand settings as Profile → Branding.
+  // refetchBrand() refreshes the shared store after a save, so edited brand
+  // colours/fonts re-render the visible slides live (no second store).
+  const { refetchBrand } = useBrandStore();
   /** One bottom editor UI (tabs + panels + download): avoid duplicating form fields in the DOM. */
   const [isDesktopLayout, setIsDesktopLayout] = useState(false);
   const previewAreaRef = useRef<HTMLDivElement>(null);
@@ -216,7 +222,6 @@ export default function CarouselEditorLayout({
   );
   const activeSlide = slides[activeIndex] ?? slides[0];
   const panelOpen = tab !== null;
-  const styleTabDisabled = Boolean(activeSlide) && activeSlide.backgroundType !== 'image';
   const hasActivePhoto =
     Boolean(activeSlide) &&
     activeSlide.backgroundType === 'image' &&
@@ -247,12 +252,6 @@ export default function CarouselEditorLayout({
     mq.addEventListener('change', apply);
     return () => mq.removeEventListener('change', apply);
   }, []);
-
-  useEffect(() => {
-    if (tab !== 'style' || !styleTabDisabled) return;
-    const timer = window.setTimeout(() => setTab(null), 0);
-    return () => window.clearTimeout(timer);
-  }, [tab, styleTabDisabled]);
 
   useEffect(() => {
     const onResize = () => setViewportHeight(window.innerHeight);
@@ -518,7 +517,7 @@ export default function CarouselEditorLayout({
   );
 
   const tabLabel = (t: EditorTab) =>
-    t === 'type' ? 'Тип' : t === 'text' ? 'Текст' : t === 'position' ? 'Позиція' : t === 'bg' ? 'Фон' : 'Стиль';
+    t === 'type' ? 'Тип' : t === 'text' ? 'Текст' : t === 'position' ? 'Позиція' : t === 'bg' ? 'Фон' : 'Бренд';
   const getTextColorChoices = useCallback(
     (slide: Slide) => {
       if (slide.backgroundType === 'color') {
@@ -534,13 +533,9 @@ export default function CarouselEditorLayout({
     [brandColorOptions],
   );
 
-  const handleEditorTabIconClick = useCallback(
-    (t: EditorTab) => {
-      if (t === 'style' && styleTabDisabled) return;
-      setTab((prev) => (prev === t ? null : t));
-    },
-    [styleTabDisabled],
-  );
+  const handleEditorTabIconClick = useCallback((t: EditorTab) => {
+    setTab((prev) => (prev === t ? null : t));
+  }, []);
 
   const onMobilePhotoUploadSuccess = useCallback(() => {
     if (isDesktopLayout) return;
@@ -603,12 +598,18 @@ export default function CarouselEditorLayout({
         onUnsplash={onUnsplash}
         onPhotoUploadSuccess={onMobilePhotoUploadSuccess}
       />
-    ) : tab === 'style' ? (
-      !styleTabDisabled ? (
-        <MobileOverlayStyleTab slide={activeSlide} onChange={updateSlide} />
-      ) : (
-        null
-      )
+    ) : tab === 'brand' ? (
+      <div className="px-1">
+        <p className="mb-3 rounded-lg bg-[color:var(--surface)] px-3 py-2 text-xs leading-snug text-zinc-600">
+          Зміни бренду застосуються до всіх каруселей.
+        </p>
+        <BrandDNASetup
+          key={brandSettings.fontId + brandSettings.colors.accent1 + brandSettings.vibe}
+          initialValues={brandSettings}
+          editMode
+          onBrandUpdated={() => void refetchBrand()}
+        />
+      </div>
     ) : null
   ) : null;
 
@@ -795,18 +796,15 @@ export default function CarouselEditorLayout({
               style={{ background: '#fafaf7' }}
               aria-label="Панелі редагування"
             >
-              {(['type', 'text', 'position', 'bg', 'style'] as const).map((t) => {
-                const disabled = t === 'style' && styleTabDisabled;
-                const active = !disabled && tab === t;
+              {(['type', 'text', 'position', 'bg', 'brand'] as const).map((t) => {
+                const active = tab === t;
                 return (
                   <button
                     key={t}
                     type="button"
-                    disabled={disabled}
                     onClick={() => handleEditorTabIconClick(t)}
                     className={[
-                      'flex h-[62px] w-[62px] shrink-0 flex-col items-center justify-center gap-1 rounded-[13px] transition-colors',
-                      disabled ? 'cursor-not-allowed opacity-40' : 'cursor-pointer',
+                      'flex h-[62px] w-[62px] shrink-0 cursor-pointer flex-col items-center justify-center gap-1 rounded-[13px] transition-colors',
                       active ? 'bg-[#eef1ff]' : 'bg-transparent',
                     ].join(' ')}
                     aria-label={tabLabel(t)}
@@ -1180,20 +1178,13 @@ export default function CarouselEditorLayout({
             </div>
           </div>
           <div className="grid grid-cols-5 gap-1 px-2 py-2">
-            {(['type', 'text', 'position', 'bg', 'style'] as const).map((t) => (
-              (() => {
-                const disabled = t === 'style' && styleTabDisabled;
-                return (
+            {(['type', 'text', 'position', 'bg', 'brand'] as const).map((t) => (
               <button
                 key={t}
                 type="button"
-                onClick={() => {
-                  if (disabled) return;
-                  handleEditorTabIconClick(t);
-                }}
+                onClick={() => handleEditorTabIconClick(t)}
                 className={[
                   'flex min-h-11 w-full min-w-0 flex-col items-center justify-center rounded-[10px] px-2 py-2',
-                  disabled ? 'cursor-not-allowed pointer-events-none opacity-40' : '',
                   tab === t ? 'bg-[#eef1ff]' : 'bg-transparent',
                 ].join(' ')}
               >
@@ -1202,8 +1193,6 @@ export default function CarouselEditorLayout({
                   {tabLabel(t)}
                 </span>
               </button>
-                );
-              })()
             ))}
           </div>
         </div>
@@ -1282,31 +1271,6 @@ function MobileTypeTab({
   );
 }
 
-function MobileOverlayStyleTab({
-  slide,
-  onChange,
-}: {
-  slide: Slide;
-  onChange: (id: string, patch: Partial<Slide>) => void;
-}) {
-  const opts: Array<{ id: NonNullable<Slide['overlayType']>; label: string }> = [
-    { id: 'full', label: 'Повний' },
-    { id: 'gradient', label: 'Градієнт' },
-    { id: 'frost', label: 'Фрост' },
-  ];
-  return (
-    <div className="space-y-2">
-      <div className="flex gap-2">
-        {opts.map((o) => (
-          <button key={o.id} type="button" onClick={() => onChange(slide.id, { overlayType: o.id })} className={slide.overlayType === o.id ? 'rounded-full border border-[#4a6cf7] bg-[#eef1ff] px-3 py-1.5 text-xs font-medium text-[#4a6cf7]' : 'rounded-full border border-[color:var(--border)] px-3 py-1.5 text-xs text-zinc-700'}>
-            {o.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function MobileTabIcon({ tab, active, size = 22 }: { tab: EditorTab; active: boolean; size?: number }) {
   const stroke = active ? '#4a6cf7' : '#555';
   const sw = size >= 26 ? 2 : 1.6;
@@ -1337,10 +1301,18 @@ function MobileTabIcon({ tab, active, size = 22 }: { tab: EditorTab; active: boo
         <path d="M7 17l10-8" stroke={stroke} strokeWidth={sw} />
       </svg>
     );
+  // 'brand' — palette / swatch icon
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <path d="M12 4a8 8 0 1 1 0 16V4z" stroke={stroke} strokeWidth={sw} />
-      <circle cx="12" cy="12" r="8" stroke={stroke} strokeWidth={sw} />
+      <path
+        d="M12 3a9 9 0 1 0 0 18c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.3-.3-.4-.5-.8-.5-1.2 0-.8.7-1.5 1.5-1.5H16a5 5 0 0 0 5-5c0-3.9-4-7-9-7z"
+        stroke={stroke}
+        strokeWidth={sw}
+        strokeLinejoin="round"
+      />
+      <circle cx="7.5" cy="11.5" r="1" fill={stroke} />
+      <circle cx="12" cy="8" r="1" fill={stroke} />
+      <circle cx="16" cy="11" r="1" fill={stroke} />
     </svg>
   );
 }
