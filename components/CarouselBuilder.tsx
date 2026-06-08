@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEndEvent } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
-import { Check, Circle, Download, Loader2 } from 'lucide-react';
+import { Download, Loader2 } from 'lucide-react';
 import type { CarouselRantOutput, Slide } from '@/lib/carouselTypes';
 import { CAROUSEL_DEFAULT_BG, resolveSlideType } from '@/lib/carouselTypes';
 import { createEmptySlide, normalizeSlidesFromDb } from '@/lib/carouselSlides';
@@ -23,6 +23,8 @@ import {
 import Link from 'next/link';
 import { resolveBrandFont } from '@/lib/brandFonts';
 import CarouselEditorLayout from '@/components/carousel/CarouselEditorLayout';
+import CarouselExportOverlay from '@/components/carousel/CarouselExportOverlay';
+import { downloadPngFromBase64 } from '@/lib/carousel/downloadImage';
 import {
   DEFAULT_BG_PHOTO_TRANSFORM,
   getBgPhotoTransform,
@@ -273,6 +275,7 @@ export default function CarouselBuilder({
   const [doneMask, setDoneMask] = useState<boolean[]>([]);
   const [hasGenerated, setHasGenerated] = useState(false);
   const [hasDownloaded, setHasDownloaded] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [validationErrorDetail, setValidationErrorDetail] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -401,7 +404,6 @@ export default function CarouselBuilder({
 
   const accentStyle = normalizeAccentStyle(brandSettings?.accentStyle);
   const accentColor = brandSettings?.colors.accent1 ?? '#FF6B6B';
-  const canDownload = useMemo(() => slides.some((s) => Boolean(s.generatedImageBase64)), [slides]);
   const brandPalette = useMemo(() => getCarouselBrandPalette(brandSettings), [brandSettings]);
 
   const updateSlide = useCallback((id: string, patch: Partial<Slide>) => {
@@ -650,39 +652,50 @@ export default function CarouselBuilder({
     }
   };
 
-  const downloadAll = async () => {
+  // Bulk download. Each file is delivered via a fresh Blob object URL that is
+  // appended to the DOM, clicked, then revoked — so the Nth export downloads as
+  // reliably as the 1st (no "saved but no file" until restart). Feedback is a
+  // DOWNLOAD message, never the autosave "слайди збережено" — a save toast must
+  // never stand in for a real download.
+  const downloadAll = () => {
+    let delivered = 0;
     let stagger = 0;
     for (let i = 0; i < slides.length; i++) {
       const b64 = slides[i].generatedImageBase64;
       if (!b64) continue;
+      const idx = i;
       window.setTimeout(() => {
-        const a = document.createElement('a');
-        a.href = `data:image/png;base64,${b64}`;
-        a.download = `ruta-carousel-${i + 1}.png`;
-        a.click();
+        downloadPngFromBase64(b64, `ruta-carousel-${idx + 1}.png`);
       }, stagger);
-      stagger += 200;
+      delivered += 1;
+      stagger += 250;
     }
+    if (delivered === 0) return;
     clearBadge('carousel');
     setHasDownloaded(true);
-    showToast('Слайди збережено ✓');
+    showToast(`Завантажується ${delivered} слайд(ів)…`);
   };
 
   const downloadOne = (i: number) => {
     const b64 = slides[i].generatedImageBase64;
     if (!b64) return;
-    const a = document.createElement('a');
-    a.href = `data:image/png;base64,${b64}`;
-    a.download = `ruta-carousel-${i + 1}.png`;
-    a.click();
+    const ok = downloadPngFromBase64(b64, `ruta-carousel-${i + 1}.png`);
+    if (!ok) return;
     clearBadge('carousel');
     setHasDownloaded(true);
-    showToast('Слайди збережено ✓');
+    showToast(`Слайд ${i + 1} завантажується…`);
   };
 
-  const editMore = () => {
-    setSlides((prev) => prev.map((s) => ({ ...s, generatedImageBase64: null })));
-    setHasGenerated(false);
+  // Export now lives in a blur overlay off the editor canvas. Opening it always
+  // re-renders from the just-saved persisted model so the output reflects the
+  // latest edits; the overlay shows the animation, then the download actions.
+  const startExport = () => {
+    setExportOpen(true);
+    void runGeneration();
+  };
+
+  const closeExport = () => {
+    setExportOpen(false);
   };
 
   const mapRantOutputToSlides = useCallback(
@@ -792,11 +805,11 @@ export default function CarouselBuilder({
           <button
             type="button"
             disabled={isGenerating}
-            onClick={() => (canDownload ? void downloadAll() : void runGeneration())}
+            onClick={() => startExport()}
             className="ml-auto hidden items-center justify-center gap-2 rounded-xl bg-[color:var(--accent)] px-4 py-2 text-sm font-medium text-white transition hover:brightness-110 disabled:opacity-50 md:inline-flex"
           >
-            {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : canDownload ? <Download className="h-4 w-4" /> : null}
-            {isGenerating ? 'Генеруємо…' : canDownload ? 'Завантажити всі' : 'Згенерувати карусель'}
+            {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            {isGenerating ? 'Експортуємо…' : 'Експортувати'}
           </button>
         </div>
       </div>
@@ -830,53 +843,6 @@ export default function CarouselBuilder({
         </div>
       )}
 
-      {isGenerating && (
-        <div className="mx-4 rounded-2xl border border-[color:var(--border)] bg-white p-4 shadow-sm">
-          <p className="mb-3 text-sm font-medium text-zinc-900">Генеруємо слайди…</p>
-          <ul className="space-y-2 text-sm">
-            {slides.map((_, i) => (
-              <li key={i} className="flex items-center gap-2">
-                {doneMask[i] ? (
-                  <Check className="h-4 w-4 text-[color:var(--accent)]" />
-                ) : generatingIndex === i ? (
-                  <Loader2 className="h-4 w-4 animate-spin text-[color:var(--accent)]" />
-                ) : (
-                  <Circle className="h-4 w-4 text-zinc-300" />
-                )}
-                <span className="text-zinc-700">Слайд {i + 1}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {hasGenerated && (
-        <div className="mx-4 space-y-3 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)]/40 px-4 py-4">
-          <p className="text-sm font-medium text-zinc-900">Готово! 🎉</p>
-          <div className="flex flex-wrap gap-2">
-            {slides.map((s, i) =>
-              s.generatedImageBase64 ? (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => downloadOne(i)}
-                  className="btn-secondary rounded-lg border border-[color:var(--border)] bg-white px-2 py-1 text-xs font-medium text-zinc-800 hover:bg-[color:var(--surface)]"
-                >
-                  ⬇ Слайд {i + 1}
-                </button>
-              ) : null,
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={editMore}
-            className="rounded-xl border border-[color:var(--border)] bg-white px-4 py-2 text-sm font-medium text-zinc-800 transition hover:bg-[color:var(--surface)]"
-          >
-            ✏ Редагувати далі
-          </button>
-        </div>
-      )}
-
       <div className="flex min-h-0 flex-1 flex-col">
         <CarouselEditorLayout
           slides={slides}
@@ -892,14 +858,25 @@ export default function CarouselBuilder({
           onDragEnd={handleDragEnd}
           onUnsplash={() => activeSlideId && setUnsplashForId(activeSlideId)}
           brandColorOptions={brandColorOptions}
-          hasGenerated={hasGenerated}
           isGenerating={isGenerating}
-          onGenerate={() => void runGeneration()}
-          onDownloadAll={() => void downloadAll()}
+          onExport={startExport}
           validationError={validationError}
           validationErrorDetail={validationErrorDetail}
         />
       </div>
+
+      <CarouselExportOverlay
+        open={exportOpen}
+        isGenerating={isGenerating}
+        hasGenerated={hasGenerated}
+        generatedImages={slides.map((s) => s.generatedImageBase64)}
+        generatingIndex={generatingIndex}
+        doneMask={doneMask}
+        errorMessage={validationError}
+        onDownloadAll={downloadAll}
+        onDownloadOne={downloadOne}
+        onClose={closeExport}
+      />
 
       {toast && (
         <div className="fixed bottom-6 right-6 z-[300] rounded-xl border border-[color:var(--border)] bg-white px-4 py-3 text-sm shadow-lg">

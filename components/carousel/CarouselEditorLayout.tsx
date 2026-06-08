@@ -157,11 +157,9 @@ export default function CarouselEditorLayout({
   onDragEnd,
   onUnsplash,
   brandColorOptions,
-  /** Generation / download */
-  hasGenerated,
+  /** Export (opens the blur overlay off the editor canvas) */
   isGenerating,
-  onGenerate,
-  onDownloadAll,
+  onExport,
   validationError,
   validationErrorDetail,
 }: {
@@ -178,10 +176,8 @@ export default function CarouselEditorLayout({
   onDragEnd: (e: DragEndEvent) => void;
   onUnsplash: () => void;
   brandColorOptions: string[];
-  hasGenerated: boolean;
   isGenerating: boolean;
-  onGenerate: () => void;
-  onDownloadAll: () => void;
+  onExport: () => void;
   validationError: string | null;
   validationErrorDetail: string | null;
 }) {
@@ -771,12 +767,12 @@ export default function CarouselEditorLayout({
         <div className="flex items-center gap-1 md:hidden">
           <button
             type="button"
-            onClick={hasGenerated ? onDownloadAll : onGenerate}
+            onClick={onExport}
             disabled={isGenerating}
             className="inline-flex items-center gap-1 rounded-full border border-[color:var(--border)] bg-white px-3 py-1.5 text-[13px] font-medium text-zinc-900 disabled:opacity-50"
           >
             {isGenerating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-            Завантажити
+            Експорт
           </button>
         </div>
       </header>
