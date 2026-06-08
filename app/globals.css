@@ -34,6 +34,14 @@
   --accent: #004ba8;
   --accent-soft: rgba(0, 75, 168, 0.12);
   --accent-rgb: 0, 75, 168;
+  /* Semantic content-type palette (icons/tags only — blue stays the functional
+     UI accent). Kept soft. Shared by Home, Create radial menu, Braindump. */
+  --type-reels: #004ba8;
+  --type-reels-soft: rgba(0, 75, 168, 0.1);
+  --type-carousel: #7850a0;
+  --type-carousel-soft: rgba(120, 80, 160, 0.12);
+  --type-stories: #c08c28;
+  --type-stories-soft: rgba(192, 140, 40, 0.12);
   --border: #e5e5e5;
   --success: #22c55e;
   --muted: #a3a3a3;
@@ -186,6 +194,41 @@ button:disabled,
 
 .reels-planner-scene-glow {
   animation: reels-planner-scene-glow 1.2s ease-out forwards;
+}
+
+/* Create radial menu: bubbles fan up from the FAB */
+@keyframes radial-bubble-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 16px)) scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+/* Braindump overlay: elements rise from the bottom over the blur */
+@keyframes braindump-rise {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes braindump-title-up {
+  from {
+    transform: translateY(46px);
+    opacity: 0.4;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 /* Route template fade */

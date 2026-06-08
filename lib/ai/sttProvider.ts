@@ -64,11 +64,14 @@ function guessInputExt(contentType: string, mediaUrl: string): string {
   return 'mp4';
 }
 
-function buildGroqFormData(): FormData {
+function buildGroqFormData(language?: string): FormData {
   const formData = new FormData();
   formData.append('model', 'whisper-large-v3-turbo');
   formData.append('response_format', 'verbose_json');
   formData.append('temperature', '0');
+  if (language) {
+    formData.append('language', language);
+  }
   return formData;
 }
 
@@ -94,6 +97,49 @@ async function parseTranscriptionResponse(sttRes: Response): Promise<TranscriptR
     language: parsed.language ?? null,
     transcript,
     segments,
+  };
+}
+
+const GROQ_AUDIO_MAX_BYTES = GROQ_MAX_UPLOAD_BYTES;
+
+/**
+ * Transcribes raw audio bytes uploaded directly from the browser (MediaRecorder
+ * capture), reusing the exact same Groq Whisper path as reel transcription —
+ * same key, same direct-bytes FormData upload, same `whisper-large-v3-turbo`
+ * model. No ffmpeg, no remote fetch. Used by the braindump voice capture.
+ */
+export async function transcribeAudioFile(
+  audio: File | Blob,
+  options: { language?: string; filename?: string } = {}
+): Promise<TranscriptResult> {
+  const apiKey = requireServerEnv('GROQ_API_KEY');
+
+  const size = audio.size ?? 0;
+  if (size === 0) {
+    throw new Error('Порожній аудіозапис. Спробуй записати ще раз.');
+  }
+  if (size > GROQ_AUDIO_MAX_BYTES) {
+    throw new Error('Запис завеликий для розпізнавання (понад 25MB). Спробуй коротший запис.');
+  }
+
+  const type = (audio as File).type || 'audio/webm';
+  const name = options.filename || (audio as File).name || 'braindump.webm';
+  const upload = audio instanceof File ? audio : new File([audio], name, { type });
+
+  const formData = buildGroqFormData(options.language);
+  formData.append('file', upload);
+
+  const sttRes = await groqTranscribe(apiKey, formData);
+  if (!sttRes.ok) {
+    const body = await sttRes.text();
+    throw new Error(`Помилка транскрипції (${sttRes.status}): ${body.slice(0, 500)}`);
+  }
+
+  const parsed = (await sttRes.json()) as GroqTranscriptionResponse;
+  return {
+    language: parsed.language ?? null,
+    transcript: (parsed.text ?? '').trim(),
+    segments: normalizeSegments(parsed.segments),
   };
 }
 

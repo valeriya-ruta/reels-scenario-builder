@@ -1,21 +1,26 @@
 'use client';
 
-import { usePathname } from 'next/navigation';
-import { useEffect, useRef, useState, type ComponentType } from 'react';
-import { Home, CalendarDays, Plus, BarChart3, User, FileText, LayoutGrid } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import { useCallback, useEffect, useRef, useState, type ComponentType } from 'react';
+import { Home, CalendarDays, Plus, X, BarChart3, User } from 'lucide-react';
+import CreateRadialMenu, {
+  RADIAL_OPTIONS,
+  type RadialOptionId,
+} from './CreateRadialMenu';
+import BraindumpOverlay from './BraindumpOverlay';
+import { CONTENT_TYPES } from '@/lib/contentTypes';
 
 /**
  * Floating bottom navigation: 4 destination tabs + a center Create FAB.
  * Mobile-first (the desktop layout uses the sidebar), white surface, with the
- * brand blue accent on the active tab. Replaces the old MobileTabBar.
+ * brand blue accent on the active tab.
  *
- * Active state is derived purely from the current route. The active tab colors
- * its icon + label in the accent blue (no tinted pill); inactive tabs are
- * neutral gray.
+ * The Create FAB opens the radial menu (task 86d35yfxw): 4 options fan up in an
+ * arc. Tap-to-open → tap-option is the guaranteed path; long-press + glide-release
+ * is layered on top. Рілс/Карусель/Сторіс route into their creation flows; Ідеї
+ * opens the braindump blur-overlay (task 86d38zghd) — NOT a route.
  */
 
-// Brand functional accent (matches --accent). Used inline so the active color
-// is deterministic for assertions and unambiguous in review.
 const ACCENT = '#004BA8';
 
 type DestinationTab = {
@@ -25,8 +30,6 @@ type DestinationTab = {
   Icon: ComponentType<{ className?: string; color?: string; strokeWidth?: number }>;
 };
 
-// Left → right around the center Create FAB:
-// Головна · План · ➕ · Аналіз · Профіль
 const leftTabs: DestinationTab[] = [
   { label: 'Головна', href: '/dashboard', matchPrefixes: ['/dashboard'], Icon: Home },
   { label: 'План', href: '/plan', matchPrefixes: ['/plan'], Icon: CalendarDays },
@@ -42,29 +45,15 @@ const rightTabs: DestinationTab[] = [
   { label: 'Профіль', href: '/profile', matchPrefixes: ['/profile'], Icon: User },
 ];
 
-/** Stories glyph (lucide@1.8 has no dedicated stories icon). */
-function StoriesGlyph({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <rect x="8" y="3" width="8" height="18" rx="2" stroke="currentColor" strokeWidth="1.7" />
-      <rect x="4" y="5" width="3" height="14" rx="1.5" stroke="currentColor" strokeWidth="1.7" opacity="0.5" />
-      <rect x="17" y="5" width="3" height="14" rx="1.5" stroke="currentColor" strokeWidth="1.7" opacity="0.5" />
-    </svg>
-  );
-}
+/** Routes for the three content-creation options (Ідеї is handled separately). */
+const OPTION_ROUTES: Record<Exclude<RadialOptionId, 'ideas'>, string> = {
+  reels: CONTENT_TYPES.reels.createHref,
+  carousel: CONTENT_TYPES.carousel.createHref,
+  stories: CONTENT_TYPES.stories.createHref,
+};
 
-// Interim Create menu: until the radial-menu task (86d35yfxw) ships, the FAB
-// opens this simple menu so mobile users keep access to their Рілси / Карусель
-// / Сторіс lists (each list page also hosts its "create new" entry point).
-const createItems: {
-  label: string;
-  href: string;
-  Icon: ComponentType<{ className?: string }>;
-}[] = [
-  { label: 'Рілси', href: '/projects', Icon: FileText },
-  { label: 'Карусель', href: '/carousel', Icon: LayoutGrid },
-  { label: 'Сторіс', href: '/storytellings', Icon: StoriesGlyph },
-];
+/** Distance (px) the pointer must travel before a long-press becomes a glide. */
+const GLIDE_THRESHOLD = 8;
 
 function TabLink({ tab, active }: { tab: DestinationTab; active: boolean }) {
   const { label, href, Icon } = tab;
@@ -84,25 +73,152 @@ function TabLink({ tab, active }: { tab: DestinationTab; active: boolean }) {
 
 export default function BottomNav() {
   const pathname = usePathname();
-  const [createOpen, setCreateOpen] = useState(false);
-  const barRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null);
+  const [highlightedId, setHighlightedId] = useState<RadialOptionId | null>(null);
+  const [braindumpOpen, setBraindumpOpen] = useState(false);
 
-  // Close the create menu on navigation.
-  useEffect(() => {
-    setCreateOpen(false);
-  }, [pathname]);
+  const fabRef = useRef<HTMLButtonElement>(null);
+  const bubbleEls = useRef<Map<RadialOptionId, HTMLButtonElement>>(new Map());
+  // Glide gesture bookkeeping. `openedByHold` = a long-press opened the menu in
+  // this gesture; `gliding` = the pointer moved past the threshold;
+  // `suppressClick` = swallow the trailing click so it doesn't re-toggle.
+  const gestureRef = useRef<{
+    startX: number;
+    startY: number;
+    openedByHold: boolean;
+    gliding: boolean;
+    suppressClick: boolean;
+    timer: ReturnType<typeof setTimeout> | null;
+  }>({ startX: 0, startY: 0, openedByHold: false, gliding: false, suppressClick: false, timer: null });
 
-  // Close the create menu on outside tap.
+  const computeAnchor = useCallback(() => {
+    const rect = fabRef.current?.getBoundingClientRect();
+    if (!rect) return null;
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  }, []);
+
+  const openMenu = useCallback(() => {
+    setAnchor(computeAnchor());
+    setMenuOpen(true);
+  }, [computeAnchor]);
+
+  const closeMenu = useCallback(() => {
+    setMenuOpen(false);
+    setHighlightedId(null);
+  }, []);
+
+  // Close the menu on navigation.
   useEffect(() => {
-    if (!createOpen) return;
-    function onPointerDown(e: PointerEvent) {
-      if (barRef.current && !barRef.current.contains(e.target as Node)) {
-        setCreateOpen(false);
+    closeMenu();
+  }, [pathname, closeMenu]);
+
+  const selectOption = useCallback(
+    (id: RadialOptionId) => {
+      closeMenu();
+      if (id === 'ideas') {
+        setBraindumpOpen(true);
+        return;
       }
+      router.push(OPTION_ROUTES[id]);
+    },
+    [closeMenu, router]
+  );
+
+  // --- Tap path (guaranteed): click toggles the menu open/closed. ---
+  const onFabClick = useCallback(() => {
+    if (gestureRef.current.suppressClick) {
+      gestureRef.current.suppressClick = false;
+      return;
     }
-    document.addEventListener('pointerdown', onPointerDown);
-    return () => document.removeEventListener('pointerdown', onPointerDown);
-  }, [createOpen]);
+    if (menuOpen) closeMenu();
+    else openMenu();
+  }, [menuOpen, openMenu, closeMenu]);
+
+  // --- Glide enhancement: long-press + drag to a bubble, release to select. ---
+  const registerBubble = useCallback((id: RadialOptionId, el: HTMLButtonElement | null) => {
+    if (el) bubbleEls.current.set(id, el);
+    else bubbleEls.current.delete(id);
+  }, []);
+
+  const bubbleUnderPoint = useCallback((x: number, y: number): RadialOptionId | null => {
+    for (const opt of RADIAL_OPTIONS) {
+      const el = bubbleEls.current.get(opt.id);
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return opt.id;
+    }
+    return null;
+  }, []);
+
+  const clearGlideTimer = useCallback(() => {
+    if (gestureRef.current.timer) {
+      clearTimeout(gestureRef.current.timer);
+      gestureRef.current.timer = null;
+    }
+  }, []);
+
+  const onFabPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      const g = gestureRef.current;
+      g.startX = e.clientX;
+      g.startY = e.clientY;
+      g.gliding = false;
+      g.openedByHold = false;
+      clearGlideTimer();
+      // Long-press opens the menu so the user can glide to a bubble while holding.
+      // A quick tap never reaches this timer, so the tap path stays intact.
+      g.timer = setTimeout(() => {
+        if (!menuOpen) {
+          openMenu();
+          g.openedByHold = true;
+        }
+      }, 180);
+    },
+    [menuOpen, openMenu, clearGlideTimer]
+  );
+
+  const onFabPointerMove = useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      const g = gestureRef.current;
+      const moved = Math.hypot(e.clientX - g.startX, e.clientY - g.startY) > GLIDE_THRESHOLD;
+      // Movement promotes the gesture to a glide and opens the menu early.
+      if (moved && !menuOpen && !g.openedByHold) {
+        clearGlideTimer();
+        openMenu();
+        g.openedByHold = true;
+      }
+      if (moved) g.gliding = true;
+      if (g.gliding) setHighlightedId(bubbleUnderPoint(e.clientX, e.clientY));
+    },
+    [menuOpen, openMenu, clearGlideTimer, bubbleUnderPoint]
+  );
+
+  const onFabPointerUp = useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      const g = gestureRef.current;
+      clearGlideTimer();
+      if (!g.openedByHold) return; // plain tap → let onClick toggle the menu
+
+      // The hold opened the menu, so swallow the trailing click either way.
+      g.suppressClick = true;
+      const target = g.gliding ? bubbleUnderPoint(e.clientX, e.clientY) : null;
+      setHighlightedId(null);
+
+      if (g.gliding) {
+        if (target) selectOption(target);
+        else closeMenu(); // glided onto empty space → cancel
+      }
+      // Held without gliding → leave the menu open for the tap path.
+      g.gliding = false;
+      g.openedByHold = false;
+    },
+    [clearGlideTimer, bubbleUnderPoint, selectOption, closeMenu]
+  );
+
+  // Clear any pending long-press timer on unmount.
+  useEffect(() => () => clearGlideTimer(), [clearGlideTimer]);
 
   // Keep the full-screen carousel editor uncovered (matches prior behaviour).
   const isCarouselEditor = pathname.startsWith('/carousel/') && pathname !== '/carousel';
@@ -111,63 +227,63 @@ export default function BottomNav() {
   const isActive = (prefixes: string[]) => prefixes.some((p) => pathname.startsWith(p));
 
   return (
-    <nav
-      className="fixed inset-x-0 bottom-0 z-50 md:hidden"
-      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
-      aria-label="Основна навігація"
-    >
-      <div
-        ref={barRef}
-        className="relative mx-3 mb-3 flex items-end justify-around gap-1 rounded-2xl border border-gray-100 bg-white px-2 pb-1.5 pt-1.5 shadow-[0_2px_6px_rgba(26,28,46,0.08),0_10px_28px_rgba(26,28,46,0.14)]"
+    <>
+      <nav
+        className="fixed inset-x-0 bottom-0 z-50 md:hidden"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        aria-label="Основна навігація"
       >
-        {leftTabs.map((tab) => (
-          <TabLink key={tab.href} tab={tab} active={isActive(tab.matchPrefixes)} />
-        ))}
+        <div className="relative mx-3 mb-3 flex items-end justify-around gap-1 rounded-2xl border border-gray-100 bg-white px-2 pb-1.5 pt-1.5 shadow-[0_2px_6px_rgba(26,28,46,0.08),0_10px_28px_rgba(26,28,46,0.14)]">
+          {leftTabs.map((tab) => (
+            <TabLink key={tab.href} tab={tab} active={isActive(tab.matchPrefixes)} />
+          ))}
 
-        {/* Center Create FAB — flat solid blue rounded-square, inline-raised. */}
-        <div className="flex flex-1 justify-center">
-          <button
-            type="button"
-            onClick={() => setCreateOpen((v) => !v)}
-            aria-label="Створити"
-            aria-expanded={createOpen}
-            aria-haspopup="menu"
-            data-testid="create-fab"
-            className="-mt-5 flex h-12 w-12 items-center justify-center rounded-2xl text-white shadow-[0_6px_16px_rgba(0,75,168,0.4)] transition-transform active:scale-95"
-            style={{ backgroundColor: ACCENT }}
-          >
-            <Plus className="h-6 w-6" strokeWidth={2.4} />
-          </button>
-        </div>
-
-        {rightTabs.map((tab) => (
-          <TabLink key={tab.href} tab={tab} active={isActive(tab.matchPrefixes)} />
-        ))}
-
-        {/* Interim Create menu (replaced by the radial-menu task 86d35yfxw). */}
-        {createOpen && (
-          <div
-            role="menu"
-            data-testid="create-menu"
-            className="absolute bottom-full left-1/2 mb-3 w-52 -translate-x-1/2 rounded-2xl border border-gray-100 bg-white p-1.5 shadow-xl"
-          >
-            <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
-              Створити
-            </p>
-            {createItems.map(({ label, href, Icon }) => (
-              <a
-                key={href}
-                href={href}
-                role="menuitem"
-                className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-zinc-800 transition-colors hover:bg-[color:var(--surface)]"
-              >
-                <Icon className="h-5 w-5 shrink-0 text-zinc-500" />
-                {label}
-              </a>
-            ))}
+          {/* Center Create FAB — toggles to × while the radial menu is open. */}
+          <div className="flex flex-1 justify-center">
+            <button
+              ref={fabRef}
+              type="button"
+              onClick={onFabClick}
+              onPointerDown={onFabPointerDown}
+              onPointerMove={onFabPointerMove}
+              onPointerUp={onFabPointerUp}
+              onPointerCancel={() => {
+                clearGlideTimer();
+                gestureRef.current.openedByHold = false;
+                gestureRef.current.gliding = false;
+                setHighlightedId(null);
+              }}
+              aria-label={menuOpen ? 'Закрити' : 'Створити'}
+              aria-expanded={menuOpen}
+              aria-haspopup="menu"
+              data-testid="create-fab"
+              className="-mt-5 flex h-12 w-12 touch-none items-center justify-center rounded-2xl text-white shadow-[0_6px_16px_rgba(0,75,168,0.4)] transition-transform active:scale-95"
+              style={{ backgroundColor: ACCENT }}
+            >
+              {menuOpen ? (
+                <X className="h-6 w-6" strokeWidth={2.6} />
+              ) : (
+                <Plus className="h-6 w-6" strokeWidth={2.4} />
+              )}
+            </button>
           </div>
-        )}
-      </div>
-    </nav>
+
+          {rightTabs.map((tab) => (
+            <TabLink key={tab.href} tab={tab} active={isActive(tab.matchPrefixes)} />
+          ))}
+        </div>
+      </nav>
+
+      <CreateRadialMenu
+        open={menuOpen}
+        anchor={anchor}
+        highlightedId={highlightedId}
+        onSelect={selectOption}
+        onDismiss={closeMenu}
+        registerBubble={registerBubble}
+      />
+
+      <BraindumpOverlay open={braindumpOpen} onClose={() => setBraindumpOpen(false)} />
+    </>
   );
 }
