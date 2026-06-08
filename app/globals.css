@@ -196,6 +196,41 @@ button:disabled,
   animation: reels-planner-scene-glow 1.2s ease-out forwards;
 }
 
+/* Create radial menu: bubbles fan up from the FAB */
+@keyframes radial-bubble-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 16px)) scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+/* Braindump overlay: elements rise from the bottom over the blur */
+@keyframes braindump-rise {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes braindump-title-up {
+  from {
+    transform: translateY(46px);
+    opacity: 0.4;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
 /* Route template fade */
 @keyframes page-enter-fade {
   from {

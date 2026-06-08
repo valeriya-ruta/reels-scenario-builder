@@ -58,19 +58,20 @@ test.describe('floating bottom nav', () => {
     }
   });
 
-  test('center Create FAB opens the create menu', async ({ page }) => {
+  test('center Create FAB opens the radial menu with 4 options', async ({ page }) => {
     await page.goto('/dashboard');
     const nav = page.getByRole('navigation', { name: 'Основна навігація' });
     const fab = nav.getByTestId('create-fab');
 
     await expect(fab).toBeVisible();
-    await expect(page.getByTestId('create-menu')).toHaveCount(0);
+    await expect(page.getByTestId('radial-menu')).toHaveCount(0);
 
     await fab.click();
-    const menu = page.getByTestId('create-menu');
+    const menu = page.getByTestId('radial-menu');
     await expect(menu).toBeVisible();
-    // Interim menu keeps mobile access to the content lists.
-    await expect(menu.getByRole('menuitem', { name: 'Рілси' })).toBeVisible();
+    for (const id of ['reels', 'carousel', 'stories', 'ideas']) {
+      await expect(menu.getByTestId(`radial-option-${id}`)).toBeVisible();
+    }
   });
 
   test('navigating across destinations produces no console errors', async ({ page }) => {
