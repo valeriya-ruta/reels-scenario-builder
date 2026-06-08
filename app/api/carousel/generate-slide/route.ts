@@ -168,6 +168,7 @@ export async function POST(req: Request) {
         title: slide.title ?? '',
         body: slide.body ?? '',
         textAlign: slide.textAlign ?? 'left',
+        placement: slide.placement ?? 'center',
         label: slide.optionalLabel ?? null,
         items: slide.listItems ?? slide.items ?? null,
         icon: slide.icon ?? null,
