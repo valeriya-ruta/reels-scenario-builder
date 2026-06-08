@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { ChevronLeft } from 'lucide-react';
 import BrandDNASetup from '@/components/BrandDNASetup';
 import { useBrandStore } from '@/components/BrandProvider';
 import { useToast } from '@/components/ToastProvider';
@@ -22,12 +24,15 @@ interface SubscriptionRow {
 
 export default function SettingsClient({
   initialBrandSettings,
-  initialTab = 'account',
 }: {
   initialBrandSettings: BrandSettings | null;
-  initialTab?: TabId;
 }) {
-  const [tab, setTab] = useState<TabId>(initialTab);
+  // This page is now Branding-only. The old "Акаунт" profile-setup flow has been
+  // superseded by the dedicated Profile page (/profile); we no longer expose a tab
+  // that routes to it. `tab` is pinned to 'brand'. (The legacy account JSX below is
+  // intentionally left in place but unreachable — see task comment: flag for a
+  // separate cleanup so we don't break anything unexpectedly.)
+  const [tab] = useState<TabId>('brand');
   const { brandSettings, refetchBrand } = useBrandStore();
   const router = useRouter();
   const toast = useToast();
@@ -197,35 +202,15 @@ export default function SettingsClient({
 
   return (
     <div className="mx-auto max-w-5xl">
-      <h1 className="font-display text-2xl font-semibold text-black">Налаштування</h1>
-      <div className="mt-5 flex flex-wrap gap-2 border-b border-[color:var(--border)] pb-3">
-        <button
-          type="button"
-          onClick={() => setTab('account')}
-          className={[
-            'rounded-lg px-3 py-1.5 text-sm font-medium transition',
-            tab === 'account'
-              ? 'bg-[color:var(--accent-soft)] text-[color:var(--accent)]'
-              : 'text-zinc-600 hover:bg-[color:var(--surface)]',
-          ].join(' ')}
+      <div className="flex items-center gap-2 border-b border-[color:var(--border)] pb-3">
+        <Link
+          href="/profile"
+          aria-label="Назад до профілю"
+          className="-ml-1 inline-flex h-9 w-9 items-center justify-center rounded-lg text-zinc-700 transition hover:bg-[color:var(--surface)]"
         >
-          Акаунт
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setTab('brand');
-            void refetchBrand();
-          }}
-          className={[
-            'rounded-lg px-3 py-1.5 text-sm font-medium transition',
-            tab === 'brand'
-              ? 'bg-[color:var(--accent-soft)] text-[color:var(--accent)]'
-              : 'text-zinc-600 hover:bg-[color:var(--surface)]',
-          ].join(' ')}
-        >
-          Бренд
-        </button>
+          <ChevronLeft className="h-5 w-5" />
+        </Link>
+        <h1 className="font-display text-2xl font-semibold text-black">Брендинг</h1>
       </div>
 
       <div className="mt-5">
