@@ -8,28 +8,13 @@ export const runtime = 'nodejs';
  * Braindump auto-save.
  *
  * The braindump overlay auto-saves the captured idea here on reaching State B
- * (and again if the user edits the text). It upserts a single `ideas` row per
+ * (and again if the user edits the text). It writes one `public.ideas` row per
  * braindump session (`id` echoed back so subsequent edits update the same row).
  *
- * PERSISTENCE STATUS — NEEDS INPUT (task 86d38zghd):
- * There is currently NO free-text idea/braindump store in the database. The
- * existing `idea_scans` table is competitor-scan cache (handle / followers /
- * reels), not a place for captured thoughts. Per the working contract we do not
- * invent a schema unilaterally, so this route targets an `ideas` table that is
- * pending Kunj's confirmation. Proposed minimal schema:
- *
- *   create table public.ideas (
- *     id uuid primary key default gen_random_uuid(),
- *     user_id uuid not null references auth.users(id) on delete cascade,
- *     content text not null,
- *     source text not null default 'braindump',
- *     created_at timestamptz not null default now(),
- *     updated_at timestamptz not null default now()
- *   );
- *   + RLS: owner can select/insert/update/delete where auth.uid() = user_id.
- *
- * Until that table exists the insert returns an error, which the overlay shows
- * as a neutral (zinc) "could not save" notice while preserving the user's text.
+ * Persistence target: the `ideas` table (migration supabase/migrations/019_ideas.sql)
+ * — the canonical home for captured ideas. `title` is left null on braindump saves
+ * (reserved for future list/swipe-deck labels). RLS is owner-only, so the user's
+ * authed Supabase client can only read/write its own rows.
  */
 export async function POST(req: Request) {
   const user = await requireAuth();
