@@ -166,6 +166,13 @@ export default function BottomNav() {
       g.startY = e.clientY;
       g.gliding = false;
       g.openedByHold = false;
+      // Capture the pointer so move/up keep firing once the finger glides OFF the
+      // FAB onto a bubble — without this the glide never tracked (the real bug).
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {
+        /* setPointerCapture can throw if the pointer is already gone; ignore. */
+      }
       clearGlideTimer();
       // Long-press opens the menu so the user can glide to a bubble while holding.
       // A quick tap never reaches this timer, so the tap path stays intact.

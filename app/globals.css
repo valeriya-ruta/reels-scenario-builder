@@ -196,15 +196,32 @@ button:disabled,
   animation: reels-planner-scene-glow 1.2s ease-out forwards;
 }
 
-/* Create radial menu: bubbles fan up from the FAB */
-@keyframes radial-bubble-in {
-  from {
+/* Create radial menu: bubbles spring OUT of the FAB (staggered, slight
+   overshoot), and collapse back into it on close. --from-x/--from-y are the
+   per-bubble vector back to the FAB centre, set inline. */
+@keyframes radial-bubble-pop {
+  0% {
     opacity: 0;
-    transform: translate(-50%, calc(-50% + 16px)) scale(0.6);
+    transform: translate(-50%, -50%) translate(var(--from-x, 0), var(--from-y, 0)) scale(0.3);
   }
-  to {
+  70% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.12);
+  }
+  100% {
     opacity: 1;
     transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes radial-bubble-collapse {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) translate(var(--from-x, 0), var(--from-y, 0)) scale(0.3);
   }
 }
 

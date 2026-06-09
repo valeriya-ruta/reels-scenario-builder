@@ -29,6 +29,25 @@ test.describe('Create radial menu', () => {
     await expect(fab).toHaveAttribute('aria-expanded', 'true');
   });
 
+  test('bubbles fan into the top-right quarter arc, anchored up-and-right of the FAB', async ({
+    page,
+  }) => {
+    const fab = await openMenu(page);
+    const fb = await fab.boundingBox();
+    expect(fb).not.toBeNull();
+    const fabCx = fb!.x + fb!.width / 2;
+    const fabCy = fb!.y + fb!.height / 2;
+    for (const id of ['reels', 'carousel', 'stories', 'ideas']) {
+      const box = await page.getByTestId(`radial-option-${id}`).boundingBox();
+      expect(box).not.toBeNull();
+      const cx = box!.x + box!.width / 2;
+      const cy = box!.y + box!.height / 2;
+      // Top-right quadrant: at or right of the FAB (never left), at or above it.
+      expect(cx).toBeGreaterThanOrEqual(fabCx - 6);
+      expect(cy).toBeLessThanOrEqual(fabCy + 6);
+    }
+  });
+
   test('× / backdrop dismiss the menu', async ({ page }) => {
     const fab = await openMenu(page);
     await fab.click(); // FAB now acts as ×
