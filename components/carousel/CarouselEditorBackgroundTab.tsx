@@ -260,6 +260,10 @@ export default function CarouselEditorBackgroundTab({
                   className="absolute right-1 top-1 rounded-full bg-black/60 px-1.5 py-0.5 text-xs text-white"
                   onClick={() =>
                     onChange(slide.id, {
+                      // Clearing the photo means this is no longer a photo slide —
+                      // fall back to a color background so it never exports black.
+                      backgroundType: 'color',
+                      hasBackgroundOverride: true,
                       backgroundImageUrl: null,
                       backgroundImageBase64: null,
                       overlayType: null,
