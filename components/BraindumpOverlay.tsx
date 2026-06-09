@@ -5,6 +5,7 @@ import { Mic, Keyboard, Check, X } from 'lucide-react';
 import { pickBraindumpPrompt } from '@/lib/braindumpPrompts';
 import { CONTENT_TYPES, CONTENT_TYPE_ORDER, type ContentType } from '@/lib/contentTypes';
 import ContentTypeIcon from '@/components/ContentTypeIcon';
+import BlurScrim from '@/components/BlurScrim';
 import { generateReelFromRant } from '@/app/actions';
 import { createStorytellingProjectFromRant } from '@/app/storytelling-actions';
 import { createCarouselProjectFromRant } from '@/app/carousel-actions';
@@ -291,209 +292,216 @@ export default function BraindumpOverlay({ open, onClose }: BraindumpOverlayProp
   const words = countWords(text);
 
   return (
-    <div
-      data-testid="braindump-overlay"
-      data-phase={phase}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Швидка ідея"
-      className="fixed inset-0 z-[70] flex flex-col bg-white/55 backdrop-blur-xl"
-    >
-      {/* Subtle radial lift under the text for legibility (no card/box border). */}
+    <BlurScrim zIndex={70} blurPx={20} tint="rgba(255,255,255,0.55)">
       <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            'radial-gradient(120% 80% at 50% 32%, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0.3) 45%, transparent 75%)',
-        }}
-      />
-
-      {/* Top bar: × close (+ saved confirmation in State B). */}
-      <div className="relative z-10 flex items-center justify-between px-5 pt-6">
-        <div className="min-h-[20px]">
-          {phase === 'B' && saveStatus === 'saved' && (
-            <span data-testid="braindump-saved" className="text-xs font-medium text-zinc-400">
-              ✓ Збережено в ідеї
-            </span>
-          )}
-        </div>
-        <button
-          type="button"
-          onClick={close}
-          aria-label="Закрити"
-          data-testid="braindump-close"
-          className="rounded-full p-1.5 text-zinc-500 transition-colors hover:bg-zinc-200/60 hover:text-zinc-800"
-        >
-          <X className="h-5 w-5" strokeWidth={2} />
-        </button>
-      </div>
-
-      {/* Capture / result body. */}
-      <div className="relative z-10 flex flex-1 flex-col px-6 pt-4">
-        {phase === 'A' ? (
-          <h2
-            data-testid="braindump-prompt"
-            className="text-2xl font-bold leading-snug tracking-tight text-black"
-          >
-            {prompt}
-          </h2>
-        ) : (
-          <textarea
-            data-testid="braindump-edit"
-            value={text}
-            onChange={(e) => handleEditInB(e.target.value)}
-            rows={6}
-            aria-label="Текст ідеї"
-            className="w-full resize-none bg-transparent text-xl font-semibold leading-snug tracking-tight text-black outline-none"
-            style={{ animation: 'braindump-title-up 280ms ease-out both' }}
-          />
-        )}
-
-        {phase === 'A' && (
-          <div className="mt-4 flex-1">
-            {inputMode === 'type' ? (
-              <textarea
-                ref={typeTextarea}
-                data-testid="braindump-text"
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                placeholder="Накидай ідею..."
-                rows={6}
-                aria-label="Ідея"
-                className="w-full resize-none bg-transparent text-lg leading-relaxed text-zinc-500 outline-none placeholder:text-zinc-400"
-              />
-            ) : (
-              <p
-                data-testid="braindump-text"
-                className="whitespace-pre-wrap text-lg leading-relaxed text-zinc-500"
-              >
-                {text || (
-                  <span className="text-zinc-400">
-                    {transcribing ? 'Розпізнаю…' : 'Натисни мікрофон і говори…'}
-                  </span>
-                )}
-              </p>
-            )}
-          </div>
-        )}
-
-        {error && (
-          <p data-testid="braindump-error" className="mt-3 text-sm font-medium text-zinc-500">
-            {error}
-          </p>
-        )}
-      </div>
-
-      {/* State A controls: mic (primary), counter, input toggle, done. */}
-      {phase === 'A' && (
-        <div className="relative z-10 px-6 pb-8" style={{ animation: 'braindump-rise 300ms ease-out both' }}>
-          <div className="flex items-end justify-center pb-4">
-            {inputMode === 'voice' && (
-              <button
-                type="button"
-                onClick={toggleRecording}
-                data-testid="braindump-mic"
-                aria-pressed={recording}
-                aria-label={recording ? 'Зупинити запис' : 'Почати запис'}
-                className="flex h-20 w-20 items-center justify-center rounded-full text-white shadow-lg transition-transform active:scale-95"
-                style={{
-                  backgroundColor: ACCENT,
-                  boxShadow: recording
-                    ? '0 0 0 8px rgba(0,75,168,0.18), 0 10px 30px rgba(0,75,168,0.45)'
-                    : '0 10px 30px rgba(0,75,168,0.4)',
-                  animation: recording ? 'reels-planner-scene-glow 1.4s ease-in-out infinite' : undefined,
-                }}
-              >
-                <Mic className="h-8 w-8" strokeWidth={2} />
-              </button>
-            )}
-          </div>
-
-          <div className="flex items-center justify-between">
-            <span data-testid="braindump-counter" className="text-xs tabular-nums text-zinc-400">
-              {words}/{SOFT_WORD_TARGET}
-            </span>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={toggleInputMode}
-                data-testid="braindump-toggle-input"
-                aria-label={inputMode === 'voice' ? 'Перейти до тексту' : 'Перейти до голосу'}
-                className="flex h-11 w-11 items-center justify-center rounded-full bg-white/80 text-zinc-700 shadow-sm transition-colors hover:bg-white"
-              >
-                {inputMode === 'voice' ? (
-                  <Keyboard className="h-5 w-5" strokeWidth={2} />
-                ) : (
-                  <Mic className="h-5 w-5" strokeWidth={2} />
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={handleDone}
-                data-testid="braindump-done"
-                aria-label="Готово"
-                disabled={transcribing}
-                className="flex h-11 w-11 items-center justify-center rounded-full text-white shadow-sm transition-transform active:scale-95 disabled:opacity-50"
-                style={{ backgroundColor: 'var(--success)' }}
-              >
-                <Check className="h-5 w-5" strokeWidth={2.4} />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* State B controls: three independent content-type buttons rise from bottom. */}
-      {phase === 'B' && (
+        data-testid="braindump-overlay"
+        data-phase={phase}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Швидка ідея"
+        className="relative flex h-full w-full flex-col"
+      >
+        {/* Subtle radial lift under the text for legibility (no card/box border). */}
         <div
-          className="relative z-10 px-6 pb-10"
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              'radial-gradient(120% 80% at 50% 55%, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0.3) 45%, transparent 78%)',
+          }}
+        />
+
+        {/* Top bar: × close (+ saved confirmation in State B). Stays pinned at the
+            top — only the content+controls below rise from the bottom. */}
+        <div className="relative z-10 flex shrink-0 items-center justify-between px-5 pt-6">
+          <div className="min-h-[20px]">
+            {phase === 'B' && saveStatus === 'saved' && (
+              <span data-testid="braindump-saved" className="text-xs font-medium text-zinc-400">
+                ✓ Збережено в ідеї
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={close}
+            aria-label="Закрити"
+            data-testid="braindump-close"
+            className="rounded-full p-1.5 text-zinc-500 transition-colors hover:bg-zinc-200/60 hover:text-zinc-800"
+          >
+            <X className="h-5 w-5" strokeWidth={2} />
+          </button>
+        </div>
+
+        {/* Spacer biases the content block toward just-below-centre and collapses
+            the dead gap to the bottom controls. */}
+        <div className="flex-1" aria-hidden />
+
+        {/* Content + controls rise TOGETHER from the bottom (not just the buttons).
+            Raised ~100px off the bottom so the two zones sit close together. */}
+        <div
+          className="relative z-10 px-6 pb-[110px]"
           style={{ animation: 'braindump-rise 320ms ease-out both' }}
         >
-          {saveStatus === 'error' && (
-            <p className="mb-3 text-sm font-medium text-zinc-500">
-              Не вдалося зберегти — текст збережено локально, спробуй ще раз.
+          {phase === 'A' ? (
+            <h2
+              data-testid="braindump-prompt"
+              className="text-2xl font-bold leading-snug tracking-tight text-black"
+            >
+              {prompt}
+            </h2>
+          ) : (
+            <textarea
+              data-testid="braindump-edit"
+              value={text}
+              onChange={(e) => handleEditInB(e.target.value)}
+              rows={4}
+              aria-label="Текст ідеї"
+              className="w-full resize-none bg-transparent text-xl font-semibold leading-snug tracking-tight text-black outline-none"
+            />
+          )}
+
+          {phase === 'A' && (
+            <div className="mt-3">
+              {inputMode === 'type' ? (
+                <textarea
+                  ref={typeTextarea}
+                  data-testid="braindump-text"
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  placeholder="Накидай ідею..."
+                  rows={4}
+                  aria-label="Ідея"
+                  className="w-full resize-none bg-transparent text-lg leading-relaxed text-zinc-500 outline-none placeholder:text-zinc-400"
+                />
+              ) : (
+                <p
+                  data-testid="braindump-text"
+                  className="whitespace-pre-wrap text-lg leading-relaxed text-zinc-500"
+                >
+                  {text || (
+                    <span className="text-zinc-400">
+                      {transcribing ? 'Розпізнаю…' : 'Натисни мікрофон і говори…'}
+                    </span>
+                  )}
+                </p>
+              )}
+            </div>
+          )}
+
+          {error && (
+            <p data-testid="braindump-error" className="mt-3 text-sm font-medium text-zinc-500">
+              {error}
             </p>
           )}
-          <p className="mb-3 text-sm font-medium text-zinc-500">Що зробимо з цієї ідеї?</p>
-          <div className="grid grid-cols-3 gap-3">
-            {CONTENT_TYPE_ORDER.map((type) => {
-              const meta = CONTENT_TYPES[type];
-              const status = typeStatus[type];
-              const done = status === 'done';
-              return (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => void runType(type)}
-                  data-testid={`braindump-type-${type}`}
-                  data-status={status}
-                  disabled={status === 'loading'}
-                  className="flex flex-col items-center gap-2 rounded-2xl border-2 px-2 py-4 text-sm font-semibold transition-colors"
-                  style={{
-                    borderColor: done ? 'var(--success)' : meta.color,
-                    color: done ? 'var(--success)' : meta.color,
-                    backgroundColor: done ? 'rgba(34,197,94,0.08)' : meta.soft,
-                  }}
-                >
-                  {done ? (
-                    <Check className="h-6 w-6" strokeWidth={2.4} />
-                  ) : status === 'loading' ? (
-                    <svg className="h-6 w-6 animate-spin" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                  ) : (
-                    <ContentTypeIcon type={type} className="h-6 w-6" inheritColor />
-                  )}
-                  <span>{done ? 'Готово' : meta.label}</span>
-                </button>
-              );
-            })}
-          </div>
+
+          {/* State A controls: mic (primary), counter, input toggle, done. */}
+          {phase === 'A' && (
+            <div className="mt-6">
+              <div className="flex items-end justify-center pb-4">
+                {inputMode === 'voice' && (
+                  <button
+                    type="button"
+                    onClick={toggleRecording}
+                    data-testid="braindump-mic"
+                    aria-pressed={recording}
+                    aria-label={recording ? 'Зупинити запис' : 'Почати запис'}
+                    className="flex h-20 w-20 items-center justify-center rounded-full text-white shadow-lg transition-transform active:scale-95"
+                    style={{
+                      backgroundColor: ACCENT,
+                      boxShadow: recording
+                        ? '0 0 0 8px rgba(0,75,168,0.18), 0 10px 30px rgba(0,75,168,0.45)'
+                        : '0 10px 30px rgba(0,75,168,0.4)',
+                      animation: recording ? 'reels-planner-scene-glow 1.4s ease-in-out infinite' : undefined,
+                    }}
+                  >
+                    <Mic className="h-8 w-8" strokeWidth={2} />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span data-testid="braindump-counter" className="text-xs tabular-nums text-zinc-400">
+                  {words}/{SOFT_WORD_TARGET}
+                </span>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={toggleInputMode}
+                    data-testid="braindump-toggle-input"
+                    aria-label={inputMode === 'voice' ? 'Перейти до тексту' : 'Перейти до голосу'}
+                    className="flex h-11 w-11 items-center justify-center rounded-full border border-black/10 bg-white/70 text-zinc-600 transition-colors hover:bg-white hover:text-zinc-900"
+                  >
+                    {inputMode === 'voice' ? (
+                      <Keyboard className="h-5 w-5" strokeWidth={1.9} />
+                    ) : (
+                      <Mic className="h-5 w-5" strokeWidth={1.9} />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDone}
+                    data-testid="braindump-done"
+                    aria-label="Готово"
+                    disabled={transcribing}
+                    className="flex h-11 w-11 items-center justify-center rounded-full text-white shadow-sm transition-transform active:scale-95 disabled:opacity-50"
+                    style={{ backgroundColor: 'var(--success)' }}
+                  >
+                    <Check className="h-5 w-5" strokeWidth={2.4} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* State B controls: three independent content-type buttons. */}
+          {phase === 'B' && (
+            <div className="mt-6">
+              {saveStatus === 'error' && (
+                <p className="mb-3 text-sm font-medium text-zinc-500">
+                  Не вдалося зберегти — текст збережено локально, спробуй ще раз.
+                </p>
+              )}
+              <p className="mb-3 text-sm font-medium text-zinc-500">Що зробимо з цієї ідеї?</p>
+              <div className="grid grid-cols-3 gap-3">
+                {CONTENT_TYPE_ORDER.map((type) => {
+                  const meta = CONTENT_TYPES[type];
+                  const status = typeStatus[type];
+                  const done = status === 'done';
+                  return (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => void runType(type)}
+                      data-testid={`braindump-type-${type}`}
+                      data-status={status}
+                      disabled={status === 'loading'}
+                      className="flex flex-col items-center gap-2 rounded-2xl border-2 px-2 py-4 text-sm font-semibold transition-colors"
+                      style={{
+                        borderColor: done ? 'var(--success)' : meta.color,
+                        color: done ? 'var(--success)' : meta.color,
+                        backgroundColor: done ? 'rgba(34,197,94,0.08)' : meta.soft,
+                      }}
+                    >
+                      {done ? (
+                        <Check className="h-6 w-6" strokeWidth={2.4} />
+                      ) : status === 'loading' ? (
+                        <svg className="h-6 w-6 animate-spin" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                      ) : (
+                        <ContentTypeIcon type={type} className="h-6 w-6" inheritColor />
+                      )}
+                      <span>{done ? 'Готово' : meta.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
-      )}
-    </div>
+      </div>
+    </BlurScrim>
   );
 }
