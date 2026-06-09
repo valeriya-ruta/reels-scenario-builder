@@ -65,9 +65,14 @@ export default function AppShell({ children, userName, userEmail }: AppShellProp
         <NavBadgePathSync />
         <ToastProvider>
           <BrandProvider>
-            <div className="flex h-screen flex-col overflow-hidden">
-              {/* Top bar */}
-              <header className="flex shrink-0 items-center gap-3 border-b border-[color:var(--border)] bg-white px-4 py-3">
+            {/* h-[100dvh] (not 100vh) so mobile browser-chrome resize never traps
+                the bottom of the scroll — fixes the "scroll stuck / logout row
+                hidden behind the floating nav" report (86d39e36r). */}
+            <div className="flex h-[100dvh] flex-col overflow-hidden">
+              {/* Top bar — desktop chrome only. On mobile the screens start clean
+                  (greeting/section content at top); the leftover "Ruta /
+                  Твоя контент-подружка" header is hidden (86d39e36r). */}
+              <header className="hidden shrink-0 items-center gap-3 border-b border-[color:var(--border)] bg-white px-4 py-3 md:flex">
                 <button
                   type="button"
                   onClick={toggleSidebar}
@@ -127,7 +132,7 @@ export default function AppShell({ children, userName, userEmail }: AppShellProp
                   )}
                 </div>
 
-                <main className="page-enter flex min-h-0 flex-1 flex-col overflow-y-auto bg-white px-3 pt-6 pb-20 md:px-8 md:py-8">
+                <main className="page-enter flex min-h-0 flex-1 flex-col overflow-y-auto bg-white px-3 pt-6 pb-28 md:px-8 md:py-8">
                   {children}
                 </main>
               </div>

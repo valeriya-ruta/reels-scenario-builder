@@ -25,6 +25,10 @@ test.describe('Home (Головна)', () => {
     await expect(page.getByTestId('recents-all-link')).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Уроки воркшопу' })).toBeVisible();
 
+    // 86d39e36r: the leftover "Ruta / Твоя контент-подружка" app header must not
+    // show on mobile main screens.
+    await expect(page.getByText('Твоя контент-подружка')).not.toBeVisible();
+
     expect(watcher.errors, watcher.errors.join('\n')).toEqual([]);
   });
 
@@ -55,6 +59,22 @@ test.describe('Home (Головна)', () => {
       // Subline carries "{Тип} · {time}" — assert a type label is present.
       await expect(rows.first()).toContainText(/Рілс|Карусель|Сторіс/);
     }
+  });
+
+  test('insights teaser shows a blurred fake preview with a "Скоро" lockup, not navigable', async ({
+    page,
+  }) => {
+    await page.goto('/dashboard');
+    const card = page.getByTestId('insights-skeleton');
+    await expect(card).toBeVisible();
+    // Sharp lockup + caption on top of the blur.
+    await expect(card).toContainText('Скоро');
+    await expect(card).toContainText('Тут зʼявиться що працює, а що ні');
+    // Realistic FAKE content rendered behind the blur (static placeholders).
+    await expect(card).toContainText('12.4k переглядів');
+    await expect(card).toContainText('19:00');
+    // Non-interactive: no links/navigable rows inside the teaser.
+    await expect(card.locator('a')).toHaveCount(0);
   });
 
   test('insights skeleton dismisses and stays gone after reload', async ({ page }) => {
