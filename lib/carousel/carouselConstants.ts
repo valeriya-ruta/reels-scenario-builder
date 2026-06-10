@@ -6,6 +6,16 @@ export const CANVAS_HEIGHT = 1350;
 /** Backward-compatible alias for width where older code expects a single size. */
 export const CANVAS_SIZE = CANVAS_WIDTH;
 export const PADDING = 88;
+
+/**
+ * Global multiplier on carousel TEXT sizes (86d3a19zx). Editor previews and the
+ * export renderers both multiply their base title/body px by this single factor,
+ * so a bump stays 1:1 between what you edit and what exports. Line-heights and
+ * block positions are derived from the scaled sizes, so layout scales coherently.
+ */
+export const CAROUSEL_TEXT_SCALE = 1.12;
+/** Scales a base px font size by CAROUSEL_TEXT_SCALE (rounded to a whole px). */
+export const scaleText = (px: number): number => Math.round(px * CAROUSEL_TEXT_SCALE);
 export const WATERMARK_Y = 36;
 export const DOT_BOTTOM_Y = 44;
 

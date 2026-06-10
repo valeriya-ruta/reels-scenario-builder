@@ -11,6 +11,7 @@ import {
 } from '@/lib/carousel/canvasSegmentedText';
 import { ensureCarouselFonts } from '@/lib/carousel/carouselFonts';
 import { getBgPhotoTransform, type BgPhotoTransform } from '@/lib/carousel/bgPhotoTransform';
+import { scaleText } from '@/lib/carousel/carouselConstants';
 
 const CANVAS_W = 1080;
 const CANVAS_H = 1350;
@@ -320,10 +321,12 @@ export async function renderSlideImagePng(input: GenerateSlideInput): Promise<Bu
     drawPhotoOverlay(ctx, input.overlay_type ?? 'full', input.overlay_color ?? '#141414', input.overlay_opacity ?? 50);
   }
 
-  const titleSizePx =
-    input.title_px ?? Math.round(TITLE_SIZE * TITLE_SCALE[input.title_size ?? 'L']);
-  const bodySizePx =
-    input.body_px ?? Math.round(BODY_SIZE * BODY_SCALE[input.body_size ?? 'M']);
+  const titleSizePx = scaleText(
+    input.title_px ?? Math.round(TITLE_SIZE * TITLE_SCALE[input.title_size ?? 'L']),
+  );
+  const bodySizePx = scaleText(
+    input.body_px ?? Math.round(BODY_SIZE * BODY_SCALE[input.body_size ?? 'M']),
+  );
   const titleLineHeight = Math.round(titleSizePx * 1.25);
   const bodyLineHeight = Math.round(bodySizePx * 1.25);
   const normalizedTitle = normalizeMultiline(input.title || '');

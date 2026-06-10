@@ -8,6 +8,7 @@ import {
   DEFAULT_DARK,
   DEFAULT_ACCENT,
   DEFAULT_CREAM,
+  scaleText,
   type BrandDnaForRender,
   type SlideTemplateKind,
 } from '@/lib/carousel/carouselConstants';
@@ -365,7 +366,7 @@ async function renderCover(
     );
     const contentW = CANVAS_SIZE - PADDING * 2;
     const align: 'left' | 'center' | 'right' = 'center';
-    const titleSizePx = (input.titleSize ?? 'L') === 'M' ? 70 : 88;
+    const titleSizePx = scaleText((input.titleSize ?? 'L') === 'M' ? 70 : 88);
     const titleLineH = Math.round(titleSizePx * 0.98);
     const titleWords = segmentsToWords(parseAccentSpans(title));
     const titleLines = layoutWords(
@@ -381,7 +382,7 @@ async function renderCover(
     const bodyLine = stripAccentMarkers(body).trim();
     const fallbackSub = (label || designNote || '').trim();
     const hasSub = Boolean(bodyLine || fallbackSub);
-    const subSizePx = 26;
+    const subSizePx = scaleText(26);
     const subLineH = Math.round(subSizePx * 1.3);
     const subLines = hasSub
       ? Math.max(1, wrapPlain(ctx, bodyLine || fallbackSub, contentW, subSizePx, fonts.sans).length)
@@ -513,7 +514,7 @@ async function renderContent(
     const contentW = CANVAS_SIZE - PADDING * 2;
     const lab = (label || '').trim();
 
-    const titleSizePx = (input.titleSize ?? 'L') === 'M' ? 52 : 64;
+    const titleSizePx = scaleText((input.titleSize ?? 'L') === 'M' ? 52 : 64);
     const titleLineH = Math.round(titleSizePx * 1.05);
     const titleLines = layoutWords(
       (t) => {
@@ -526,7 +527,7 @@ async function renderContent(
     const titleBlockH = title.trim() ? Math.max(1, titleLines.length) * titleLineH : 0;
 
     const bodyText = stripAccentMarkers(body);
-    const bodySizePx = (input.bodySize ?? 'M') === 'S' ? 27 : 34;
+    const bodySizePx = scaleText((input.bodySize ?? 'M') === 'S' ? 27 : 34);
     const bodyLineH = Math.round(bodySizePx * 1.625); // leading-relaxed
     const bodyLines = wrapPlain(ctx, bodyText, contentW, bodySizePx, fonts.sans);
     const bodyBlockH = bodyLines.length * bodyLineH;
@@ -662,13 +663,15 @@ async function renderStatement(
     const align = input.textAlign ?? 'left';
     drawWatermark(ctx, handle, domain, 'bold', isDarkColor(quoteBg), fonts);
     const isTestimonial = input.layoutPreset === 'testimonial';
-    const sizePx = isTestimonial
-      ? (input.titleSize ?? 'L') === 'M'
-        ? 46
-        : 52
-      : (input.titleSize ?? 'L') === 'M'
-        ? 70
-        : 82;
+    const sizePx = scaleText(
+      isTestimonial
+        ? (input.titleSize ?? 'L') === 'M'
+          ? 46
+          : 52
+        : (input.titleSize ?? 'L') === 'M'
+          ? 70
+          : 82,
+    );
     const lineH = Math.round(sizePx * 1.25); // leading-tight
     const contentW = CANVAS_SIZE - PADDING * 2;
     const lines = layoutWords(
@@ -729,8 +732,8 @@ async function renderBullets(
       PADDING,
       y,
       CANVAS_SIZE - PADDING * 2,
-      72,
-      78,
+      scaleText(72),
+      scaleText(78),
       '#1a1a1a',
       'left',
       fonts,
@@ -738,14 +741,14 @@ async function renderBullets(
     y += 28;
     let n = 1;
     for (const row of list.slice(0, 8)) {
-      ctx.font = `52px ${fonts.serifItalic}`;
+      ctx.font = `${scaleText(52)}px ${fonts.serifItalic}`;
       ctx.fillStyle = '#c8c0b4';
       ctx.textBaseline = 'alphabetic';
       ctx.fillText(String(n), PADDING, y + 32);
-      ctx.font = `32px ${fonts.sans}`;
+      ctx.font = `${scaleText(32)}px ${fonts.sans}`;
       ctx.fillStyle = '#555555';
       const colX = PADDING + 56;
-      const yy = drawPlainParagraph(ctx, row, colX, y + 32, CANVAS_SIZE - colX - PADDING, 32, 38, '#555555', 'left', fonts);
+      const yy = drawPlainParagraph(ctx, row, colX, y + 32, CANVAS_SIZE - colX - PADDING, scaleText(32), scaleText(38), '#555555', 'left', fonts);
       y = yy + 16;
       ctx.strokeStyle = '#ddd8d0';
       ctx.lineWidth = 1;
@@ -766,8 +769,8 @@ async function renderBullets(
       PADDING,
       y,
       CANVAS_SIZE - PADDING * 2,
-      66,
-      72,
+      scaleText(66),
+      scaleText(72),
       titleColor,
       accent,
       brand.accentStyle,
@@ -784,7 +787,7 @@ async function renderBullets(
       ctx.fillStyle = `rgb(${r},${g},${b})`;
       ctx.fill();
       if (chk) ctx.drawImage(chk, PADDING + 6, y + 6, 24, 24);
-      drawPlainParagraph(ctx, row, PADDING + 36 + 16, y + 28, CANVAS_SIZE - PADDING * 2 - 52, 34, 40, bodyColor, 'left', fonts);
+      drawPlainParagraph(ctx, row, PADDING + 36 + 16, y + 28, CANVAS_SIZE - PADDING * 2 - 52, scaleText(34), scaleText(40), bodyColor, 'left', fonts);
       y += 36 + 20;
     }
   }
@@ -872,7 +875,7 @@ async function renderCta(
     const { r, g, b } = hexToRgb(accent);
     const contentW = CANVAS_SIZE - PADDING * 2;
 
-    const titleSizePx = (input.titleSize ?? 'L') === 'M' ? 58 : 72;
+    const titleSizePx = scaleText((input.titleSize ?? 'L') === 'M' ? 58 : 72);
     const titleLineH = Math.round(titleSizePx * 1.05);
     const titleLines = layoutWords(
       (t) => {
@@ -886,7 +889,7 @@ async function renderCta(
 
     // Accent box (rounded-2xl, px-8 / py-6) with bold 36px body.
     const boxBodyText = stripAccentMarkers(body).trim() || 'Підпишись';
-    const boxBodySize = 36;
+    const boxBodySize = scaleText(36);
     const boxInnerPad = 32; // px-8
     const boxPadY = 24; // py-6
     const boxBodyLineH = Math.round(boxBodySize * 1.2);

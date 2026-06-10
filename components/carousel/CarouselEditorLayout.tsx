@@ -20,7 +20,8 @@ import {
   type DragEndEvent,
 } from '@dnd-kit/core';
 import {
-  rectSortingStrategy,
+  horizontalListSortingStrategy,
+  verticalListSortingStrategy,
   SortableContext,
   sortableKeyboardCoordinates,
   useSortable,
@@ -103,19 +104,29 @@ function SortableThumb({
     id: slide.id,
   });
   const dragTransform = CSS.Transform.toString(transform);
-  // Long-press "lift": raise + slightly scale the grabbed thumbnail so it reads
-  // as floating. Composed after the dnd-kit translate so reorder still tracks.
+  // Long-press "lift": raise + scale the grabbed thumbnail so it clearly reads as
+  // a picked-up, floating chip. Composed after the dnd-kit translate so reorder
+  // still tracks the finger left/right.
   const liftTransform = isDragging
-    ? `${dragTransform ? `${dragTransform} ` : ''}translateY(-8px) scale(1.06)`
+    ? `${dragTransform ? `${dragTransform} ` : ''}translateY(-12px) scale(1.12)`
     : dragTransform || undefined;
   const style: CSSProperties = {
     transform: liftTransform,
     transition,
-    opacity: isDragging ? 0.95 : 1,
+    // Clear lifted-state affordance: full opacity, floats above siblings, deep
+    // shadow + a solid accent ring so it's obvious the slide is grabbed (86d3a1a8b).
+    opacity: 1,
     zIndex: isDragging ? 30 : undefined,
-    boxShadow: isDragging ? '0 10px 24px rgba(0,0,0,0.28)' : undefined,
-    // Allow horizontal panning of the strip; long-press still initiates drag.
-    touchAction: wholeTileDrag ? 'pan-x' : undefined,
+    boxShadow: isDragging
+      ? `0 16px 32px rgba(0,0,0,0.34), 0 0 0 3px ${accentColor}`
+      : undefined,
+    cursor: isDragging ? 'grabbing' : undefined,
+    // On the mobile strip the WHOLE tile is the drag handle. It MUST be
+    // touch-action:none so the WebView delivers the left/right drag to dnd-kit
+    // instead of swallowing it as a horizontal scroll (the reason left/right
+    // reorder didn't work). dnd-kit auto-scrolls the strip when dragging near an
+    // edge, so off-screen positions are still reachable.
+    touchAction: wholeTileDrag ? 'none' : undefined,
   };
   const thumbHeight = size === 'sm' ? 58 : 78;
   const thumbWidth = Math.round((thumbHeight * CANVAS_WIDTH) / CANVAS_HEIGHT);
@@ -966,7 +977,7 @@ export default function CarouselEditorLayout({
               onDragEnd={onDragEnd}
               modifiers={dragModifiers}
             >
-              <SortableContext items={slides.map((s) => s.id)} strategy={rectSortingStrategy}>
+              <SortableContext items={slides.map((s) => s.id)} strategy={verticalListSortingStrategy}>
                 <div className="flex w-[72px] shrink-0 flex-col items-center gap-2 overflow-y-auto px-1 py-0">
                   {slides.map((slide, index) => (
                     <SortableThumb
@@ -1168,7 +1179,7 @@ export default function CarouselEditorLayout({
                 onDragEnd={onDragEnd}
                 modifiers={dragModifiers}
               >
-                <SortableContext items={slides.map((s) => s.id)} strategy={rectSortingStrategy}>
+                <SortableContext items={slides.map((s) => s.id)} strategy={horizontalListSortingStrategy}>
                   <div className="flex shrink-0 flex-row items-center gap-2 overflow-x-auto px-3 py-2">
                     {slides.map((slide, index) => (
                       <SortableThumb

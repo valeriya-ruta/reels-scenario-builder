@@ -5,9 +5,11 @@ import { Video, LayoutGrid, Circle, Lightbulb, type LucideIcon } from 'lucide-re
 import BlurScrim from '@/components/BlurScrim';
 
 /**
- * Create radial menu — fans 4 option bubbles into a thumb-friendly QUARTER-CIRCLE
- * arc anchored on the Create FAB, sweeping 12 o'clock (up) → 3 o'clock (right).
- * All options share the same blue treatment (no per-option colour). Task 86d39dnam.
+ * Create radial menu — fans 4 option bubbles into a thumb-friendly arc anchored on
+ * the Create FAB, balanced around 12 o'clock so it sweeps up-LEFT to up-RIGHT and
+ * sits over the screen centre (86d3a1a33). Each label sits ABOVE its bubble so a
+ * finger on the button never covers it. All options share the same blue treatment
+ * (no per-option colour). Tasks 86d39dnam / 86d3a1a33.
  *
  * Interaction is owned by the parent (BottomNav): this component is presentational.
  * It renders the dimming blur backdrop + bubbles for the FAB anchor and the
@@ -35,9 +37,10 @@ export const RADIAL_OPTIONS: RadialOption[] = [
 
 const ACCENT = '#004BA8';
 const RADIUS = 148;
-/** Even fan across the top-right quadrant: 12 o'clock (90°) → ~3 o'clock (6°).
- *  Order top → right: Рілс (top) → Карусель → Сторіс → Ідеї (rightmost). */
-const ANGLES_DEG = [90, 62, 34, 6];
+/** Balanced fan centred on 12 o'clock — sweeps up-LEFT to up-RIGHT (86d3a1a33) so
+ *  the arc sits over the screen centre instead of a quarter-circle pinned to the
+ *  right edge. Order left → right: Рілс → Карусель → Сторіс → Ідеї. */
+const ANGLES_DEG = [150, 110, 70, 30];
 /** ms the close/collapse animation runs before the menu unmounts. */
 const CLOSE_MS = 200;
 
@@ -153,6 +156,10 @@ export default function CreateRadialMenu({
                   : `radial-bubble-pop 320ms cubic-bezier(0.34, 1.56, 0.64, 1) ${i * 45}ms both`,
               }}
             >
+              {/* Label ABOVE the button so the finger doesn't cover it (86d3a1a33). */}
+              <span className="rounded-md bg-white/95 px-1.5 py-0.5 text-[11px] font-semibold text-zinc-800 shadow-sm">
+                {opt.label}
+              </span>
               <span
                 className="flex h-14 w-14 items-center justify-center rounded-full text-white"
                 style={{
@@ -166,9 +173,6 @@ export default function CreateRadialMenu({
                 }}
               >
                 <Icon className="h-6 w-6" strokeWidth={2} />
-              </span>
-              <span className="rounded-md bg-white/95 px-1.5 py-0.5 text-[11px] font-semibold text-zinc-800 shadow-sm">
-                {opt.label}
               </span>
             </button>
           );

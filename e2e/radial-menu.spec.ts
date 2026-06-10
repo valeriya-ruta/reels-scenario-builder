@@ -29,7 +29,7 @@ test.describe('Create radial menu', () => {
     await expect(fab).toHaveAttribute('aria-expanded', 'true');
   });
 
-  test('bubbles fan into the top-right quarter arc, anchored up-and-right of the FAB', async ({
+  test('bubbles fan up in a balanced arc, spanning both sides of the FAB (86d3a1a33)', async ({
     page,
   }) => {
     const fab = await openMenu(page);
@@ -37,15 +37,22 @@ test.describe('Create radial menu', () => {
     expect(fb).not.toBeNull();
     const fabCx = fb!.x + fb!.width / 2;
     const fabCy = fb!.y + fb!.height / 2;
+    let anyLeft = false;
+    let anyRight = false;
     for (const id of ['reels', 'carousel', 'stories', 'ideas']) {
       const box = await page.getByTestId(`radial-option-${id}`).boundingBox();
       expect(box).not.toBeNull();
       const cx = box!.x + box!.width / 2;
       const cy = box!.y + box!.height / 2;
-      // Top-right quadrant: at or right of the FAB (never left), at or above it.
-      expect(cx).toBeGreaterThanOrEqual(fabCx - 6);
+      // Every option fans UPward (above the FAB)…
       expect(cy).toBeLessThanOrEqual(fabCy + 6);
+      if (cx < fabCx) anyLeft = true;
+      if (cx > fabCx) anyRight = true;
     }
+    // …and the arc is balanced: it reaches to BOTH the left and the right of the
+    // FAB rather than being pinned to the right edge.
+    expect(anyLeft, 'expected at least one option left of the FAB').toBe(true);
+    expect(anyRight, 'expected at least one option right of the FAB').toBe(true);
   });
 
   test('× / backdrop dismiss the menu', async ({ page }) => {

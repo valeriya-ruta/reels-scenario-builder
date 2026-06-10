@@ -53,6 +53,15 @@ export default function BlurScrim({
           backdropFilter: `blur(${blurPx}px)`,
           WebkitBackdropFilter: `blur(${blurPx}px)`,
           background: tint,
+          // Force the scrim onto its own GPU compositing layer. Without this,
+          // mobile WebKit / WKWebView (web.ruta.media runs in a WebView) frequently
+          // refuses to paint `backdrop-filter` at all — the blur silently no-ops and
+          // you see only the flat tint (the "plain white background" bug). A
+          // translateZ(0) + will-change hint makes the blur actually render, and
+          // does so for BOTH surfaces because they share this one component.
+          transform: 'translateZ(0)',
+          WebkitTransform: 'translateZ(0)',
+          willChange: 'backdrop-filter',
         }}
       />
       {children}

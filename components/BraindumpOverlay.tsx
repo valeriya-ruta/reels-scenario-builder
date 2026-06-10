@@ -337,9 +337,10 @@ export default function BraindumpOverlay({ open, onClose }: BraindumpOverlayProp
         <div className="flex-1" aria-hidden />
 
         {/* Content + controls rise TOGETHER from the bottom (not just the buttons).
-            Raised ~100px off the bottom so the two zones sit close together. */}
+            Raised well off the bottom (~130px higher than before, 86d3a1aqk) so the
+            cluster sits within easy thumb reach instead of hugging the edge. */}
         <div
-          className="relative z-10 px-6 pb-[110px]"
+          className="relative z-10 px-6 pb-[240px]"
           style={{ animation: 'braindump-rise 320ms ease-out both' }}
         >
           {phase === 'A' ? (
@@ -394,10 +395,13 @@ export default function BraindumpOverlay({ open, onClose }: BraindumpOverlayProp
             </p>
           )}
 
-          {/* State A controls: mic (primary), counter, input toggle, done. */}
+          {/* State A controls. Layout per 86d3a1aqk:
+              - Mic (big blue, primary) with the green ✓ confirm as a smaller
+                button RIGHT BESIDE it → confirm is one short tap from the mic.
+              - Counter (n/50) bottom-left, keyboard/voice toggle bottom-right. */}
           {phase === 'A' && (
             <div className="mt-6">
-              <div className="flex items-end justify-center pb-4">
+              <div className="flex items-center justify-center gap-5 pb-4">
                 {inputMode === 'voice' && (
                   <button
                     type="button"
@@ -417,6 +421,17 @@ export default function BraindumpOverlay({ open, onClose }: BraindumpOverlayProp
                     <Mic className="h-8 w-8" strokeWidth={2} />
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={handleDone}
+                  data-testid="braindump-done"
+                  aria-label="Готово"
+                  disabled={transcribing}
+                  className="flex h-14 w-14 items-center justify-center rounded-full text-white shadow-md transition-transform active:scale-95 disabled:opacity-50"
+                  style={{ backgroundColor: 'var(--success)' }}
+                >
+                  <Check className="h-6 w-6" strokeWidth={2.4} />
+                </button>
               </div>
 
               <div className="flex items-center justify-between">
@@ -424,32 +439,19 @@ export default function BraindumpOverlay({ open, onClose }: BraindumpOverlayProp
                   {words}/{SOFT_WORD_TARGET}
                 </span>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={toggleInputMode}
-                    data-testid="braindump-toggle-input"
-                    aria-label={inputMode === 'voice' ? 'Перейти до тексту' : 'Перейти до голосу'}
-                    className="flex h-11 w-11 items-center justify-center rounded-full border border-black/10 bg-white/70 text-zinc-600 transition-colors hover:bg-white hover:text-zinc-900"
-                  >
-                    {inputMode === 'voice' ? (
-                      <Keyboard className="h-5 w-5" strokeWidth={1.9} />
-                    ) : (
-                      <Mic className="h-5 w-5" strokeWidth={1.9} />
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleDone}
-                    data-testid="braindump-done"
-                    aria-label="Готово"
-                    disabled={transcribing}
-                    className="flex h-11 w-11 items-center justify-center rounded-full text-white shadow-sm transition-transform active:scale-95 disabled:opacity-50"
-                    style={{ backgroundColor: 'var(--success)' }}
-                  >
-                    <Check className="h-5 w-5" strokeWidth={2.4} />
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={toggleInputMode}
+                  data-testid="braindump-toggle-input"
+                  aria-label={inputMode === 'voice' ? 'Перейти до тексту' : 'Перейти до голосу'}
+                  className="flex h-11 w-11 items-center justify-center rounded-full border border-black/10 bg-white/70 text-zinc-600 transition-colors hover:bg-white hover:text-zinc-900"
+                >
+                  {inputMode === 'voice' ? (
+                    <Keyboard className="h-5 w-5" strokeWidth={1.9} />
+                  ) : (
+                    <Mic className="h-5 w-5" strokeWidth={1.9} />
+                  )}
+                </button>
               </div>
             </div>
           )}

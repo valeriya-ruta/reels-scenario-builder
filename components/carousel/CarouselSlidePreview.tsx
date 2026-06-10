@@ -9,6 +9,7 @@ import {
   DEFAULT_DARK,
   DEFAULT_ACCENT,
   DEFAULT_BG,
+  scaleText as ts,
 } from '@/lib/carousel/carouselConstants';
 import { parseAccentSpans, stripAccentMarkers } from '@/lib/carousel/accentSpans';
 import type { BrandSettings } from '@/lib/brand';
@@ -362,11 +363,11 @@ export default function CarouselSlidePreview({
           }}
         >
             <div className="absolute bottom-[100px] left-[88px] right-[88px] top-[140px] flex flex-col justify-end">
-              <div className={`${textAlignClass} text-[88px] font-bold leading-[1.0] whitespace-pre-wrap`} style={{ fontFamily: titleFont, color: resolvedTitleColor, fontSize: (slide.titleSize ?? 'L') === 'M' ? 70 : 88 }}>
+              <div className={`${textAlignClass} text-[88px] font-bold leading-[1.0] whitespace-pre-wrap`} style={{ fontFamily: titleFont, color: resolvedTitleColor, fontSize: ts((slide.titleSize ?? 'L') === 'M' ? 70 : 88) }}>
                 <AccentRuns text={slide.title} accentStyle={brand.accentStyle} accentColor={accent} />
               </div>
               {showCoverSubline ? (
-                <p className="mt-6 text-[28px] leading-snug" style={{ fontFamily: bodyFont, color: resolvedBodyColor }}>
+                <p className="mt-6 text-[28px] leading-snug" style={{ fontFamily: bodyFont, color: resolvedBodyColor, fontSize: ts(28) }}>
                   {bodyLine ? (
                     <AccentRuns text={slide.body} accentStyle={brand.accentStyle} accentColor={accent} />
                   ) : (
@@ -393,11 +394,11 @@ export default function CarouselSlidePreview({
             DEFAULT_DARK,
             <>
               <div className="mb-5 h-1.5 w-12 rounded-sm" style={{ backgroundColor: accent }} />
-              <div className="text-[88px] font-bold leading-[0.98] whitespace-pre-wrap" style={{ color: resolvedTitleColor, fontFamily: titleFont, fontWeight: brandFont.titleWeight, fontSize: (slide.titleSize ?? 'L') === 'M' ? 70 : 88 }}>
+              <div className="text-[88px] font-bold leading-[0.98] whitespace-pre-wrap" style={{ color: resolvedTitleColor, fontFamily: titleFont, fontWeight: brandFont.titleWeight, fontSize: ts((slide.titleSize ?? 'L') === 'M' ? 70 : 88) }}>
                 <AccentRuns text={slide.title} accentStyle={brand.accentStyle} accentColor={accent} />
               </div>
               {showCoverSubline ? (
-                <p className="mt-3 text-[26px]" style={{ color: resolvedBodyColor, fontFamily: bodyFont }}>
+                <p className="mt-3 text-[26px]" style={{ color: resolvedBodyColor, fontFamily: bodyFont, fontSize: ts(26) }}>
                   {bodyLine ? (
                     <AccentRuns text={slide.body} accentStyle={brand.accentStyle} accentColor={accent} />
                   ) : (
@@ -416,9 +417,9 @@ export default function CarouselSlidePreview({
     const quoteText = slide.title?.trim() || slide.body?.trim() || '';
     const quoteBg = slide.backgroundType === 'color' ? resolvedBackgroundColor : accent;
     const quoteColor = resolvedTitleColor;
-    const quoteSize = slide.layoutPreset === 'quote'
+    const quoteSize = ts(slide.layoutPreset === 'quote'
       ? (slide.titleSize ?? 'L') === 'M' ? 70 : 82
-      : (slide.titleSize ?? 'L') === 'M' ? 46 : 52;
+      : (slide.titleSize ?? 'L') === 'M' ? 46 : 52);
     return (
       <div className="relative overflow-hidden rounded-xl shadow-lg" style={baseWrap}>
         <div className="relative overflow-hidden rounded-xl shadow-lg" style={{ ...baseCanvas, backgroundColor: quoteBg }}>
@@ -452,7 +453,7 @@ export default function CarouselSlidePreview({
           {contentShell(
             resolvedBackgroundColor,
             <>
-              <p className="text-[56px] font-bold leading-tight whitespace-pre-wrap" style={{ fontFamily: titleFont, color: resolvedTitleColor, fontSize: (slide.titleSize ?? 'L') === 'M' ? 45 : 56 }}>
+              <p className="text-[56px] font-bold leading-tight whitespace-pre-wrap" style={{ fontFamily: titleFont, color: resolvedTitleColor, fontSize: ts((slide.titleSize ?? 'L') === 'M' ? 45 : 56) }}>
                 <AccentRuns text={slide.title} accentStyle={brand.accentStyle} accentColor={accent} />
               </p>
               <ul className={`mt-10 text-left ${refined ? 'space-y-5' : 'space-y-3'}`}>
@@ -464,7 +465,7 @@ export default function CarouselSlidePreview({
                     >
                       {markerFor(slide.bulletStyle ?? 'numbered-padded', i)}
                     </span>
-                    <span className="text-[36px] leading-snug whitespace-pre-wrap" style={{ fontFamily: bodyFont, color: resolvedBodyColor, fontSize: (slide.bodySize ?? 'M') === 'S' ? 29 : 36 }}>
+                    <span className="text-[36px] leading-snug whitespace-pre-wrap" style={{ fontFamily: bodyFont, color: resolvedBodyColor, fontSize: ts((slide.bodySize ?? 'M') === 'S' ? 29 : 36) }}>
                       {line}
                     </span>
                   </li>
@@ -498,11 +499,11 @@ export default function CarouselSlidePreview({
                 </>
               ) : (
                 <>
-                  <p className="mt-6 text-[72px] font-bold leading-[1.05] whitespace-pre-wrap" style={{ color: resolvedTitleColor, fontFamily: titleFont, fontSize: (slide.titleSize ?? 'L') === 'M' ? 58 : 72 }}>
+                  <p className="mt-6 text-[72px] font-bold leading-[1.05] whitespace-pre-wrap" style={{ color: resolvedTitleColor, fontFamily: titleFont, fontSize: ts((slide.titleSize ?? 'L') === 'M' ? 58 : 72) }}>
                     <AccentRuns text={slide.title} accentStyle={brand.accentStyle} accentColor={accent} />
                   </p>
                   <div className="mt-10 rounded-2xl px-8 py-6" style={{ backgroundColor: accent }}>
-                    <p className="text-[36px] font-bold" style={{ color: resolveTitleAndBodyColors('color', accent, brandPalette).bodyColor, fontFamily: titleFont }}>
+                    <p className="text-[36px] font-bold" style={{ color: resolveTitleAndBodyColors('color', accent, brandPalette).bodyColor, fontFamily: titleFont, fontSize: ts(36) }}>
                       {bodyClean || 'Підпишись'}
                     </p>
                   </div>
@@ -530,10 +531,10 @@ export default function CarouselSlidePreview({
                 {pill}
               </span>
             ) : null}
-            <p className="mt-8 text-[64px] font-bold leading-[1.05] whitespace-pre-wrap" style={{ fontFamily: titleFont, color: resolvedTitleColor, fontSize: (slide.titleSize ?? 'L') === 'M' ? 52 : 64 }}>
+            <p className="mt-8 text-[64px] font-bold leading-[1.05] whitespace-pre-wrap" style={{ fontFamily: titleFont, color: resolvedTitleColor, fontSize: ts((slide.titleSize ?? 'L') === 'M' ? 52 : 64) }}>
               <AccentRuns text={slide.title} accentStyle={brand.accentStyle} accentColor={accent} />
             </p>
-            <p className="mt-6 text-[34px] leading-relaxed whitespace-pre-wrap" style={{ fontFamily: bodyFont, color: resolvedBodyColor, fontSize: (slide.bodySize ?? 'M') === 'S' ? 27 : 34 }}>
+            <p className="mt-6 text-[34px] leading-relaxed whitespace-pre-wrap" style={{ fontFamily: bodyFont, color: resolvedBodyColor, fontSize: ts((slide.bodySize ?? 'M') === 'S' ? 27 : 34) }}>
               {stripAccentMarkers(slide.body)}
             </p>
           </>,

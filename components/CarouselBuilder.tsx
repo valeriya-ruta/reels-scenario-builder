@@ -22,7 +22,7 @@ import Link from 'next/link';
 import { resolveBrandFont } from '@/lib/brandFonts';
 import CarouselEditorLayout from '@/components/carousel/CarouselEditorLayout';
 import CarouselExportOverlay from '@/components/carousel/CarouselExportOverlay';
-import { downloadPngFromBase64, downloadSlidesZip } from '@/lib/carousel/downloadImage';
+import { downloadPngFromBase64, saveSlidesSequentially } from '@/lib/carousel/downloadImage';
 import {
   DEFAULT_BG_PHOTO_TRANSFORM,
   getBgPhotoTransform,
@@ -285,6 +285,9 @@ export default function CarouselBuilder({
   const slidesRef = useRef<Slide[]>(slides);
   const prevSlidesRef = useRef<Slide[]>(slides);
   const saveSlidesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Guards a download run so a stuck flag can never silently block reruns: it is
+  // always cleared in `finally`, so the 2nd…Nth export behaves like the 1st.
+  const isDownloadingRef = useRef(false);
   const { setBadge, clearBadge } = useNavBadges();
   const { state: rantResultsState, clearResult: clearRantResult } = useRantResults();
   const skipPersistRef = useRef(true);
@@ -689,34 +692,59 @@ export default function CarouselBuilder({
     }
   };
 
-  // Bulk download as a SINGLE ZIP. Firing N separate downloads from one tap is
-  // suppressed by mobile browsers (only the first arrives) — one .zip is one
-  // download, reliable everywhere. Feedback is a DOWNLOAD message, never the
-  // autosave "слайди збережено" — a save toast must never mask a missing file.
+  // Bulk download = sequential per-slide saves straight to the gallery (NOT a
+  // zip — a zip can't land in the camera roll on mobile). Each slide is saved one
+  // after another with a small gap so WebViews don't drop the queued downloads.
+  // Feedback is a DOWNLOAD message tied to real deliveries — never a "saved" toast
+  // that masks a missing file. The flag is always reset so reruns aren't blocked.
   const downloadAll = () => {
+    if (isDownloadingRef.current) return;
+    isDownloadingRef.current = true;
     void (async () => {
-      const delivered = await downloadSlidesZip(
-        slides.map((s) => s.generatedImageBase64),
-        'ruta-carousel.zip',
-      );
-      if (delivered === 0) {
-        showToast('Немає згенерованих слайдів для завантаження');
+      try {
+        const images = slides.map((s) => s.generatedImageBase64);
+        const total = images.filter(Boolean).length;
+        if (total === 0) {
+          showToast('Немає згенерованих слайдів для завантаження');
+          return;
+        }
+        const delivered = await saveSlidesSequentially(images, {
+          filenamePrefix: 'ruta-carousel',
+          onProgress: (done) => showToast(`Зберігаю слайд ${done} з ${total}…`),
+        });
+        if (delivered === 0) {
+          showToast('Не вдалося зберегти слайди — спробуй ще раз');
+          return;
+        }
+        clearBadge('carousel');
+        setHasDownloaded(true);
+        showToast(`Збережено ${delivered} слайд(ів) у галерею`);
+      } finally {
+        isDownloadingRef.current = false;
+      }
+    })();
+  };
+
+  // Single-slide save reuses the exact same render→save path as bulk (fresh blob +
+  // object URL + <a download> per call), so an individual tile reliably lands a
+  // file. Toast fires only on a real save attempt.
+  const downloadOne = (i: number) => {
+    const b64 = slides[i].generatedImageBase64;
+    if (!b64) return;
+    if (isDownloadingRef.current) return;
+    isDownloadingRef.current = true;
+    try {
+      const ok = downloadPngFromBase64(b64, `ruta-carousel-${i + 1}.png`);
+      if (!ok) {
+        showToast('Не вдалося зберегти слайд — спробуй ще раз');
         return;
       }
       clearBadge('carousel');
       setHasDownloaded(true);
-      showToast(`Завантажується архів із ${delivered} слайд(ів)…`);
-    })();
-  };
-
-  const downloadOne = (i: number) => {
-    const b64 = slides[i].generatedImageBase64;
-    if (!b64) return;
-    const ok = downloadPngFromBase64(b64, `ruta-carousel-${i + 1}.png`);
-    if (!ok) return;
-    clearBadge('carousel');
-    setHasDownloaded(true);
-    showToast(`Слайд ${i + 1} завантажується…`);
+      showToast(`Слайд ${i + 1} збережено`);
+    } finally {
+      isDownloadingRef.current = false;
+    }
   };
 
   // Export now lives in a blur overlay off the editor canvas. Opening it always
