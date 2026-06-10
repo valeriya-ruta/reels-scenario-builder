@@ -7,10 +7,8 @@ import { Download, Loader2 } from 'lucide-react';
 import type { CarouselRantOutput, Slide } from '@/lib/carouselTypes';
 import { CAROUSEL_DEFAULT_BG, resolveSlideType } from '@/lib/carouselTypes';
 import { createEmptySlide, normalizeSlidesFromDb } from '@/lib/carouselSlides';
-import {
-  saveCarouselSlides,
-  updateCarouselProjectName,
-} from '@/app/carousel-actions';
+import { updateCarouselProjectName } from '@/app/carousel-actions';
+import { persistCarouselSlides } from '@/lib/carousel/persistSlides';
 import { useNavBadges } from '@/components/NavBadgeContext';
 import { readPendingCarouselFromStorage, useRantResults } from '@/components/RantResultsContext';
 import { useBrandStore } from '@/components/BrandProvider';
@@ -24,7 +22,7 @@ import Link from 'next/link';
 import { resolveBrandFont } from '@/lib/brandFonts';
 import CarouselEditorLayout from '@/components/carousel/CarouselEditorLayout';
 import CarouselExportOverlay from '@/components/carousel/CarouselExportOverlay';
-import { downloadPngFromBase64 } from '@/lib/carousel/downloadImage';
+import { downloadPngFromBase64, downloadSlidesZip } from '@/lib/carousel/downloadImage';
 import {
   DEFAULT_BG_PHOTO_TRANSFORM,
   getBgPhotoTransform,
@@ -285,6 +283,7 @@ export default function CarouselBuilder({
 
   const slideListTopRef = useRef<HTMLDivElement | null>(null);
   const slidesRef = useRef<Slide[]>(slides);
+  const prevSlidesRef = useRef<Slide[]>(slides);
   const saveSlidesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { setBadge, clearBadge } = useNavBadges();
   const { state: rantResultsState, clearResult: clearRantResult } = useRantResults();
@@ -312,54 +311,81 @@ export default function CarouselBuilder({
     }
   }, [projectNameDraft, projectName, projectId]);
 
-  // Persist the latest slides immediately, bypassing the debounce. Used when the
-  // editor unmounts (client-side navigation) or the tab/app is hidden/unloaded,
-  // so the last edits made within the debounce window are never lost.
-  const flushSlidesNow = useCallback(() => {
-    if (saveSlidesTimerRef.current) {
-      clearTimeout(saveSlidesTimerRef.current);
-      saveSlidesTimerRef.current = null;
-    }
-    if (!dirtyRef.current) return;
-    dirtyRef.current = false;
-    const currentSlides = slidesRef.current;
-    void (async () => {
-      try {
-        await saveCarouselSlides(projectId, currentSlides);
-      } catch (error) {
-        dirtyRef.current = true;
-        console.error('saveCarouselSlides flush failed', error);
+  // Run the actual persist. `keepalive` lets the write complete even while the
+  // tab/app is being backgrounded or closed (used by the flush path). On failure
+  // we re-mark dirty so the next edit / flush retries instead of silently
+  // dropping the edit.
+  const persistNow = useCallback(
+    async (keepalive: boolean) => {
+      if (saveSlidesTimerRef.current) {
+        clearTimeout(saveSlidesTimerRef.current);
+        saveSlidesTimerRef.current = null;
       }
-    })();
-  }, [projectId]);
+      if (!dirtyRef.current) return;
+      dirtyRef.current = false;
+      const result = await persistCarouselSlides(projectId, slidesRef.current, { keepalive });
+      if (!result.ok) {
+        dirtyRef.current = true;
+        console.error('[carousel] autosave failed', result.error);
+      }
+    },
+    [projectId],
+  );
+
+  // Flush synchronously-ish on leave (unmount / hidden / pagehide). keepalive
+  // guarantees the browser finishes the request after the page starts unloading.
+  const flushSlidesNow = useCallback(() => {
+    void persistNow(true);
+  }, [persistNow]);
 
   useEffect(() => {
     if (skipPersistRef.current) {
       skipPersistRef.current = false;
+      prevSlidesRef.current = slides;
       return;
     }
     dirtyRef.current = true;
+    // Heavy edits (a background photo set/removed, background TYPE change, or a
+    // slide add/delete/reorder) persist IMMEDIATELY rather than after the
+    // debounce, so a fast close right after picking a background never loses it
+    // (a base64 photo is too big for the keepalive flush, so it must be written
+    // while the app is still alive). Text edits stay debounced.
+    const prev = prevSlidesRef.current;
+    const next = slides;
+    let heavy = prev.length !== next.length;
+    if (!heavy) {
+      for (let i = 0; i < next.length; i++) {
+        const a = prev[i];
+        const b = next[i];
+        if (
+          !a ||
+          a.id !== b.id ||
+          a.backgroundType !== b.backgroundType ||
+          a.backgroundImageBase64 !== b.backgroundImageBase64 ||
+          a.backgroundImageUrl !== b.backgroundImageUrl
+        ) {
+          heavy = true;
+          break;
+        }
+      }
+    }
+    prevSlidesRef.current = next;
+
     if (saveSlidesTimerRef.current) {
       clearTimeout(saveSlidesTimerRef.current);
     }
-    saveSlidesTimerRef.current = setTimeout(() => {
-      const currentSlides = slidesRef.current;
-      dirtyRef.current = false;
-      void (async () => {
-        try {
-          await saveCarouselSlides(projectId, currentSlides);
-        } catch (error) {
-          dirtyRef.current = true;
-          console.error('saveCarouselSlides failed', error);
-        }
-      })();
-    }, 1400);
+    saveSlidesTimerRef.current = setTimeout(
+      () => {
+        void persistNow(false);
+      },
+      heavy ? 0 : 900,
+    );
     return () => {
       if (saveSlidesTimerRef.current) {
         clearTimeout(saveSlidesTimerRef.current);
       }
     };
-  }, [projectId, slides]);
+  }, [persistNow, slides]);
 
   // Guarantee the pending debounced save is flushed when the user leaves the
   // editor: client-side navigation (unmount), backgrounding the app / switching
@@ -370,9 +396,11 @@ export default function CarouselBuilder({
     };
     document.addEventListener('visibilitychange', handleVisibility);
     window.addEventListener('pagehide', flushSlidesNow);
+    window.addEventListener('beforeunload', flushSlidesNow);
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility);
       window.removeEventListener('pagehide', flushSlidesNow);
+      window.removeEventListener('beforeunload', flushSlidesNow);
       flushSlidesNow();
     };
   }, [flushSlidesNow]);
@@ -562,7 +590,16 @@ export default function CarouselBuilder({
     try {
       // Flush the persisted slide model first so the server-side export renders
       // from exactly what the editor holds (no race with the debounced autosave).
-      await saveCarouselSlides(projectId, snapshot);
+      // This goes through the save route (no 1 MB Server Action cap) — the old
+      // server action threw "Body exceeded 1 MB limit" on any slide carrying a
+      // base64 photo, which surfaced as the generic export failure (86d39dw6b).
+      dirtyRef.current = false;
+      const saved = await persistCarouselSlides(projectId, snapshot);
+      if (!saved.ok) {
+        throw new CarouselGenerationError(
+          saved.error ? `Save before export failed: ${saved.error}` : 'Save before export failed',
+        );
+      }
       for (let i = 0; i < snapshot.length; i++) {
         currentSlideIndex = i;
         setGeneratingIndex(i);
@@ -652,28 +689,24 @@ export default function CarouselBuilder({
     }
   };
 
-  // Bulk download. Each file is delivered via a fresh Blob object URL that is
-  // appended to the DOM, clicked, then revoked — so the Nth export downloads as
-  // reliably as the 1st (no "saved but no file" until restart). Feedback is a
-  // DOWNLOAD message, never the autosave "слайди збережено" — a save toast must
-  // never stand in for a real download.
+  // Bulk download as a SINGLE ZIP. Firing N separate downloads from one tap is
+  // suppressed by mobile browsers (only the first arrives) — one .zip is one
+  // download, reliable everywhere. Feedback is a DOWNLOAD message, never the
+  // autosave "слайди збережено" — a save toast must never mask a missing file.
   const downloadAll = () => {
-    let delivered = 0;
-    let stagger = 0;
-    for (let i = 0; i < slides.length; i++) {
-      const b64 = slides[i].generatedImageBase64;
-      if (!b64) continue;
-      const idx = i;
-      window.setTimeout(() => {
-        downloadPngFromBase64(b64, `ruta-carousel-${idx + 1}.png`);
-      }, stagger);
-      delivered += 1;
-      stagger += 250;
-    }
-    if (delivered === 0) return;
-    clearBadge('carousel');
-    setHasDownloaded(true);
-    showToast(`Завантажується ${delivered} слайд(ів)…`);
+    void (async () => {
+      const delivered = await downloadSlidesZip(
+        slides.map((s) => s.generatedImageBase64),
+        'ruta-carousel.zip',
+      );
+      if (delivered === 0) {
+        showToast('Немає згенерованих слайдів для завантаження');
+        return;
+      }
+      clearBadge('carousel');
+      setHasDownloaded(true);
+      showToast(`Завантажується архів із ${delivered} слайд(ів)…`);
+    })();
   };
 
   const downloadOne = (i: number) => {

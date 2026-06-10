@@ -1,6 +1,7 @@
 'use client';
 
 import { Check, Circle, Download, Loader2 } from 'lucide-react';
+import BlurScrim from '@/components/BlurScrim';
 
 /**
  * Full-screen blur overlay that hosts carousel export OFF the editor canvas.
@@ -42,15 +43,15 @@ export default function CarouselExportOverlay({
   const readyCount = generatedImages.filter(Boolean).length;
 
   return (
-    <div
-      className="fixed inset-0 z-[400] flex items-center justify-center p-4"
+    <BlurScrim
+      zIndex={400}
+      blurPx={14}
+      tint="rgba(24,24,27,0.32)"
+      className="flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"
       aria-label="Експорт каруселі"
     >
-      {/* Blur the whole editor behind the overlay (no route change, no hard modal). */}
-      <div className="absolute inset-0 bg-zinc-900/30 backdrop-blur-md" />
-
       <div className="relative z-[401] flex max-h-[88vh] w-full max-w-md flex-col overflow-hidden rounded-3xl border border-[color:var(--border)] bg-white shadow-2xl">
         <div className="flex items-center justify-between gap-2 border-b border-[color:var(--border)] px-5 py-4">
           <h2 className="font-display text-lg font-semibold text-zinc-900">
@@ -147,6 +148,6 @@ export default function CarouselExportOverlay({
           </button>
         </div>
       </div>
-    </div>
+    </BlurScrim>
   );
 }

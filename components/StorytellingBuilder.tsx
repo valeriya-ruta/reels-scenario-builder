@@ -204,9 +204,10 @@ export default function StorytellingBuilder({ project: initialProject, initialCo
         <div className="mb-3">
           <Link
             href="/storytellings"
-            className="inline-flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-700"
+            aria-label="До всіх сторітелінгів"
+            className="-ml-1 inline-flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
           >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
             <span>До всіх сторітелінгів</span>

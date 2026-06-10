@@ -82,10 +82,11 @@ export default function ProjectHeader({
         <div className="mb-3">
           <Link
             href={backHref}
-            className="inline-flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-700"
+            aria-label={backLabel}
+            className="-ml-1 inline-flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
           >
             <svg
-              className="h-4 w-4"
+              className="h-5 w-5"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"

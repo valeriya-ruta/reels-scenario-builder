@@ -38,6 +38,7 @@ import {
   Loader2,
   Move,
   Plus,
+  Trash2,
   X,
 } from 'lucide-react';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '@/lib/carousel/carouselConstants';
@@ -78,6 +79,11 @@ function SortableThumb({
   /** When true (mobile), the whole tile is the long-press drag handle so the
    *  strip can scroll freely; reorder starts on long-press, tap selects. */
   wholeTileDrag = false,
+  /** Mobile delete affordance: a trash icon overlaid after a second tap on the
+   *  already-selected slide; tapping it deletes immediately (no confirm). */
+  showTrash = false,
+  canDelete = true,
+  onDelete,
 }: {
   slide: Slide;
   index: number;
@@ -89,14 +95,25 @@ function SortableThumb({
   brandFont: BrandFont;
   totalSlides: number;
   wholeTileDrag?: boolean;
+  showTrash?: boolean;
+  canDelete?: boolean;
+  onDelete?: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: slide.id,
   });
+  const dragTransform = CSS.Transform.toString(transform);
+  // Long-press "lift": raise + slightly scale the grabbed thumbnail so it reads
+  // as floating. Composed after the dnd-kit translate so reorder still tracks.
+  const liftTransform = isDragging
+    ? `${dragTransform ? `${dragTransform} ` : ''}translateY(-8px) scale(1.06)`
+    : dragTransform || undefined;
   const style: CSSProperties = {
-    transform: CSS.Transform.toString(transform),
+    transform: liftTransform,
     transition,
-    opacity: isDragging ? 0.85 : 1,
+    opacity: isDragging ? 0.95 : 1,
+    zIndex: isDragging ? 30 : undefined,
+    boxShadow: isDragging ? '0 10px 24px rgba(0,0,0,0.28)' : undefined,
     // Allow horizontal panning of the strip; long-press still initiates drag.
     touchAction: wholeTileDrag ? 'pan-x' : undefined,
   };
@@ -105,14 +122,21 @@ function SortableThumb({
   const thumbScale = Math.min(thumbWidth / CANVAS_WIDTH, thumbHeight / CANVAS_HEIGHT);
 
   return (
-    <button
+    <div
       ref={setNodeRef}
       style={{ ...style, width: thumbWidth, height: thumbHeight }}
-      type="button"
-      onClick={onSelect}
       {...(wholeTileDrag ? { ...attributes, ...listeners } : {})}
+      role="button"
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
       className={[
-        'relative shrink-0 overflow-hidden rounded-md transition-[border-color] duration-150 ease-out',
+        'relative shrink-0 cursor-pointer overflow-hidden rounded-md transition-[border-color,transform] duration-150 ease-out',
         active ? 'ring-2' : 'ring-1 ring-black/10',
       ].join(' ')}
       aria-label={`Слайд ${index + 1}`}
@@ -132,6 +156,20 @@ function SortableThumb({
         className="pointer-events-none absolute inset-0"
         style={{ borderRadius: 6, border: active ? `2px solid ${accentColor}` : '1px solid rgba(0,0,0,0.08)' }}
       />
+      {showTrash && canDelete ? (
+        <button
+          type="button"
+          aria-label={`Видалити слайд ${index + 1}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete?.();
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+          className="absolute inset-0 z-[2] flex items-center justify-center rounded-md bg-black/55 text-white"
+        >
+          <Trash2 className="h-5 w-5" />
+        </button>
+      ) : null}
       {wholeTileDrag ? null : (
         <span
           {...attributes}
@@ -141,7 +179,7 @@ function SortableThumb({
           <GripVertical className="h-3 w-3" />
         </span>
       )}
-    </button>
+    </div>
   );
 }
 
@@ -227,6 +265,10 @@ export default function CarouselEditorLayout({
     activeSlide.backgroundType === 'image' &&
     Boolean(activeSlide.backgroundImageUrl || activeSlide.backgroundImageBase64);
   const [mobilePositioningMode, setMobilePositioningMode] = useState(false);
+  // Mobile strip delete: id of the slide currently showing its trash overlay
+  // (revealed by a 2nd tap on the already-selected slide). Cleared on selecting
+  // another slide, deleting, or interacting elsewhere.
+  const [trashForId, setTrashForId] = useState<string | null>(null);
   const [showPhotoHint, setShowPhotoHint] = useState(false);
   const [isPhotoInteracting, setIsPhotoInteracting] = useState(false);
   const [livePhotoTransform, setLivePhotoTransform] = useState<BgPhotoTransform | null>(null);
@@ -338,6 +380,7 @@ export default function CarouselEditorLayout({
       const next = activeIndex + delta;
       if (next < 0 || next >= slides.length) return;
       setMobilePositioningMode(false);
+      setTrashForId(null);
       setIsPhotoInteracting(false);
       setLivePhotoTransform(null);
       dragRef.current = null;
@@ -534,6 +577,7 @@ export default function CarouselEditorLayout({
   );
 
   const handleEditorTabIconClick = useCallback((t: EditorTab) => {
+    setTrashForId(null);
     setTab((prev) => (prev === t ? null : t));
   }, []);
 
@@ -967,6 +1011,7 @@ export default function CarouselEditorLayout({
                   ref={previewAreaRef}
                   className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-4 md:hidden"
               onClick={(e) => {
+                if (trashForId) setTrashForId(null);
                 if (!mobilePositioningMode) return;
                 if (e.target === e.currentTarget) {
                   finishPhotoInteraction();
@@ -1133,24 +1178,40 @@ export default function CarouselEditorLayout({
                         active={slide.id === activeSlideId}
                         accentColor={accentColor}
                         onSelect={() => {
-                          setMobilePositioningMode(false);
-                          setIsPhotoInteracting(false);
-                          setLivePhotoTransform(null);
-                          dragRef.current = null;
-                          pinchRef.current = null;
-                          activePointersRef.current.clear();
-                          setActiveSlideId(slide.id);
+                          if (slide.id !== activeSlideId) {
+                            // Tap an unselected slide → select it.
+                            setMobilePositioningMode(false);
+                            setIsPhotoInteracting(false);
+                            setLivePhotoTransform(null);
+                            dragRef.current = null;
+                            pinchRef.current = null;
+                            activePointersRef.current.clear();
+                            setTrashForId(null);
+                            setActiveSlideId(slide.id);
+                          } else if (slides.length > 1) {
+                            // 2nd tap on the already-selected slide → reveal trash.
+                            setTrashForId(slide.id);
+                          }
                         }}
                         size="sm"
                         brandSettings={brandSettings}
                         brandFont={brandFont}
                         totalSlides={slides.length}
                         wholeTileDrag
+                        showTrash={trashForId === slide.id}
+                        canDelete={slides.length > 1}
+                        onDelete={() => {
+                          setTrashForId(null);
+                          removeSlide(slide.id);
+                        }}
                       />
                     ))}
                     <button
                       type="button"
-                      onClick={addSlide}
+                      onClick={() => {
+                        setTrashForId(null);
+                        addSlide();
+                      }}
                       className="flex h-[58px] w-[46px] shrink-0 items-center justify-center rounded-md border border-dashed border-[color:var(--border)] text-zinc-500 hover:bg-[color:var(--surface)]"
                       aria-label="Додати слайд"
                     >

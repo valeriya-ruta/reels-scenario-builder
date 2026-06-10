@@ -66,6 +66,17 @@ test.describe('Braindump overlay', () => {
     );
   });
 
+  test('opens over a single full-screen blur scrim (no per-element blur)', async ({ page }) => {
+    await openBraindump(page);
+    const scrim = page.getByTestId('blur-scrim');
+    await expect(scrim).toBeVisible();
+    // One uniform backdrop-blur layer — not filters on individual UI elements.
+    const filter = await scrim.evaluate(
+      (el) => getComputedStyle(el).backdropFilter || (getComputedStyle(el) as unknown as { webkitBackdropFilter: string }).webkitBackdropFilter,
+    );
+    expect(filter).toContain('blur');
+  });
+
   test('voice: recording transcribes via the API and text shows in gray (State A)', async ({
     page,
   }) => {

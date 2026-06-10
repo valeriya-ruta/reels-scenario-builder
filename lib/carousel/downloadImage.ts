@@ -7,6 +7,8 @@
 // that is appended to the DOM, clicked, then removed and revoked makes the Nth
 // download behave like the 1st and prevents blob-URL / DOM-node leaks.
 
+import JSZip from 'jszip';
+
 function base64ToBlob(base64: string, mime: string): Blob {
   const byteChars = atob(base64);
   const len = byteChars.length;
@@ -38,4 +40,46 @@ export function downloadPngFromBase64(base64: string, filename: string): boolean
     window.setTimeout(() => URL.revokeObjectURL(url), 15_000);
   });
   return true;
+}
+
+function triggerBlobDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.rel = 'noopener';
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  requestAnimationFrame(() => {
+    a.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 15_000);
+  });
+}
+
+/**
+ * Bundle every slide PNG into ONE .zip and download that single file.
+ *
+ * "Download all" used to fire N separate programmatic downloads from a single
+ * tap. Mobile browsers (and Safari) suppress every download after the first, so
+ * only slide 1 arrived (86d39e144). A single ZIP is one download → reliable
+ * cross-browser. Returns the number of slides bundled (0 = nothing to download).
+ */
+export async function downloadSlidesZip(
+  slides: (string | null)[],
+  zipName = 'ruta-carousel.zip',
+): Promise<number> {
+  if (typeof document === 'undefined') return 0;
+  const zip = new JSZip();
+  let count = 0;
+  for (let i = 0; i < slides.length; i++) {
+    const b64 = slides[i];
+    if (!b64) continue;
+    zip.file(`ruta-carousel-${i + 1}.png`, b64, { base64: true });
+    count += 1;
+  }
+  if (count === 0) return 0;
+  const blob = await zip.generateAsync({ type: 'blob' });
+  triggerBlobDownload(blob, zipName);
+  return count;
 }

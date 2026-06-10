@@ -140,6 +140,15 @@ export function normalizeSlidesFromDb(raw: unknown): Slide[] {
       overlayType = null;
     }
 
+    // A slide whose stored backgroundType is `image` but which carries no actual
+    // photo is NOT a photo slide — it renders BLACK in the export (the photo
+    // renderer fills the dark fallback) and makes the Фон panel open on the
+    // wrong tab. Coerce it back to `color` so existing carousels never export
+    // black and the panel reflects reality. (Task 86d36eg7t.)
+    const effectiveBackgroundType =
+      backgroundType === 'image' && !hasPhoto ? 'color' : backgroundType;
+    const effectiveOverlayType = effectiveBackgroundType === 'image' ? overlayType : null;
+
     const legacyKind = isSlideKind(o.slideKind) ? o.slideKind : undefined;
     const slideType =
       isSlideType(o.slideType)
@@ -174,7 +183,7 @@ export function normalizeSlidesFromDb(raw: unknown): Slide[] {
       icon: o.icon === null || typeof o.icon === 'string' ? o.icon : base.icon,
       placement: isPlacement(o.placement) ? o.placement : base.placement,
       textAlign: isTextAlign(o.textAlign) ? o.textAlign : base.textAlign,
-      backgroundType,
+      backgroundType: effectiveBackgroundType,
       hasBackgroundOverride: o.hasBackgroundOverride === true,
       backgroundColor: typeof o.backgroundColor === 'string' ? o.backgroundColor : base.backgroundColor,
       gradientMidColor:
@@ -193,7 +202,7 @@ export function normalizeSlidesFromDb(raw: unknown): Slide[] {
         o.generatedImageBase64 === null || typeof o.generatedImageBase64 === 'string'
           ? o.generatedImageBase64
           : null,
-      overlayType,
+      overlayType: effectiveOverlayType,
       overlayColor: typeof o.overlayColor === 'string' ? o.overlayColor : base.overlayColor,
       overlayOpacity:
         typeof o.overlayOpacity === 'number' && Number.isFinite(o.overlayOpacity)
@@ -228,7 +237,20 @@ export function normalizeSlidesFromDb(raw: unknown): Slide[] {
   });
 }
 
-/** Strip generated previews before persisting (PNG base64 is large). */
+/** Strip generated previews before persisting (PNG base64 is large), and coerce
+ *  a photo-typed slide with no actual photo back to `color` so it can never be
+ *  persisted in a state that exports black / opens the Фон panel on the wrong
+ *  tab. (Tasks 86d36eg7t / 86d36eg0h — single source of truth.) */
 export function slidesForDatabase(slides: Slide[]): Slide[] {
-  return slides.map((s) => ({ ...s, generatedImageBase64: null }));
+  return slides.map((s) => {
+    const hasPhoto =
+      s.backgroundType === 'image' &&
+      Boolean(
+        (s.backgroundImageUrl && s.backgroundImageUrl.trim().length > 0) ||
+          (s.backgroundImageBase64 && s.backgroundImageBase64.trim().length > 0),
+      );
+    const backgroundType = s.backgroundType === 'image' && !hasPhoto ? 'color' : s.backgroundType;
+    const overlayType = backgroundType === 'image' ? s.overlayType : null;
+    return { ...s, backgroundType, overlayType, generatedImageBase64: null };
+  });
 }

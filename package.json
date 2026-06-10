@@ -32,6 +32,7 @@
     "canvas-confetti": "^1.9.4",
     "color-name-list": "^14.36.0",
     "didyoumean2": "^7.0.4",
+    "jszip": "^3.10.1",
     "lucide-react": "^1.8.0",
     "nanoid": "^5.0.9",
     "next": "16.1.6",
