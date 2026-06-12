@@ -269,6 +269,18 @@ export default function CarouselEditorLayout({
   // (revealed by a 2nd tap on the already-selected slide). Cleared on selecting
   // another slide, deleting, or interacting elsewhere.
   const [trashForId, setTrashForId] = useState<string | null>(null);
+  // One-time discoverability hint for the mobile strip: the reorder gesture
+  // (long-press a thumb, then drag LEFT/RIGHT along the strip) isn't obvious, so
+  // surface it once until the user reorders for the first time. Task 86d3a1a8b.
+  const [showReorderHint, setShowReorderHint] = useState(false);
+  const dismissReorderHint = useCallback(() => {
+    setShowReorderHint(false);
+    try {
+      localStorage.setItem('ruta_reorder_hint_seen', '1');
+    } catch {
+      /* ignore storage failures */
+    }
+  }, []);
   const [showPhotoHint, setShowPhotoHint] = useState(false);
   const [isPhotoInteracting, setIsPhotoInteracting] = useState(false);
   const [livePhotoTransform, setLivePhotoTransform] = useState<BgPhotoTransform | null>(null);
@@ -601,6 +613,16 @@ export default function CarouselEditorLayout({
       // Ignore localStorage edge cases.
     }
   }, [isDesktopLayout]);
+
+  // Surface the reorder hint once on mobile when there are ≥2 slides to reorder.
+  useEffect(() => {
+    if (isDesktopLayout || slides.length < 2) return;
+    try {
+      if (!localStorage.getItem('ruta_reorder_hint_seen')) setShowReorderHint(true);
+    } catch {
+      /* ignore storage failures */
+    }
+  }, [isDesktopLayout, slides.length]);
 
   const tabPanelContent = activeSlide ? (
     tab === 'type' ? (
@@ -1162,9 +1184,19 @@ export default function CarouselEditorLayout({
               className="border-t"
               style={{ borderTopWidth: 0.5, borderTopColor: 'rgba(0,0,0,0.06)' }}
             >
+              {showReorderHint ? (
+                <div
+                  data-testid="reorder-hint"
+                  className="flex items-center justify-center gap-1.5 px-3 pt-1.5 text-[11px] font-medium text-zinc-400"
+                >
+                  <GripVertical className="h-3 w-3" />
+                  Затисни й перетягни слайд ліворуч/праворуч, щоб змінити порядок
+                </div>
+              ) : null}
               <DndContext
                 sensors={sensors}
                 collisionDetection={closestCenter}
+                onDragStart={dismissReorderHint}
                 onDragEnd={onDragEnd}
                 modifiers={dragModifiers}
               >

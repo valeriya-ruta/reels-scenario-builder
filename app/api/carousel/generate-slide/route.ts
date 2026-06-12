@@ -211,19 +211,21 @@ export async function POST(req: Request) {
     // photo renderer agrees with CarouselSlidePreview (same as the template path).
     const tSize = slide.titleSize ?? 'L';
     const bSize = slide.bodySize ?? 'M';
+    // Per-type px must stay 1:1 with the editor (CarouselSlidePreview) — bumped
+    // alongside it for the global text-size increase (86d3a19zx).
     const legacyTitlePx =
       slideType === 'cover'
         ? tSize === 'M'
-          ? 70
-          : 88
+          ? 78
+          : 96
         : slideType === 'final'
           ? tSize === 'M'
             ? 58
             : 72
           : tSize === 'M'
-            ? 52
-            : 64;
-    const legacyBodyPx = slideType === 'cover' ? 26 : bSize === 'S' ? 27 : 34;
+            ? 58
+            : 72;
+    const legacyBodyPx = slideType === 'cover' ? 30 : bSize === 'S' ? 30 : 38;
     const isContentSlide =
       slideType === 'slide' && (slide.layoutPreset === 'text' || !slide.layoutPreset);
     const legacyLabel = isContentSlide ? slide.optionalLabel ?? null : null;

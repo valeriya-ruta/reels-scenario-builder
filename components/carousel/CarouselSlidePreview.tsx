@@ -362,11 +362,11 @@ export default function CarouselSlidePreview({
           }}
         >
             <div className="absolute bottom-[100px] left-[88px] right-[88px] top-[140px] flex flex-col justify-end">
-              <div className={`${textAlignClass} text-[88px] font-bold leading-[1.0] whitespace-pre-wrap`} style={{ fontFamily: titleFont, color: resolvedTitleColor, fontSize: (slide.titleSize ?? 'L') === 'M' ? 70 : 88 }}>
+              <div className={`${textAlignClass} font-bold leading-[1.0] whitespace-pre-wrap`} style={{ fontFamily: titleFont, color: resolvedTitleColor, fontSize: (slide.titleSize ?? 'L') === 'M' ? 78 : 96 }}>
                 <AccentRuns text={slide.title} accentStyle={brand.accentStyle} accentColor={accent} />
               </div>
               {showCoverSubline ? (
-                <p className="mt-6 text-[28px] leading-snug" style={{ fontFamily: bodyFont, color: resolvedBodyColor }}>
+                <p className="mt-6 leading-snug" style={{ fontFamily: bodyFont, color: resolvedBodyColor, fontSize: 32 }}>
                   {bodyLine ? (
                     <AccentRuns text={slide.body} accentStyle={brand.accentStyle} accentColor={accent} />
                   ) : (
@@ -393,11 +393,11 @@ export default function CarouselSlidePreview({
             DEFAULT_DARK,
             <>
               <div className="mb-5 h-1.5 w-12 rounded-sm" style={{ backgroundColor: accent }} />
-              <div className="text-[88px] font-bold leading-[0.98] whitespace-pre-wrap" style={{ color: resolvedTitleColor, fontFamily: titleFont, fontWeight: brandFont.titleWeight, fontSize: (slide.titleSize ?? 'L') === 'M' ? 70 : 88 }}>
+              <div className="font-bold leading-[0.98] whitespace-pre-wrap" style={{ color: resolvedTitleColor, fontFamily: titleFont, fontWeight: brandFont.titleWeight, fontSize: (slide.titleSize ?? 'L') === 'M' ? 78 : 96 }}>
                 <AccentRuns text={slide.title} accentStyle={brand.accentStyle} accentColor={accent} />
               </div>
               {showCoverSubline ? (
-                <p className="mt-3 text-[26px]" style={{ color: resolvedBodyColor, fontFamily: bodyFont }}>
+                <p className="mt-3" style={{ color: resolvedBodyColor, fontFamily: bodyFont, fontSize: 30 }}>
                   {bodyLine ? (
                     <AccentRuns text={slide.body} accentStyle={brand.accentStyle} accentColor={accent} />
                   ) : (
@@ -530,10 +530,10 @@ export default function CarouselSlidePreview({
                 {pill}
               </span>
             ) : null}
-            <p className="mt-8 text-[64px] font-bold leading-[1.05] whitespace-pre-wrap" style={{ fontFamily: titleFont, color: resolvedTitleColor, fontSize: (slide.titleSize ?? 'L') === 'M' ? 52 : 64 }}>
+            <p className="mt-8 font-bold leading-[1.05] whitespace-pre-wrap" style={{ fontFamily: titleFont, color: resolvedTitleColor, fontSize: (slide.titleSize ?? 'L') === 'M' ? 58 : 72 }}>
               <AccentRuns text={slide.title} accentStyle={brand.accentStyle} accentColor={accent} />
             </p>
-            <p className="mt-6 text-[34px] leading-relaxed whitespace-pre-wrap" style={{ fontFamily: bodyFont, color: resolvedBodyColor, fontSize: (slide.bodySize ?? 'M') === 'S' ? 27 : 34 }}>
+            <p className="mt-6 leading-relaxed whitespace-pre-wrap" style={{ fontFamily: bodyFont, color: resolvedBodyColor, fontSize: (slide.bodySize ?? 'M') === 'S' ? 30 : 38 }}>
               {stripAccentMarkers(slide.body)}
             </p>
           </>,
