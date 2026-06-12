@@ -95,7 +95,8 @@ export default function CarouselExportOverlay({
           ) : (
             <>
               <p className="mb-3 text-sm text-zinc-600">
-                Натисни «Завантажити всі», або завантаж окремий слайд з його плитки.
+                «Зберегти всі» збереже кожен слайд окремим фото в галерею. Або
+                збережи окремий слайд кнопкою на його плитці.
               </p>
               <div className="grid grid-cols-3 gap-2">
                 {generatedImages.map((b64, i) =>
@@ -136,7 +137,7 @@ export default function CarouselExportOverlay({
               className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[color:var(--accent)] px-4 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-50"
             >
               <Download className="h-4 w-4" />
-              Завантажити всі{readyCount ? ` (${readyCount})` : ''}
+              Зберегти всі{readyCount ? ` (${readyCount})` : ''}
             </button>
           )}
           <button
