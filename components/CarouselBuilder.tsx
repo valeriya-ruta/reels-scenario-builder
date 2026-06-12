@@ -22,7 +22,7 @@ import Link from 'next/link';
 import { resolveBrandFont } from '@/lib/brandFonts';
 import CarouselEditorLayout from '@/components/carousel/CarouselEditorLayout';
 import CarouselExportOverlay from '@/components/carousel/CarouselExportOverlay';
-import { downloadPngFromBase64, downloadSlidesZip } from '@/lib/carousel/downloadImage';
+import { saveSlideImage, saveSlidesIndividually } from '@/lib/carousel/downloadImage';
 import {
   DEFAULT_BG_PHOTO_TRANSFORM,
   getBgPhotoTransform,
@@ -689,34 +689,46 @@ export default function CarouselBuilder({
     }
   };
 
-  // Bulk download as a SINGLE ZIP. Firing N separate downloads from one tap is
-  // suppressed by mobile browsers (only the first arrives) — one .zip is one
-  // download, reliable everywhere. Feedback is a DOWNLOAD message, never the
-  // autosave "слайди збережено" — a save toast must never mask a missing file.
+  // Bulk save — each slide as its OWN file straight to the gallery, in order
+  // (no ZIP: unpacking an archive on a phone is the pain Ruta asked us to drop).
+  // Every call recreates its own download/share resources, so the 2nd, 3rd, Nth
+  // export behaves exactly like the 1st with no app restart. Feedback is always
+  // a real SAVE/DOWNLOAD message — never a success toast that masks a no-op.
   const downloadAll = () => {
     void (async () => {
-      const delivered = await downloadSlidesZip(
+      const { count, outcome } = await saveSlidesIndividually(
         slides.map((s) => s.generatedImageBase64),
-        'ruta-carousel.zip',
+        { baseName: 'ruta-carousel', shareTitle: projectName },
       );
-      if (delivered === 0) {
-        showToast('Немає згенерованих слайдів для завантаження');
+      if (outcome === 'failed' || count === 0) {
+        showToast('Немає згенерованих слайдів для збереження');
         return;
       }
       clearBadge('carousel');
       setHasDownloaded(true);
-      showToast(`Завантажується архів із ${delivered} слайд(ів)…`);
+      showToast(
+        outcome === 'shared'
+          ? `Зберігаємо ${count} слайд(ів) у галерею…`
+          : `Завантажується ${count} слайд(ів)…`,
+      );
     })();
   };
 
   const downloadOne = (i: number) => {
     const b64 = slides[i].generatedImageBase64;
     if (!b64) return;
-    const ok = downloadPngFromBase64(b64, `ruta-carousel-${i + 1}.png`);
-    if (!ok) return;
-    clearBadge('carousel');
-    setHasDownloaded(true);
-    showToast(`Слайд ${i + 1} завантажується…`);
+    void (async () => {
+      const outcome = await saveSlideImage(b64, `ruta-carousel-${i + 1}.png`, projectName);
+      if (outcome === 'failed') {
+        showToast('Не вдалося зберегти слайд');
+        return;
+      }
+      clearBadge('carousel');
+      setHasDownloaded(true);
+      showToast(
+        outcome === 'shared' ? `Зберігаємо слайд ${i + 1}…` : `Слайд ${i + 1} завантажується…`,
+      );
+    })();
   };
 
   // Export now lives in a blur overlay off the editor canvas. Opening it always

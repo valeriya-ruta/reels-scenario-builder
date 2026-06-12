@@ -1,15 +1,28 @@
-// Robust client-side image download.
+// Client-side slide-image saving for the carousel export.
 //
-// The previous implementation built a data: URL on a detached <a> and clicked
-// it, then showed a "saved" toast regardless of whether anything was delivered.
-// After repeated exports, browsers (Chrome especially) silently stopped
-// delivering those downloads until an app restart. Using a Blob + object URL
-// that is appended to the DOM, clicked, then removed and revoked makes the Nth
-// download behave like the 1st and prevents blob-URL / DOM-node leaks.
+// Goals (mobile-first — web.ruta.media is used on a phone):
+//  - Save each slide as its OWN image file straight to the gallery / camera
+//    roll. Never a ZIP — unpacking an archive on a phone is the exact pain Ruta
+//    asked us to remove.
+//  - Bulk "save all" and single-slide save are two separate, independently
+//    reliable actions.
+//  - CRUCIALLY: every save recreates its own resources (Blob, object URL,
+//    <a> element, File) and tears them down afterwards. The previous build
+//    created an object URL / anchor once, revoked it, then reused the dead
+//    reference — so the 1st export delivered a file and every later one silently
+//    no-op'd (success toast, no file) until the app was restarted. Recreating
+//    per call makes the Nth save behave exactly like the 1st.
 
-import JSZip from 'jszip';
+export type SaveOutcome = 'shared' | 'downloaded' | 'failed';
 
-function base64ToBlob(base64: string, mime: string): Blob {
+export type SaveResult = { count: number; outcome: SaveOutcome };
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+// Fresh Blob built from the base64 PNG on every call — no shared/cached buffer.
+function base64ToBlob(base64: string, mime = 'image/png'): Blob {
   const byteChars = atob(base64);
   const len = byteChars.length;
   const bytes = new Uint8Array(len);
@@ -17,32 +30,37 @@ function base64ToBlob(base64: string, mime: string): Blob {
   return new Blob([bytes], { type: mime });
 }
 
-/**
- * Triggers a real file download for a base64 PNG. Returns true if the click was
- * dispatched (so callers can show "downloaded" feedback only on a real attempt,
- * never a "saved" toast that masks a no-op).
- */
-export function downloadPngFromBase64(base64: string, filename: string): boolean {
-  if (typeof document === 'undefined' || !base64) return false;
-  const url = URL.createObjectURL(base64ToBlob(base64, 'image/png'));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.rel = 'noopener';
-  a.style.display = 'none';
-  document.body.appendChild(a);
-  a.click();
-  // Remove the node on the next frame and revoke the object URL once the browser
-  // has had time to begin the download — clean per-download teardown so repeated
-  // exports never accumulate stale URLs/nodes.
-  requestAnimationFrame(() => {
-    a.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 15_000);
-  });
-  return true;
+function base64ToFile(base64: string, filename: string, mime = 'image/png'): File {
+  return new File([base64ToBlob(base64, mime)], filename, { type: mime });
 }
 
-function triggerBlobDownload(blob: Blob, filename: string): void {
+type ShareNavigator = Navigator & {
+  canShare?: (data?: ShareData) => boolean;
+  share?: (data?: ShareData) => Promise<void>;
+};
+
+// Can this device hand image files to the native share sheet? On iOS/Android
+// that sheet is the only reliable route into Photos / Gallery, and it survives
+// repeat use (unlike back-to-back programmatic <a download> clicks, which mobile
+// browsers suppress after the first).
+function canShareFiles(files: File[]): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const nav = navigator as ShareNavigator;
+  if (typeof nav.canShare !== 'function' || typeof nav.share !== 'function') return false;
+  try {
+    return nav.canShare({ files });
+  } catch {
+    return false;
+  }
+}
+
+function isAbort(e: unknown): boolean {
+  return e instanceof Error && e.name === 'AbortError';
+}
+
+// Direct file download via a freshly-created, immediately-torn-down anchor.
+// Used as the desktop / no-share-support fallback.
+function anchorDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -51,6 +69,8 @@ function triggerBlobDownload(blob: Blob, filename: string): void {
   a.style.display = 'none';
   document.body.appendChild(a);
   a.click();
+  // Tear down on the next frame; revoke the URL once the download has had time
+  // to start. Nothing is reused between calls.
   requestAnimationFrame(() => {
     a.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 15_000);
@@ -58,28 +78,77 @@ function triggerBlobDownload(blob: Blob, filename: string): void {
 }
 
 /**
- * Bundle every slide PNG into ONE .zip and download that single file.
- *
- * "Download all" used to fire N separate programmatic downloads from a single
- * tap. Mobile browsers (and Safari) suppress every download after the first, so
- * only slide 1 arrived (86d39e144). A single ZIP is one download → reliable
- * cross-browser. Returns the number of slides bundled (0 = nothing to download).
+ * Save ONE slide. Prefers the native share sheet on mobile (the user taps
+ * "Зберегти зображення" → it lands in the camera roll); falls back to a direct
+ * file download where file-sharing isn't available (most desktops).
  */
-export async function downloadSlidesZip(
-  slides: (string | null)[],
-  zipName = 'ruta-carousel.zip',
-): Promise<number> {
-  if (typeof document === 'undefined') return 0;
-  const zip = new JSZip();
-  let count = 0;
-  for (let i = 0; i < slides.length; i++) {
-    const b64 = slides[i];
-    if (!b64) continue;
-    zip.file(`ruta-carousel-${i + 1}.png`, b64, { base64: true });
-    count += 1;
+export async function saveSlideImage(
+  base64: string | null,
+  filename: string,
+  shareTitle?: string,
+): Promise<SaveOutcome> {
+  if (typeof document === 'undefined' || !base64) return 'failed';
+  const file = base64ToFile(base64, filename);
+  if (canShareFiles([file])) {
+    try {
+      await (navigator as ShareNavigator).share!({ files: [file], title: shareTitle });
+      return 'shared';
+    } catch (e) {
+      // User dismissed the sheet — respect that, don't also force a download.
+      if (isAbort(e)) return 'shared';
+      // Any other share failure → fall through to a direct download.
+    }
   }
-  if (count === 0) return 0;
-  const blob = await zip.generateAsync({ type: 'blob' });
-  triggerBlobDownload(blob, zipName);
-  return count;
+  anchorDownload(base64ToBlob(base64), filename);
+  return 'downloaded';
+}
+
+/**
+ * Bulk save — each slide as its OWN file, in order, never a ZIP.
+ *
+ * On platforms that support multi-file sharing we hand the whole set to the
+ * native sheet in a single gesture: the user saves them all to the gallery,
+ * individually and in order. This is the reliable mobile path — N back-to-back
+ * programmatic downloads get suppressed after the first on iOS/Android. Where
+ * file-sharing isn't available we fall back to sequential per-file downloads,
+ * each with freshly-created resources and spaced apart so the browser delivers
+ * every one rather than dropping the later ones.
+ */
+export async function saveSlidesIndividually(
+  slides: (string | null)[],
+  opts: {
+    baseName?: string;
+    onProgress?: (done: number, total: number) => void;
+    shareTitle?: string;
+  } = {},
+): Promise<SaveResult> {
+  if (typeof document === 'undefined') return { count: 0, outcome: 'failed' };
+  const baseName = opts.baseName ?? 'ruta-carousel';
+  const present = slides
+    .map((b64, i) => ({ b64, i }))
+    .filter((s): s is { b64: string; i: number } => Boolean(s.b64));
+  const total = present.length;
+  if (total === 0) return { count: 0, outcome: 'failed' };
+
+  const files = present.map(({ b64, i }) => base64ToFile(b64, `${baseName}-${i + 1}.png`));
+
+  if (canShareFiles(files)) {
+    try {
+      await (navigator as ShareNavigator).share!({ files, title: opts.shareTitle });
+      opts.onProgress?.(total, total);
+      return { count: total, outcome: 'shared' };
+    } catch (e) {
+      if (isAbort(e)) return { count: total, outcome: 'shared' };
+      // Otherwise fall through to sequential downloads below.
+    }
+  }
+
+  let done = 0;
+  for (const { b64, i } of present) {
+    anchorDownload(base64ToBlob(b64), `${baseName}-${i + 1}.png`);
+    done += 1;
+    opts.onProgress?.(done, total);
+    if (done < total) await delay(350);
+  }
+  return { count: done, outcome: 'downloaded' };
 }
