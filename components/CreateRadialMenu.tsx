@@ -5,9 +5,14 @@ import { Video, LayoutGrid, Circle, Lightbulb, type LucideIcon } from 'lucide-re
 import BlurScrim from '@/components/BlurScrim';
 
 /**
- * Create radial menu — fans 4 option bubbles into a thumb-friendly QUARTER-CIRCLE
- * arc anchored on the Create FAB, sweeping 12 o'clock (up) → 3 o'clock (right).
- * All options share the same blue treatment (no per-option colour). Task 86d39dnam.
+ * Create radial menu — fans 4 option bubbles into a thumb-friendly arc anchored
+ * on the Create FAB. The arc is a BALANCED half-fan centred on 12 o'clock (up):
+ * items spread symmetrically to the LEFT and RIGHT of straight-up rather than a
+ * hard quarter-circle pinned to the right corner, so the cluster sits toward
+ * screen-centre and is easy to read. Each option's text label sits ABOVE its
+ * button so the thumb (arriving from the FAB below) never covers it.
+ * All options share the same blue treatment (no per-option colour).
+ * Tasks 86d39dnam (animation/glide) + 86d3a1a33 (centre/labels-above/both-sides).
  *
  * Interaction is owned by the parent (BottomNav): this component is presentational.
  * It renders the dimming blur backdrop + bubbles for the FAB anchor and the
@@ -34,10 +39,17 @@ export const RADIAL_OPTIONS: RadialOption[] = [
 ];
 
 const ACCENT = '#004BA8';
-const RADIUS = 148;
-/** Even fan across the top-right quadrant: 12 o'clock (90°) → ~3 o'clock (6°).
- *  Order top → right: Рілс (top) → Карусель → Сторіс → Ідеї (rightmost). */
-const ANGLES_DEG = [90, 62, 34, 6];
+const RADIUS = 150;
+/** Balanced half-fan symmetric about 12 o'clock (90° = straight up): the four
+ *  items spread to the LEFT and RIGHT of centre instead of leaning into the
+ *  right corner. Read left → right: Рілс → Карусель → Сторіс → Ідеї. */
+const ANGLES_DEG = [145, 108, 72, 35];
+/** Horizontal half-width of a bubble button (w-16 = 64px) — used to centre the
+ *  icon on its computed arc point. */
+const BUBBLE_HALF_W = 32;
+/** Distance from a button's top edge down to its ICON centre (label block +
+ *  gap + half the 56px icon), so labels-above don't push the icon off the arc. */
+const ICON_CENTER_OFFSET = 54;
 /** ms the close/collapse animation runs before the menu unmounts. */
 const CLOSE_MS = 200;
 
@@ -146,6 +158,11 @@ export default function CreateRadialMenu({
               style={{
                 left: pos.x,
                 top: pos.y,
+                // Centre the ICON on the computed arc point: pull left by half the
+                // button width and up by the label-block + half-icon offset so the
+                // label sits above without shoving the icon off the arc.
+                marginLeft: -BUBBLE_HALF_W,
+                marginTop: -ICON_CENTER_OFFSET,
                 ['--from-x' as string]: `${pos.fromX}px`,
                 ['--from-y' as string]: `${pos.fromY}px`,
                 animation: closing
@@ -153,6 +170,11 @@ export default function CreateRadialMenu({
                   : `radial-bubble-pop 320ms cubic-bezier(0.34, 1.56, 0.64, 1) ${i * 45}ms both`,
               }}
             >
+              {/* Label ABOVE the icon — the thumb arrives from the FAB below, so a
+                  label under the button would be covered by the finger. */}
+              <span className="rounded-md bg-white/95 px-1.5 py-0.5 text-[11px] font-semibold text-zinc-800 shadow-sm">
+                {opt.label}
+              </span>
               <span
                 className="flex h-14 w-14 items-center justify-center rounded-full text-white"
                 style={{
@@ -166,9 +188,6 @@ export default function CreateRadialMenu({
                 }}
               >
                 <Icon className="h-6 w-6" strokeWidth={2} />
-              </span>
-              <span className="rounded-md bg-white/95 px-1.5 py-0.5 text-[11px] font-semibold text-zinc-800 shadow-sm">
-                {opt.label}
               </span>
             </button>
           );

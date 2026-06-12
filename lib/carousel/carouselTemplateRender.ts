@@ -365,7 +365,7 @@ async function renderCover(
     );
     const contentW = CANVAS_SIZE - PADDING * 2;
     const align: 'left' | 'center' | 'right' = 'center';
-    const titleSizePx = (input.titleSize ?? 'L') === 'M' ? 70 : 88;
+    const titleSizePx = (input.titleSize ?? 'L') === 'M' ? 78 : 96;
     const titleLineH = Math.round(titleSizePx * 0.98);
     const titleWords = segmentsToWords(parseAccentSpans(title));
     const titleLines = layoutWords(
@@ -381,7 +381,7 @@ async function renderCover(
     const bodyLine = stripAccentMarkers(body).trim();
     const fallbackSub = (label || designNote || '').trim();
     const hasSub = Boolean(bodyLine || fallbackSub);
-    const subSizePx = 26;
+    const subSizePx = 30;
     const subLineH = Math.round(subSizePx * 1.3);
     const subLines = hasSub
       ? Math.max(1, wrapPlain(ctx, bodyLine || fallbackSub, contentW, subSizePx, fonts.sans).length)
@@ -513,7 +513,7 @@ async function renderContent(
     const contentW = CANVAS_SIZE - PADDING * 2;
     const lab = (label || '').trim();
 
-    const titleSizePx = (input.titleSize ?? 'L') === 'M' ? 52 : 64;
+    const titleSizePx = (input.titleSize ?? 'L') === 'M' ? 58 : 72;
     const titleLineH = Math.round(titleSizePx * 1.05);
     const titleLines = layoutWords(
       (t) => {
@@ -526,7 +526,7 @@ async function renderContent(
     const titleBlockH = title.trim() ? Math.max(1, titleLines.length) * titleLineH : 0;
 
     const bodyText = stripAccentMarkers(body);
-    const bodySizePx = (input.bodySize ?? 'M') === 'S' ? 27 : 34;
+    const bodySizePx = (input.bodySize ?? 'M') === 'S' ? 30 : 38;
     const bodyLineH = Math.round(bodySizePx * 1.625); // leading-relaxed
     const bodyLines = wrapPlain(ctx, bodyText, contentW, bodySizePx, fonts.sans);
     const bodyBlockH = bodyLines.length * bodyLineH;
