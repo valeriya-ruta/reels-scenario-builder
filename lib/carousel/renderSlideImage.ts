@@ -225,6 +225,10 @@ export async function renderSlideImagePng(input: GenerateSlideInput): Promise<Bu
   const accentColor = input.accent_color?.trim() || '#e05c40';
   const accentStyle = normalizeAccentStyle(input.accent_style);
 
+  // Kept so the frost plate can re-draw a blurred copy of the photo behind the
+  // text (the editor's `backdrop-filter: blur`).
+  let bgImageForFrost: Awaited<ReturnType<typeof loadImage>> | null = null;
+
   if (input.background_type === 'color' || input.background_type === 'gradient') {
     const { r, g, b } = hexToRgb(input.background_color || '#1A1A2E');
     ctx.fillStyle = `rgb(${r},${g},${b})`;
@@ -311,6 +315,7 @@ export async function renderSlideImagePng(input: GenerateSlideInput): Promise<Bu
         .png()
         .toBuffer();
       const img = await loadImage(transformed);
+      bgImageForFrost = img;
       ctx.drawImage(img, 0, 0, CANVAS_W, CANVAS_H);
     } else {
       ctx.fillStyle = '#1A1A2E';
@@ -392,6 +397,20 @@ export async function renderSlideImagePng(input: GenerateSlideInput): Promise<Bu
     const panelW = CANVAS_W - 2 * (MARGIN_X - panelPadX);
     const panelY = textBlockY - panelPadY;
     const panelH = textBlockHeight + panelPadY * 2;
+
+    // Frost: re-draw the photo blurred, clipped to the plate, so the underlying
+    // image is frosted exactly like the editor's `backdrop-filter: blur(12px)`.
+    // Backdrop: just the solid translucent plate (the editor draws no blur).
+    if (input.overlay_type === 'frost' && bgImageForFrost) {
+      ctx.save();
+      roundRect(ctx, panelX, panelY, panelW, panelH, 28);
+      ctx.clip();
+      ctx.filter = 'blur(16px)';
+      ctx.drawImage(bgImageForFrost, 0, 0, CANVAS_W, CANVAS_H);
+      ctx.filter = 'none';
+      ctx.restore();
+    }
+
     ctx.fillStyle = rgba(oc, panelAlpha);
     roundRect(ctx, panelX, panelY, panelW, panelH, 28);
     ctx.fill();
