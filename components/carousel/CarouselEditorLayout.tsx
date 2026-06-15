@@ -15,6 +15,7 @@ import {
   DndContext,
   KeyboardSensor,
   PointerSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -550,11 +551,20 @@ export default function CarouselEditorLayout({
 
   const mobilePreviewScale = previewScale;
 
-  // Mobile: long-press to pick up a thumbnail (a horizontal swipe that moves
-  // before the delay aborts the drag, so the strip scrolls instead). Tap selects.
+  // Mobile: long-press ANYWHERE on a thumbnail picks it up (the whole tile is the
+  // activator — see wholeTileDrag). TouchSensor first (most reliable long-press on
+  // touch devices), PointerSensor as fallback. The `delay` is what distinguishes
+  // a reorder from a scroll: a quick horizontal swipe moves past `tolerance`
+  // before the delay elapses, so the strip scrolls; a deliberate hold lifts. The
+  // tolerance is generous (16px) so natural finger jitter while pressing the tile
+  // BODY doesn't abort the lift — fixing "reorder only grabs from the top"
+  // (task 86d3btm30). Tap still selects; second tap reveals delete.
   const mobileSensors = useSensors(
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 200, tolerance: 16 },
+    }),
     useSensor(PointerSensor, {
-      activationConstraint: { delay: 220, tolerance: 8 },
+      activationConstraint: { delay: 200, tolerance: 16 },
     }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
