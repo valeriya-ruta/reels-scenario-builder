@@ -152,3 +152,65 @@ export async function saveSlidesIndividually(
   }
   return { count: done, outcome: 'downloaded' };
 }
+
+/**
+ * Primary "Завантажити всі" — save each slide as a real FILE on the device,
+ * never the share sheet. Sequential per-file downloads with freshly-created
+ * resources, spaced apart so the browser delivers every one.
+ *
+ * Platform note: a web app cannot write straight into the iOS/Android Photos
+ * gallery — that's an OS sandbox limit. Downloads land in the device's
+ * Downloads (which the gallery/Files app indexes); the real "into Photos" route
+ * is the Share button → "Save image". On desktop these save straight to disk.
+ */
+export async function saveSlidesToFiles(
+  slides: (string | null)[],
+  opts: { baseName?: string; onProgress?: (done: number, total: number) => void } = {},
+): Promise<SaveResult> {
+  if (typeof document === 'undefined') return { count: 0, outcome: 'failed' };
+  const baseName = opts.baseName ?? 'ruta-carousel';
+  const present = slides
+    .map((b64, i) => ({ b64, i }))
+    .filter((s): s is { b64: string; i: number } => Boolean(s.b64));
+  const total = present.length;
+  if (total === 0) return { count: 0, outcome: 'failed' };
+
+  let done = 0;
+  for (const { b64, i } of present) {
+    anchorDownload(base64ToBlob(b64), `${baseName}-${i + 1}.png`);
+    done += 1;
+    opts.onProgress?.(done, total);
+    if (done < total) await delay(400);
+  }
+  return { count: done, outcome: 'downloaded' };
+}
+
+export type ShareOutcome = 'shared' | 'unsupported' | 'failed';
+
+/**
+ * Secondary "Поділитися" — hand the whole set to the native share sheet
+ * (Telegram / WhatsApp / Save image …) in a single gesture. Returns
+ * `unsupported` where the device can't share files so the caller can hint.
+ */
+export async function shareSlides(
+  slides: (string | null)[],
+  opts: { baseName?: string; shareTitle?: string } = {},
+): Promise<{ count: number; outcome: ShareOutcome }> {
+  if (typeof document === 'undefined') return { count: 0, outcome: 'unsupported' };
+  const baseName = opts.baseName ?? 'ruta-carousel';
+  const present = slides
+    .map((b64, i) => ({ b64, i }))
+    .filter((s): s is { b64: string; i: number } => Boolean(s.b64));
+  const total = present.length;
+  if (total === 0) return { count: 0, outcome: 'failed' };
+
+  const files = present.map(({ b64, i }) => base64ToFile(b64, `${baseName}-${i + 1}.png`));
+  if (!canShareFiles(files)) return { count: 0, outcome: 'unsupported' };
+  try {
+    await (navigator as ShareNavigator).share!({ files, title: opts.shareTitle });
+    return { count: total, outcome: 'shared' };
+  } catch (e) {
+    if (isAbort(e)) return { count: total, outcome: 'shared' };
+    return { count: 0, outcome: 'failed' };
+  }
+}

@@ -22,7 +22,7 @@ import Link from 'next/link';
 import { resolveBrandFont } from '@/lib/brandFonts';
 import CarouselEditorLayout from '@/components/carousel/CarouselEditorLayout';
 import CarouselExportOverlay from '@/components/carousel/CarouselExportOverlay';
-import { saveSlideImage, saveSlidesIndividually } from '@/lib/carousel/downloadImage';
+import { saveSlideImage, saveSlidesToFiles, shareSlides } from '@/lib/carousel/downloadImage';
 import {
   DEFAULT_BG_PHOTO_TRANSFORM,
   getBgPhotoTransform,
@@ -700,11 +700,13 @@ export default function CarouselBuilder({
   // Every call recreates its own download/share resources, so the 2nd, 3rd, Nth
   // export behaves exactly like the 1st with no app restart. Feedback is always
   // a real SAVE/DOWNLOAD message — never a success toast that masks a no-op.
+  // Primary "Завантажити всі" — save real files to the device (never the share
+  // sheet). The Share button below is the explicit route to the OS sheet.
   const downloadAll = () => {
     void (async () => {
-      const { count, outcome } = await saveSlidesIndividually(
+      const { count, outcome } = await saveSlidesToFiles(
         slides.map((s) => s.generatedImageBase64),
-        { baseName: 'ruta-carousel', shareTitle: projectName },
+        { baseName: 'ruta-carousel' },
       );
       if (outcome === 'failed' || count === 0) {
         showToast('Немає згенерованих слайдів для збереження');
@@ -712,11 +714,28 @@ export default function CarouselBuilder({
       }
       clearBadge('carousel');
       setHasDownloaded(true);
-      showToast(
-        outcome === 'shared'
-          ? `Зберігаємо ${count} слайд(ів) у галерею…`
-          : `Завантажується ${count} слайд(ів)…`,
+      showToast(`Завантажується ${count} слайд(ів)…`);
+    })();
+  };
+
+  // Secondary "Поділитися" — the native share sheet (Telegram / Save image …).
+  const shareAll = () => {
+    void (async () => {
+      const { count, outcome } = await shareSlides(
+        slides.map((s) => s.generatedImageBase64),
+        { baseName: 'ruta-carousel', shareTitle: projectName },
       );
+      if (outcome === 'unsupported') {
+        showToast('Поширення недоступне на цьому пристрої — скористайся «Завантажити всі»');
+        return;
+      }
+      if (outcome === 'failed' || count === 0) {
+        showToast('Не вдалося поділитися слайдами');
+        return;
+      }
+      clearBadge('carousel');
+      setHasDownloaded(true);
+      showToast(`Відкриваємо меню поширення для ${count} слайд(ів)…`);
     })();
   };
 
@@ -925,6 +944,7 @@ export default function CarouselBuilder({
         doneMask={doneMask}
         errorMessage={validationError}
         onDownloadAll={downloadAll}
+        onShareAll={shareAll}
         onDownloadOne={downloadOne}
         onClose={closeExport}
       />
