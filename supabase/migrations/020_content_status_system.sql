@@ -35,18 +35,30 @@ alter table public.ideas
   -- Promoting it sets content_type to the chosen type (see auto-save task).
   add column if not exists content_type text not null default 'idea';
 
--- 2. Validity: status must be one of the 7 (drop-then-add keeps this re-runnable).
-do $$
-declare
-  t text;
-begin
-  foreach t in array array['carousel_projects','projects','storytelling_projects','ideas'] loop
-    execute format('alter table public.%I drop constraint if exists %I', t, t || '_status_chk');
-    execute format(
-      'alter table public.%I add constraint %I check (status in (''idea'',''script'',''film'',''design'',''edit'',''ready'',''published''))',
-      t, t || '_status_chk');
-  end loop;
-end $$;
+-- 2. Track validity enforced at the DB: each content table only accepts the
+-- statuses on ITS type's track (drop-then-add keeps this re-runnable). `ideas`
+-- is the flexible one — a braindump idea (content_type='idea') sits at 'idea',
+-- and once promoted (content_type=reel/carousel/story) it carries that track's
+-- statuses, so it allows all 7.
+alter table public.carousel_projects drop constraint if exists carousel_projects_status_chk;
+alter table public.carousel_projects
+  add constraint carousel_projects_status_chk
+  check (status in ('idea','script','design','ready','published'));
+
+alter table public.projects drop constraint if exists projects_status_chk;
+alter table public.projects
+  add constraint projects_status_chk
+  check (status in ('idea','script','film','edit','ready','published'));
+
+alter table public.storytelling_projects drop constraint if exists storytelling_projects_status_chk;
+alter table public.storytelling_projects
+  add constraint storytelling_projects_status_chk
+  check (status in ('idea','film','published'));
+
+alter table public.ideas drop constraint if exists ideas_status_chk;
+alter table public.ideas
+  add constraint ideas_status_chk
+  check (status in ('idea','script','film','design','edit','ready','published'));
 
 alter table public.ideas drop constraint if exists ideas_content_type_chk;
 alter table public.ideas
