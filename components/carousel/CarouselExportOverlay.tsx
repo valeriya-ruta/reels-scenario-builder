@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, Circle, Download, Loader2 } from 'lucide-react';
+import { Check, Circle, Download, Loader2, Share2 } from 'lucide-react';
 import BlurScrim from '@/components/BlurScrim';
 
 /**
@@ -22,6 +22,7 @@ export default function CarouselExportOverlay({
   doneMask,
   errorMessage,
   onDownloadAll,
+  onShareAll,
   onDownloadOne,
   onClose,
 }: {
@@ -33,7 +34,10 @@ export default function CarouselExportOverlay({
   generatingIndex: number;
   doneMask: boolean[];
   errorMessage: string | null;
+  /** Primary: save real files to the device. */
   onDownloadAll: () => void;
+  /** Secondary: open the OS share sheet (Telegram / Save image …). */
+  onShareAll: () => void;
   onDownloadOne: (index: number) => void;
   onClose: () => void;
 }) {
@@ -95,8 +99,9 @@ export default function CarouselExportOverlay({
           ) : (
             <>
               <p className="mb-3 text-sm text-zinc-600">
-                «Зберегти всі» збереже кожен слайд окремим фото в галерею. Або
-                збережи окремий слайд кнопкою на його плитці.
+                <b>«Завантажити всі»</b> збереже кожен слайд окремим файлом на
+                пристрій. <b>«Поділитися»</b> відкриє меню (Telegram, «Зберегти
+                зображення» тощо). Або збережи окремий слайд кнопкою на плитці.
               </p>
               <div className="grid grid-cols-3 gap-2">
                 {generatedImages.map((b64, i) =>
@@ -130,15 +135,29 @@ export default function CarouselExportOverlay({
 
         <div className="flex flex-col gap-2 border-t border-[color:var(--border)] px-5 py-4">
           {!errorMessage && (
-            <button
-              type="button"
-              onClick={onDownloadAll}
-              disabled={isGenerating || readyCount === 0}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[color:var(--accent)] px-4 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-50"
-            >
-              <Download className="h-4 w-4" />
-              Зберегти всі{readyCount ? ` (${readyCount})` : ''}
-            </button>
+            <div className="flex gap-2">
+              {/* Primary (dominant): save real files to the device. */}
+              <button
+                type="button"
+                onClick={onDownloadAll}
+                disabled={isGenerating || readyCount === 0}
+                className="inline-flex flex-[7] items-center justify-center gap-2 rounded-xl bg-[#004BA8] px-4 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-50"
+              >
+                <Download className="h-4 w-4" />
+                Завантажити всі{readyCount ? ` (${readyCount})` : ''}
+              </button>
+              {/* Secondary: OS share sheet (keeps the wanted share-to-Telegram flow). */}
+              <button
+                type="button"
+                onClick={onShareAll}
+                disabled={isGenerating || readyCount === 0}
+                aria-label="Поділитися"
+                className="inline-flex flex-[3] items-center justify-center gap-1.5 rounded-xl border border-[color:var(--border)] bg-white px-3 py-3 text-sm font-medium text-zinc-800 transition hover:bg-[color:var(--surface)] disabled:opacity-50"
+              >
+                <Share2 className="h-4 w-4" />
+                Поділитися
+              </button>
+            </div>
           )}
           <button
             type="button"
