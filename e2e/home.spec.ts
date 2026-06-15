@@ -53,11 +53,11 @@ test.describe('Home (Головна)', () => {
     await expect(list.or(empty)).toBeVisible();
 
     if (await list.isVisible()) {
-      const rows = page.getByTestId('recent-row');
+      const rows = list.locator('[data-content-id]');
       const count = await rows.count();
       expect(count).toBeGreaterThan(0);
-      // Subline carries "{Тип} · {time}" — assert a type label is present.
-      await expect(rows.first()).toContainText(/Рілс|Карусель|Сторіс/);
+      // Subline carries the status label + type chip — assert a type label is present.
+      await expect(rows.first()).toContainText(/Рілс|Карусель|Сторіс|Ідея/);
     }
   });
 
@@ -97,9 +97,9 @@ test.describe('Home (Головна)', () => {
     await expect(firstLesson).toHaveAttribute('href', /youtube\.com/);
   });
 
-  test('"Усі" link navigates', async ({ page }) => {
+  test('"Усі" link navigates to the full content library', async ({ page }) => {
     await page.goto('/dashboard');
     await page.getByTestId('recents-all-link').click();
-    await expect(page).toHaveURL(/\/projects/);
+    await expect(page).toHaveURL(/\/content/);
   });
 });
