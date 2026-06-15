@@ -233,34 +233,9 @@ function markerFor(
   }
 }
 
-function drawWatermark(
-  ctx: SKRSContext2D,
-  handle: string,
-  domain: string,
-  vibe: 'bold' | 'refined',
-  lightText: boolean,
-  fonts: CarouselFonts,
-) {
-  const h = handle.trim() || '';
-  const d = domain.trim() || '';
-  const size = vibe === 'refined' ? 22 : 24;
-  ctx.font = `${size}px ${fonts.sans}`;
-  ctx.fillStyle = lightText ? 'rgba(255,255,255,0.55)' : 'rgba(150,150,150,0.6)';
-  ctx.textBaseline = 'alphabetic';
-  if (vibe === 'refined') {
-    if (h) ctx.fillText(h, PADDING, WATERMARK_Y);
-    if (d) {
-      const tw = ctx.measureText(d).width;
-      ctx.fillText(d, CANVAS_SIZE - PADDING - tw, WATERMARK_Y);
-    }
-  } else {
-    const t = h || d || '';
-    if (t) {
-      const tw = ctx.measureText(t).width;
-      ctx.fillText(t, (CANVAS_SIZE - tw) / 2, WATERMARK_Y);
-    }
-  }
-}
+// Watermark removed entirely from exported slides (task 86d3btkv8). The
+// drawWatermark helper and all its call sites were deleted so no "@handle" /
+// "web.ruta.media" text can ever render on an exported slide again.
 
 // Pagination intentionally removed from slide renders.
 
@@ -488,7 +463,7 @@ async function renderContent(
   refined: boolean,
   fonts: CarouselFonts,
 ): Promise<void> {
-  const { brand, title, body, label, handle, domain } = input;
+  const { brand, title, body, label } = input;
   const accent = brand.accentColor || DEFAULT_ACCENT;
   const titleColor = input.titleColor || '#000000';
   const bodyColor = input.bodyColor || '#000000';
@@ -498,7 +473,6 @@ async function renderContent(
     ctx.strokeStyle = '#e8e3dc';
     ctx.lineWidth = 0.5;
     ctx.strokeRect(0.25, 0.25, CANVAS_SIZE - 0.5, CANVAS_HEIGHT - 0.5);
-    drawWatermark(ctx, handle, domain, 'refined', false, fonts);
     const [l1, l2] = splitEditorialTitle(stripAccentMarkers(title));
     let y = WATERMARK_Y + 48;
     ctx.font = `22px ${fonts.sansBold}`;
@@ -530,7 +504,6 @@ async function renderContent(
     const placement = input.placement ?? 'center';
     ctx.fillStyle = input.backgroundColor || DEFAULT_BG;
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
-    drawWatermark(ctx, handle, domain, 'bold', isDarkColor(input.backgroundColor || DEFAULT_BG), fonts);
     const contentW = CANVAS_SIZE - PADDING * 2;
     const lab = (label || '').trim();
 
@@ -632,13 +605,12 @@ async function renderStatement(
   refined: boolean,
   fonts: CarouselFonts,
 ): Promise<void> {
-  const { brand, title, handle, domain } = input;
+  const { brand, title } = input;
   const accent = brand.accentColor || DEFAULT_ACCENT;
   const titleColor = input.titleColor || '#000000';
   if (refined) {
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
-    drawWatermark(ctx, handle, domain, 'refined', true, fonts);
     let y = CANVAS_HEIGHT / 2 - 80;
     ctx.font = `100px ${fonts.serifItalic}`;
     y = drawPlainParagraph(
@@ -681,7 +653,6 @@ async function renderStatement(
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
     const statementTextColor = titleColor;
     const align = input.textAlign ?? 'left';
-    drawWatermark(ctx, handle, domain, 'bold', isDarkColor(quoteBg), fonts);
     const isTestimonial = input.layoutPreset === 'testimonial';
     const sizePx = isTestimonial
       ? (input.titleSize ?? 'L') === 'M'
@@ -734,7 +705,7 @@ async function renderBullets(
   refined: boolean,
   fonts: CarouselFonts,
 ): Promise<void> {
-  const { brand, title, body, items, handle, domain } = input;
+  const { brand, title, body, items } = input;
   const accent = brand.accentColor || DEFAULT_ACCENT;
   const titleColor = input.titleColor || '#000000';
   const bodyColor = input.bodyColor || '#000000';
@@ -742,7 +713,6 @@ async function renderBullets(
   if (refined) {
     ctx.fillStyle = DEFAULT_CREAM;
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
-    drawWatermark(ctx, handle, domain, 'refined', false, fonts);
     let y = PADDING + 40;
     y = drawPlainParagraph(
       ctx,
@@ -788,7 +758,6 @@ async function renderBullets(
     const placement = input.placement ?? 'center';
     ctx.fillStyle = input.backgroundColor || DEFAULT_BG;
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
-    drawWatermark(ctx, handle, domain, 'bold', isDarkColor(input.backgroundColor || DEFAULT_BG), fonts);
     const contentW = CANVAS_SIZE - PADDING * 2;
 
     // Editor shows 3 placeholder items when the list is empty.
@@ -886,7 +855,7 @@ async function renderCta(
   refined: boolean,
   fonts: CarouselFonts,
 ): Promise<void> {
-  const { brand, title, body, label, handle, domain } = input;
+  const { brand, title, body, label } = input;
   const accent = brand.accentColor || DEFAULT_ACCENT;
   const titleColor = input.titleColor || '#000000';
   if (refined) {
@@ -895,7 +864,6 @@ async function renderCta(
     ctx.strokeStyle = '#e8e3dc';
     ctx.lineWidth = 0.5;
     ctx.strokeRect(0.25, 0.25, CANVAS_SIZE - 0.5, CANVAS_HEIGHT - 0.5);
-    drawWatermark(ctx, handle, domain, 'refined', false, fonts);
     let y = WATERMARK_Y + 56;
     ctx.font = `22px ${fonts.sansBold}`;
     ctx.fillStyle = '#bbbbbb';
@@ -958,7 +926,6 @@ async function renderCta(
     const align = input.textAlign ?? 'left';
     ctx.fillStyle = input.backgroundColor || DEFAULT_DARK;
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
-    drawWatermark(ctx, handle, domain, 'bold', isDarkColor(input.backgroundColor || DEFAULT_DARK), fonts);
     const { r, g, b } = hexToRgb(accent);
     const contentW = CANVAS_SIZE - PADDING * 2;
 
