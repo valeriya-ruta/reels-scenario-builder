@@ -325,7 +325,13 @@ export default function CarouselBuilder({
       dirtyRef.current = false;
       const result = await persistCarouselSlides(projectId, slidesRef.current, { keepalive });
       if (!result.ok) {
+        // Re-mark dirty so the next edit / flush retries instead of dropping work.
         dirtyRef.current = true;
+        if (result.tooLarge && !keepalive) {
+          // Make the failure visible rather than silently losing the edit.
+          setToast('Не вдалося зберегти: зображення завеликі. Зменш або заміни фото.');
+          window.setTimeout(() => setToast(null), 4000);
+        }
         console.error('[carousel] autosave failed', result.error);
       }
     },

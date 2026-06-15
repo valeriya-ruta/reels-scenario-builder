@@ -1,6 +1,7 @@
 import type { Slide } from '@/lib/carouselTypes';
+import { approxJsonBytes, MAX_SAVE_PAYLOAD_BYTES } from '@/lib/carousel/bgImage';
 
-export type PersistResult = { ok: boolean; error?: string };
+export type PersistResult = { ok: boolean; error?: string; tooLarge?: boolean };
 
 /**
  * Persist carousel slides via the autosave Route Handler (single source of
@@ -18,11 +19,19 @@ export async function persistCarouselSlides(
   slides: Slide[],
   opts: { keepalive?: boolean } = {},
 ): Promise<PersistResult> {
+  const payload = { project_id: projectId, slides };
+  // Refuse oversized payloads before they hit Vercel's ~4.5 MB body cap (which
+  // returns HTTP 413 and used to silently drop the edit). With photos now
+  // compressed on upload this should never trip in normal use; if it does, the
+  // caller surfaces a clear message instead of losing work.
+  if (approxJsonBytes(payload) > MAX_SAVE_PAYLOAD_BYTES) {
+    return { ok: false, tooLarge: true, error: 'PAYLOAD_TOO_LARGE' };
+  }
   try {
     const res = await fetch('/api/carousel/save', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ project_id: projectId, slides }),
+      body: JSON.stringify(payload),
       keepalive: opts.keepalive,
     });
     if (!res.ok) {

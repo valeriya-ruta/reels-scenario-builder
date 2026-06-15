@@ -12,11 +12,7 @@ import {
   zoomAroundPoint,
 } from '@/lib/carousel/bgPhotoTransform';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '@/lib/carousel/carouselConstants';
-
-function stripDataUrlBase64(data: string): string {
-  const m = data.match(/^data:[^;]+;base64,(.+)$/);
-  return m ? m[1] : data;
-}
+import { bgPhotoDataUrl, compressImageFileToBase64 } from '@/lib/carousel/bgImage';
 
 const OVERLAY_CHIPS: { id: SlideOverlayType; label: string }[] = [
   { id: 'full', label: 'Повний' },
@@ -48,7 +44,7 @@ export default function CarouselEditorBackgroundTab({
   const transform = getBgPhotoTransform(slide.bgPhotoTransform);
   const zoomPercent = Math.round(transform.scale * 100);
   const photoSrc = slide.backgroundImageBase64
-    ? `data:image/png;base64,${slide.backgroundImageBase64}`
+    ? bgPhotoDataUrl(slide.backgroundImageBase64)
     : slide.backgroundImageUrl || '';
 
   const setOverlayPatch = (patch: Partial<Slide>) => {
@@ -223,22 +219,21 @@ export default function CarouselEditorBackgroundTab({
                 onChange={(e) => {
                   const f = e.target.files?.[0];
                   if (!f) return;
-                  const r = new FileReader();
-                  r.onload = () => {
-                    const data = String(r.result ?? '');
-                    onChange(slide.id, {
-                      backgroundImageBase64: stripDataUrlBase64(data),
-                      hasBackgroundOverride: true,
-                      backgroundImageUrl: null,
-                      overlayType: slide.overlayType ?? 'full',
-                      bgPhotoTransform: DEFAULT_BG_PHOTO_TRANSFORM,
-                    });
-                    onPhotoUploadSuccess?.();
-                  };
-                  r.onerror = () => {
-                    onPhotoUploadError?.();
-                  };
-                  r.readAsDataURL(f);
+                  void (async () => {
+                    try {
+                      const base64 = await compressImageFileToBase64(f);
+                      onChange(slide.id, {
+                        backgroundImageBase64: base64,
+                        hasBackgroundOverride: true,
+                        backgroundImageUrl: null,
+                        overlayType: slide.overlayType ?? 'full',
+                        bgPhotoTransform: DEFAULT_BG_PHOTO_TRANSFORM,
+                      });
+                      onPhotoUploadSuccess?.();
+                    } catch {
+                      onPhotoUploadError?.();
+                    }
+                  })();
                 }}
               />
             </label>
@@ -249,7 +244,7 @@ export default function CarouselEditorBackgroundTab({
                 <img
                   src={
                     slide.backgroundImageBase64
-                      ? `data:image/png;base64,${slide.backgroundImageBase64}`
+                      ? bgPhotoDataUrl(slide.backgroundImageBase64)
                       : slide.backgroundImageUrl || ''
                   }
                   alt=""
@@ -291,21 +286,20 @@ export default function CarouselEditorBackgroundTab({
                     onChange={(e) => {
                       const f = e.target.files?.[0];
                       if (!f) return;
-                      const r = new FileReader();
-                      r.onload = () => {
-                        const data = String(r.result ?? '');
-                        onChange(slide.id, {
-                          backgroundImageBase64: stripDataUrlBase64(data),
-                          hasBackgroundOverride: true,
-                          backgroundImageUrl: null,
-                          bgPhotoTransform: DEFAULT_BG_PHOTO_TRANSFORM,
-                        });
-                        onPhotoUploadSuccess?.();
-                      };
-                      r.onerror = () => {
-                        onPhotoUploadError?.();
-                      };
-                      r.readAsDataURL(f);
+                      void (async () => {
+                        try {
+                          const base64 = await compressImageFileToBase64(f);
+                          onChange(slide.id, {
+                            backgroundImageBase64: base64,
+                            hasBackgroundOverride: true,
+                            backgroundImageUrl: null,
+                            bgPhotoTransform: DEFAULT_BG_PHOTO_TRANSFORM,
+                          });
+                          onPhotoUploadSuccess?.();
+                        } catch {
+                          onPhotoUploadError?.();
+                        }
+                      })();
                     }}
                   />
                 </label>
