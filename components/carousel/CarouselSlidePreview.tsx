@@ -26,6 +26,7 @@ import {
   toCssTranslatePx,
   type BgPhotoTransform,
 } from '@/lib/carousel/bgPhotoTransform';
+import { bgPhotoDataUrl } from '@/lib/carousel/bgImage';
 
 function AccentRuns({
   text,
@@ -156,7 +157,7 @@ function ImageBackground({
 }) {
   const gradient = `radial-gradient(circle at 30% 30%, ${slide.backgroundColor || fallbackHex} 0%, ${slide.gradientMidColor || slide.overlayColor || fallbackHex} 60%, ${slide.gradientEndColor || '#111111'} 100%)`;
   const url = slide.backgroundImageBase64
-    ? `data:image/png;base64,${slide.backgroundImageBase64}`
+    ? bgPhotoDataUrl(slide.backgroundImageBase64)
     : slide.backgroundImageUrl || '';
   const transform = getBgPhotoTransform(transformOverride ?? slide.bgPhotoTransform);
   const translate = toCssTranslatePx(transform, CANVAS_WIDTH, CANVAS_HEIGHT);
