@@ -1,6 +1,6 @@
 'use client';
 
-import { type CSSProperties } from 'react';
+import { useRef, type CSSProperties } from 'react';
 import StatusRing from '@/components/content/StatusRing';
 import { formatRelativeTime } from '@/lib/content/relativeTime';
 import {
@@ -57,6 +57,24 @@ export default function ContentRow({
   onRingClick?: (piece: ContentRowPiece) => void;
   onLongPress?: (piece: ContentRowPiece) => void;
 }) {
+  // Long-press (≥450ms) opens the status picker; a normal tap opens the piece.
+  // We suppress the click that follows a fired long-press so it doesn't also open.
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressed = useRef(false);
+  const startPress = () => {
+    longPressed.current = false;
+    if (!onLongPress) return;
+    pressTimer.current = setTimeout(() => {
+      longPressed.current = true;
+      onLongPress(piece);
+    }, 450);
+  };
+  const cancelPress = () => {
+    if (pressTimer.current) {
+      clearTimeout(pressTimer.current);
+      pressTimer.current = null;
+    }
+  };
   return (
     <div
       className="flex w-full items-center gap-3 border-b border-[color:var(--border)] px-1 py-3 text-left"
@@ -78,7 +96,17 @@ export default function ContentRow({
       {/* Name + subline — tapping opens the piece; long-press opens the picker. */}
       <button
         type="button"
-        onClick={() => onOpen?.(piece)}
+        onClick={() => {
+          if (longPressed.current) {
+            longPressed.current = false;
+            return;
+          }
+          onOpen?.(piece);
+        }}
+        onPointerDown={startPress}
+        onPointerUp={cancelPress}
+        onPointerLeave={cancelPress}
+        onPointerCancel={cancelPress}
         onContextMenu={(e) => {
           e.preventDefault();
           onLongPress?.(piece);
