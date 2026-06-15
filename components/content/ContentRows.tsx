@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import ContentRow, { type ContentRowPiece } from '@/components/content/ContentRow';
 import StatusPickerSheet from '@/components/content/StatusPickerSheet';
 import { setContentStatus } from '@/app/content-actions';
-import { contentHref, type ContentPiece } from '@/lib/content/contentList';
+import { contentHref, type ContentPiece } from '@/lib/content/contentPiece';
 import { nextStatus, type ContentStatus } from '@/lib/content/statusSystem';
 
 /**
