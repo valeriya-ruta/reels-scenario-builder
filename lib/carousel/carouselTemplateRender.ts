@@ -20,7 +20,6 @@ import {
   type CarouselFonts,
 } from '@/lib/carousel/canvasSegmentedText';
 import { ensureCarouselFonts } from '@/lib/carousel/carouselFonts';
-import { rasterizePhosphorIcon } from '@/lib/carousel/phosphorIcon';
 import type { BrandAccentStyle } from '@/lib/brand';
 import { resolveTitleAndBodyColors, type CarouselBrandPalette } from '@/lib/carousel/colorSystem';
 
@@ -210,6 +209,28 @@ function splitEditorialTitle(title: string): [string, string] {
   if (words.length <= 3) return [t, ''];
   const mid = Math.ceil(words.length / 2);
   return [words.slice(0, mid).join(' '), words.slice(mid).join(' ')];
+}
+
+/** List marker for a given bullet style — mirrors CarouselSlidePreview.markerFor. */
+function markerFor(
+  style: CarouselTemplateInput['bulletStyle'],
+  i: number,
+): string {
+  switch (style) {
+    case 'numbered-simple':
+      return `${i + 1} ·`;
+    case 'dots':
+      return '●';
+    case 'dashes':
+      return '—';
+    case 'checks':
+      return '✓';
+    case 'cross-check':
+      return i === 0 ? '✗' : '✓';
+    case 'numbered-padded':
+    default:
+      return `${String(i + 1).padStart(2, '0')}.`;
+  }
 }
 
 function drawWatermark(
@@ -756,36 +777,105 @@ async function renderBullets(
       n++;
     }
   } else {
+    // Bold list — mirror CarouselSlidePreview's `list` layout EXACTLY:
+    //   • title (bold, sized 56px / 45px M), then a `mt-10` (40px) gap;
+    //   • numbered/marker rows with a 48px marker COLUMN (min-w-[48px]) in the
+    //     accent colour, a 16px gap (gap-4), then hanging-indented wrapped text;
+    //   • markers follow `bulletStyle` (01./02. by default — NOT checkboxes);
+    //   • the WHOLE block is vertically placed (placement) like the editor's flex
+    //     justify, instead of being top-aligned.
+    const align = input.textAlign ?? 'left';
+    const placement = input.placement ?? 'center';
     ctx.fillStyle = input.backgroundColor || DEFAULT_BG;
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
-    drawWatermark(ctx, handle, domain, 'bold', false, fonts);
-    let y = PADDING + 32;
-    y = drawParagraphSegmented(
-      ctx,
-      title,
-      PADDING,
-      y,
-      CANVAS_SIZE - PADDING * 2,
-      66,
-      72,
-      titleColor,
-      accent,
-      brand.accentStyle,
-      'left',
-      false,
-      500,
-      fonts,
+    drawWatermark(ctx, handle, domain, 'bold', isDarkColor(input.backgroundColor || DEFAULT_BG), fonts);
+    const contentW = CANVAS_SIZE - PADDING * 2;
+
+    // Editor shows 3 placeholder items when the list is empty.
+    const rows = (list.length ? list : ['Пункт 1', 'Пункт 2', 'Пункт 3']).slice(0, 8);
+    const bulletStyle = input.bulletStyle ?? 'numbered-padded';
+
+    const titleSizePx = (input.titleSize ?? 'L') === 'M' ? 45 : 56;
+    const titleLineH = Math.round(titleSizePx * 1.25); // leading-tight
+    const titleLines = layoutWords(
+      (t) => {
+        ctx.font = `${titleSizePx}px ${fonts.sansBold}`;
+        return ctx.measureText(t).width;
+      },
+      segmentsToWords(parseAccentSpans(title)),
+      contentW,
     );
-    y += 32;
-    const chk = await rasterizePhosphorIcon('check', 24, '#ffffff');
-    for (const row of list.slice(0, 8)) {
-      const { r, g, b } = hexToRgb(accent);
-      roundRectPath(ctx, PADDING, y, 36, 36, 8);
-      ctx.fillStyle = `rgb(${r},${g},${b})`;
-      ctx.fill();
-      if (chk) ctx.drawImage(chk, PADDING + 6, y + 6, 24, 24);
-      drawPlainParagraph(ctx, row, PADDING + 36 + 16, y + 28, CANVAS_SIZE - PADDING * 2 - 52, 34, 40, bodyColor, 'left', fonts);
-      y += 36 + 20;
+    const titleBlockH = title.trim() ? Math.max(1, titleLines.length) * titleLineH : 0;
+
+    // List geometry. Marker column min-w-[48px], gap-4 (16px); items always
+    // left-aligned (the editor's <ul> forces text-left). Hanging indent = wrapped
+    // lines start under the text column, not the marker.
+    const markerColW = 48;
+    const markerGap = 16;
+    const textX = PADDING + markerColW + markerGap;
+    const textW = contentW - markerColW - markerGap;
+    const markerSizePx = 28; // text-[28px]
+    const bodySizePx = (input.bodySize ?? 'M') === 'S' ? 29 : 36;
+    const bodyLineH = Math.round(bodySizePx * 1.375); // leading-snug
+    const itemGap = 12; // space-y-3 (bold)
+
+    const itemLines = rows.map((row) => {
+      const lines = wrapPlain(ctx, row, textW, bodySizePx, fonts.sans);
+      return lines.length ? lines : [''];
+    });
+    const itemHeights = itemLines.map((lines) => lines.length * bodyLineH);
+    const listH =
+      itemHeights.reduce((a, b) => a + b, 0) + itemGap * Math.max(0, rows.length - 1);
+
+    const gapTitleList = titleBlockH ? 40 : 0; // mt-10
+    const blockH = titleBlockH + gapTitleList + listH;
+    let y = placementTopY(placement, blockH);
+
+    // Title (respects textAlign; bold).
+    let tb = firstBaseline(ctx, titleSizePx, titleLineH, y, fonts.sansBold);
+    for (let i = 0; i < titleLines.length; i++) {
+      drawSegmentedLine(
+        ctx,
+        titleLines[i],
+        PADDING,
+        tb,
+        titleSizePx,
+        titleColor,
+        accent,
+        brand.accentStyle,
+        align,
+        contentW,
+        false,
+        500 + i,
+        fonts,
+        true,
+      );
+      tb += titleLineH;
+    }
+    y += titleBlockH + gapTitleList;
+
+    // Rows: marker in its column + hanging-indented text.
+    for (let idx = 0; idx < itemLines.length; idx++) {
+      const lines = itemLines[idx];
+      const baseFirst = firstBaseline(ctx, bodySizePx, bodyLineH, y, fonts.sans);
+
+      const markerHex =
+        bulletStyle === 'cross-check' && idx === 0 ? '#DC2626' : accent;
+      const { r: mr, g: mg, b: mb } = hexToRgb(markerHex);
+      ctx.font = `${markerSizePx}px ${fonts.sansBold}`; // font-semibold
+      ctx.fillStyle = `rgb(${mr},${mg},${mb})`;
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText(markerFor(bulletStyle, idx), PADDING, baseFirst);
+
+      ctx.font = `${bodySizePx}px ${fonts.sans}`;
+      const { r: br, g: bg, b: bb } = hexToRgb(bodyColor);
+      ctx.fillStyle = `rgb(${br},${bg},${bb})`;
+      let by = baseFirst;
+      for (const ln of lines) {
+        ctx.fillText(ln, textX, by);
+        by += bodyLineH;
+      }
+      y += itemHeights[idx] + (idx < itemLines.length - 1 ? itemGap : 0);
     }
   }
 }

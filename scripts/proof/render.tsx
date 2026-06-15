@@ -18,6 +18,19 @@ import { resolveBrandFont } from '@/lib/brandFonts';
 const OUT = '/tmp/proof';
 mkdirSync(OUT, { recursive: true });
 
+// Local Montserrat (latin + cyrillic, 400 + 700) so the editor HTML screenshot
+// renders the REAL brand font offline — the Google Fonts CDN is network-blocked
+// here, and the export already uses these same @fontsource files.
+const FS = join(process.cwd(), 'node_modules', '@fontsource', 'montserrat', 'files');
+const face = (subset: string, weight: number) =>
+  `@font-face{font-family:'Montserrat';font-style:normal;font-weight:${weight};font-display:block;src:url('file://${join(FS, `montserrat-${subset}-${weight}-normal.woff2`)}') format('woff2');}`;
+const MONTSERRAT_FACE = [
+  face('latin', 400),
+  face('cyrillic', 400),
+  face('latin', 700),
+  face('cyrillic', 700),
+].join('');
+
 // Default brand: bold vibe, Montserrat, brand red accent — same as the export
 // route's defaults / the deployed build.
 const brand: BrandSettings = {
@@ -50,6 +63,21 @@ function makeSlides(): Slide[] {
   content.icon = 'lightning'; // editor ignores this; export must not draw it
   content.hasBackgroundOverride = false;
 
+  // 2b) Numbered LIST slide — the reported bug case (must render 01./02./03.
+  //     numbered markers, NOT checkbox squares; vertically centered; hanging
+  //     indent on wrapped items).
+  const list = createEmptySlide();
+  list.slideType = 'slide';
+  list.layoutPreset = 'list';
+  list.title = 'Що перевірити у експерта';
+  list.bulletStyle = 'numbered-padded';
+  list.listItems = [
+    'Реальні кейси та результати, а не лише гарні слова про досвід',
+    'Відгуки клієнтів, яких можна знайти і запитати напряму',
+    'Чітка методологія роботи від першого дзвінка до результату',
+  ];
+  list.hasBackgroundOverride = false;
+
   // 3) Quote/statement (text lives in body).
   const quote = createEmptySlide();
   quote.slideType = 'slide';
@@ -69,7 +97,7 @@ function makeSlides(): Slide[] {
   cta.ctaAction = 'follow';
   cta.hasBackgroundOverride = false;
 
-  return [cover, content, quote, cta];
+  return [cover, content, list, quote, cta];
 }
 
 const CTA_WORD: Record<string, string> = {
@@ -146,9 +174,7 @@ async function main() {
     );
     const html = `<!doctype html><html><head><meta charset="utf-8">
 <link rel="stylesheet" href="file:///tmp/proof/tw.css">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Montserrat:wght@400;700&display=swap" rel="stylesheet">
-<style>html,body{margin:0;padding:0}#root{width:1080px;height:1350px}</style>
+<style>${MONTSERRAT_FACE}html,body{margin:0;padding:0}#root{width:1080px;height:1350px}</style>
 </head><body><div id="root">${markup}</div></body></html>`;
     writeFileSync(join(OUT, `editor-${i + 1}.html`), html);
     console.log(`slide ${i + 1}: ${slideType}/${preset} bg=${rv.backgroundColor} title=${rv.titleColor}`);
