@@ -1,28 +1,34 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import ContentRows from '@/components/content/ContentRows';
+import StatusFilter from '@/components/content/StatusFilter';
 import type { ContentPiece } from '@/lib/content/contentPiece';
+import type { ContentStatus } from '@/lib/content/statusSystem';
 
 /**
- * Full "Твій контент" library (Status system 6/8 — task 86d3btmqq).
- * Lists ALL the user's content pieces, most-recent-first, with the interactive
- * rows (tap-ring advance / long-press picker / tap-open). A filter slot sits at
- * the top for the status filter (task 7/8); a `renderFilter` prop lets that task
- * inject the control without restructuring this page.
+ * Full "Твій контент" library (Status system 6/8 + 7/8).
+ * Lists ALL the user's content pieces, most-recent-first, with interactive rows
+ * (tap-ring advance / long-press picker / tap-open) and a status filter
+ * (checkbox multiselect + removable chips + "Усі" reset, OR semantics).
  */
-export default function ContentLibrary({
-  pieces,
-  renderFilter,
-}: {
-  pieces: ContentPiece[];
-  renderFilter?: (ctx: { total: number }) => React.ReactNode;
-}) {
+export default function ContentLibrary({ pieces }: { pieces: ContentPiece[] }) {
   const [hint, setHint] = useState<string | null>(null);
+  const [statuses, setStatuses] = useState<ContentStatus[]>([]);
   const showHint = (msg: string) => {
     setHint(msg);
     window.setTimeout(() => setHint(null), 2500);
   };
+
+  const toggleStatus = (s: ContentStatus) =>
+    setStatuses((cur) => (cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s]));
+
+  // OR semantics: a piece matches if its status is among the selected ones.
+  const visible = useMemo(() => {
+    if (statuses.length === 0) return pieces;
+    const set = new Set(statuses);
+    return pieces.filter((p) => set.has(p.status));
+  }, [pieces, statuses]);
 
   return (
     <div className="min-h-screen bg-[color:var(--background)]">
@@ -31,7 +37,11 @@ export default function ContentLibrary({
           Твій контент
         </h1>
 
-        {renderFilter ? <div className="mt-4">{renderFilter({ total: pieces.length })}</div> : null}
+        {pieces.length > 0 ? (
+          <div className="mt-4">
+            <StatusFilter selected={statuses} onToggle={toggleStatus} onClear={() => setStatuses([])} />
+          </div>
+        ) : null}
 
         {pieces.length === 0 ? (
           <div
@@ -46,9 +56,13 @@ export default function ContentLibrary({
               «Опубліковано».
             </p>
           </div>
+        ) : visible.length === 0 ? (
+          <div className="mt-10 rounded-2xl bg-[color:var(--surface)] px-6 py-10 text-center" data-testid="content-filter-empty">
+            <p className="text-sm text-zinc-500">Нічого з таким статусом. Спробуй інший фільтр.</p>
+          </div>
         ) : (
           <div className="mt-4" data-testid="content-list">
-            <ContentRows pieces={pieces} onHint={showHint} />
+            <ContentRows pieces={visible} onHint={showHint} />
           </div>
         )}
       </div>
