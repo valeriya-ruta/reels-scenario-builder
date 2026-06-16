@@ -1,7 +1,9 @@
 import { redirect } from 'next/navigation';
 import { requireAuth } from '@/lib/auth';
-import { getRecentContent } from '@/lib/recentContent';
+import { getAllContent } from '@/lib/content/contentList';
 import HomeView from '@/components/home/HomeView';
+
+export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage() {
   const user = await requireAuth();
@@ -9,7 +11,8 @@ export default async function DashboardPage() {
     redirect('/');
   }
 
-  const recents = await getRecentContent(user.id, 5);
+  // Latest few across all types/statuses for the Home recents (full list at /content).
+  const recents = await getAllContent(6);
 
   const fullName =
     (user.user_metadata?.full_name as string | undefined) ??

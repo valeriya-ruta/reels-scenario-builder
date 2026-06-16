@@ -1,23 +1,23 @@
 import { Suspense } from 'react';
 import WelcomeModal from '@/components/WelcomeModal';
 import Greeting from './Greeting';
-import RecentContentList from './RecentContentList';
+import HomeRecents from './HomeRecents';
 import InsightsSkeleton from './InsightsSkeleton';
 import WorkshopLessons from './WorkshopLessons';
-import type { RecentContentItem } from '@/lib/recentContent';
+import type { ContentPiece } from '@/lib/content/contentPiece';
 
 /**
  * Home (Головна) — the default landing screen. Mobile-first, white surfaces,
  * blue #004BA8 functional accent, clean hairline lists. Sections top→bottom:
- * greeting → "Твій контент" recents → insights coming-soon skeleton →
- * workshop lessons.
+ * greeting → "Твій контент" recents (latest few, status rows) → insights
+ * coming-soon skeleton → workshop lessons.
  */
 export default function HomeView({
   userName,
   recents,
 }: {
   userName?: string | null;
-  recents: RecentContentItem[];
+  recents: ContentPiece[];
 }) {
   return (
     <div className="mx-auto w-full max-w-2xl space-y-8 pb-24">
@@ -25,7 +25,7 @@ export default function HomeView({
         <WelcomeModal />
       </Suspense>
       <Greeting name={userName} />
-      <RecentContentList items={recents} />
+      <HomeRecents pieces={recents} />
       <InsightsSkeleton />
       <WorkshopLessons />
     </div>
