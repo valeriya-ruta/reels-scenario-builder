@@ -2,6 +2,7 @@ import 'server-only';
 
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import type { ContentStatus, ContentType } from '@/lib/content/statusSystem';
+import { contentHref, type ContentPiece } from '@/lib/content/contentPiece';
 
 /**
  * Canonical "all content pieces for this user" read (Status system 1/8).
@@ -10,18 +11,12 @@ import type { ContentStatus, ContentType } from '@/lib/content/statusSystem';
  * Home recents, and filter all consume one shape regardless of which underlying
  * table (carousel_projects / projects / storytelling_projects / ideas) a piece
  * lives in.
+ *
+ * The client-safe `ContentPiece` shape + `contentHref` live in contentPiece.ts
+ * (no server-only deps) and are re-exported here for convenience.
  */
-export type ContentPiece = {
-  id: string;
-  userId: string;
-  type: ContentType;
-  status: ContentStatus;
-  title: string;
-  /** Underlying table the piece lives in (for opening the right editor). */
-  refTable: 'carousel_projects' | 'projects' | 'storytelling_projects' | 'ideas';
-  createdAt: string;
-  updatedAt: string;
-};
+export type { ContentPiece };
+export { contentHref };
 
 type ContentPieceRow = {
   id: string;
@@ -74,20 +69,4 @@ export async function getAllContent(limit?: number): Promise<ContentPiece[]> {
     return [];
   }
   return data.map(rowToPiece);
-}
-
-/** Route a content piece to its editor URL (used by the row's tap-to-open). */
-export function contentHref(piece: Pick<ContentPiece, 'type' | 'refTable' | 'id'>): string {
-  switch (piece.refTable) {
-    case 'carousel_projects':
-      return `/carousel/${piece.id}`;
-    case 'projects':
-      return `/project/${piece.id}`;
-    case 'storytelling_projects':
-      return `/storytelling/${piece.id}`;
-    case 'ideas':
-      return `/?idea=${piece.id}`;
-    default:
-      return '/';
-  }
 }
