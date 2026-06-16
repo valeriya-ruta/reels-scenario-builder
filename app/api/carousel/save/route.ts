@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import { normalizeSlidesFromDb, slidesForDatabase } from '@/lib/carouselSlides';
+import { carouselSignals } from '@/lib/content/contentKind';
 
 export const runtime = 'nodejs';
 
@@ -59,5 +60,30 @@ export async function POST(req: Request) {
     console.error('[carousel/save] failed', { projectId, message: error.message });
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
+
+  // Auto-promote Ідея → Скрипт the moment a carousel has real slide content
+  // (Status system 5/8). Best-effort + never clobbers a manually-set later
+  // status (Дизайн/Готово/…), and never breaks the core slide save above —
+  // tolerant of the status column not yet existing (data-model migration gated).
+  try {
+    if (carouselSignals(null, persist).hasAuthoredWork) {
+      const { data: row } = await supabase
+        .from('carousel_projects')
+        .select('status')
+        .eq('id', projectId)
+        .eq('user_id', user.id)
+        .maybeSingle<{ status: string | null }>();
+      if ((row?.status ?? 'idea') === 'idea') {
+        await supabase
+          .from('carousel_projects')
+          .update({ status: 'script' })
+          .eq('id', projectId)
+          .eq('user_id', user.id);
+      }
+    }
+  } catch (e) {
+    console.warn('[carousel/save] status auto-promote skipped:', (e as Error)?.message);
+  }
+
   return NextResponse.json({ ok: true });
 }
