@@ -131,7 +131,16 @@ export function ensureCarouselFonts(fontPairing?: string | null): CarouselFonts 
     const bodyFams = registerSubsetStack(fontsourceDir, bodyPackage, `${bodyPrefix}_sans`, '400', 'normal');
     const titleFams = (() => {
       const w700 = registerSubsetStack(fontsourceDir, packageName, `${prefix}_sansBold`, '700', 'normal');
-      return w700.length ? w700 : registerSubsetStack(fontsourceDir, packageName, `${prefix}_sansBold`, '400', 'normal');
+      if (w700.length) return w700;
+      // A 700-weight title font whose bold face failed to register must NOT
+      // silently degrade to the brand's regular (400) face — that renders the
+      // title THIN (task 86d36eg64). Returning [] makes toFontStack fall back to
+      // the bundled bold Noto face, preserving the bold weight. Single-weight
+      // brand fonts (titleWeight 400, e.g. Days One / Climate Crisis) genuinely
+      // have only one face, so for those we do use the 400 file.
+      const wantsBold = Number(brandFont.titleWeight) >= 600;
+      if (wantsBold) return [];
+      return registerSubsetStack(fontsourceDir, packageName, `${prefix}_sansBold`, '400', 'normal');
     })();
     const sansItalicFams = (() => {
       const it = registerSubsetStack(fontsourceDir, bodyPackage, `${bodyPrefix}_sansItalic`, '400', 'italic');
