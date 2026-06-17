@@ -42,7 +42,7 @@ export const STATUS_LABELS: Record<ContentStatus, string> = {
 /** Locked palette (hexes tunable, progression fixed). Зняти + Дизайн share yellow. */
 export const STATUS_COLORS: Record<ContentStatus, string> = {
   idea: '#9A9A9A',
-  script: '#004BA8',
+  script: '#B57EDC',
   film: '#E8B81E',
   design: '#E8B81E',
   edit: '#D97726',
@@ -76,8 +76,12 @@ export const TYPE_CHIP_COLORS: Record<ContentType, string> = {
 
 export const PUBLISHED_STATUS: ContentStatus = 'published';
 
-/** Sliver shown for an idea-type piece (no real track yet) — see ring task. */
-export const IDEA_SLIVER_FRACTION = 0.12;
+/**
+ * Idea stage = outline-only ring, no fill wedge (task 86d3c7mcn, overrides the
+ * earlier ~12% sliver spec). Every idea-stage piece renders identically: a faint
+ * grey outline, empty inside.
+ */
+export const IDEA_SLIVER_FRACTION = 0;
 
 export function trackFor(type: ContentType): readonly ContentStatus[] {
   return TYPE_TRACKS[type] ?? TYPE_TRACKS.idea;
