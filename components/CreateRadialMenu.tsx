@@ -5,15 +5,15 @@ import { Play, LayoutGrid, Circle, Lightbulb, type LucideIcon } from 'lucide-rea
 import BlurScrim from '@/components/BlurScrim';
 
 /**
- * Create radial menu — a Pinterest-style TIGHT arc cluster that fans out to the
- * RIGHT of the centered Create FAB (task 86d3ca3jy, geometry signed off in the
- * mockup). Small bubbles, each type's chip colour, label ABOVE the bubble.
+ * Create radial menu — an L-shape cluster growing up-and-right out of the
+ * centered Create FAB (task 86d3cqd67, supersedes the cancelled arc 86d3ca3jy).
+ * Small bubbles, each type's chip colour, label ABOVE the bubble — STYLE
+ * unchanged; only the button positions changed (see `bubblePositions`).
  *
- * Arc math (LOCKED):
- *   anchor = FAB centre (cx, cy)
- *   radius R = min(viewportWidth * 0.32, 128)px
- *   spread 104°, centre 64° → angles 116°…12° (CCW from +x), evenly over 4 items
- *   x = cx + R·cos(deg); y = cy − R·sin(deg)
+ * Layout:
+ *      [Сторіс]                ← rises directly above Карусель
+ *   [Ідея] [Рілс] [Карусель]   ← horizontal row just above the FAB
+ *            [ + ]             ← FAB (centred)
  *
  * Interaction is owned by the parent (BottomNav): this component is presentational.
  * It reports taps / backdrop dismiss back up and reflects the glide-armed bubble
@@ -30,27 +30,14 @@ export interface RadialOption {
   color: string;
 }
 
-/** Order along the arc, index 0→3 (upper-left → right): Карусель, Рілс, Сторіс, Ідея.
- *  Bubble colours = each type's chip colour. */
+/** Menu order, FAB-nearest → far: Ідея → Рілс → Карусель → Сторіс. Bubble
+ *  colours / icons / labels are each type's existing values — unchanged. */
 export const RADIAL_OPTIONS: RadialOption[] = [
-  { id: 'carousel', label: 'Карусель', Icon: LayoutGrid, color: '#185FA5' },
-  { id: 'reels', label: 'Рілс', Icon: Play, color: '#534AB7' },
-  { id: 'stories', label: 'Сторіс', Icon: Circle, color: '#D85A30' },
   { id: 'ideas', label: 'Ідея', Icon: Lightbulb, color: '#5F5E5A' },
+  { id: 'reels', label: 'Рілс', Icon: Play, color: '#534AB7' },
+  { id: 'carousel', label: 'Карусель', Icon: LayoutGrid, color: '#185FA5' },
+  { id: 'stories', label: 'Сторіс', Icon: Circle, color: '#D85A30' },
 ];
-
-/** Tight, right-biased arc: spread 104°, centre 64°, evenly across 4 items. */
-const ARC_CENTER_DEG = 64;
-const ARC_SPREAD_DEG = 104;
-const ANGLES_DEG = RADIAL_OPTIONS.map((_, i) =>
-  ARC_CENTER_DEG + ARC_SPREAD_DEG / 2 - (i * ARC_SPREAD_DEG) / (RADIAL_OPTIONS.length - 1),
-);
-
-/** Radius scales with the viewport, capped at 128px (LOCKED). */
-function arcRadius(): number {
-  const vw = typeof window === 'undefined' ? 390 : window.innerWidth;
-  return Math.min(vw * 0.32, 128);
-}
 
 /** Bubble = 46px circle; the column is wider so the label can sit centred above. */
 const BUBBLE_PX = 46;
@@ -60,6 +47,19 @@ const COLUMN_HALF_W = COLUMN_W / 2;
 const ICON_CENTER_OFFSET = 16 + 4 + BUBBLE_PX / 2;
 /** ms the close/collapse animation runs before the menu unmounts. */
 const CLOSE_MS = 200;
+
+/**
+ * L-shape geometry (anchor = FAB centre), task 86d3cqd67 — POSITIONS ONLY.
+ *   bottom arm: Ідея · Рілс · Карусель in a horizontal row just above the FAB
+ *               (Ідея ~15px left of the FAB centre);
+ *   vertical arm: Сторіс rises directly above Карусель.
+ * The stepped corner points back at the + so the menu reads as growing from it.
+ */
+const ROW_GAP_PX = 67; // horizontal centre-to-centre between row bubbles
+const IDEA_DX = -15; // Ідея sits ~15px left of the FAB centre
+const ROW_DY = -100; // row bubble centres ~100px above the FAB centre
+const STORIS_RISE = 82; // Сторіс ~82px above the row
+const EDGE_MARGIN = 10; // keep bubbles clear of the screen edge
 
 export interface BubblePos {
   id: RadialOptionId;
@@ -72,11 +72,16 @@ export interface BubblePos {
 
 /** Computes the on-screen center of each bubble for a given FAB anchor point. */
 export function bubblePositions(anchor: { x: number; y: number }): BubblePos[] {
-  const R = arcRadius();
+  const vw = typeof window === 'undefined' ? 390 : window.innerWidth;
+  // dx/dy per menu index: [Ідея, Рілс, Карусель, Сторіс].
+  const dx = [IDEA_DX, IDEA_DX + ROW_GAP_PX, IDEA_DX + 2 * ROW_GAP_PX, IDEA_DX + 2 * ROW_GAP_PX];
+  const dy = [ROW_DY, ROW_DY, ROW_DY, ROW_DY - STORIS_RISE];
+  // Keep the right column (Карусель/Сторіс) on-screen: shift the whole L left if it would overflow.
+  const rightMostX = anchor.x + IDEA_DX + 2 * ROW_GAP_PX + BUBBLE_PX / 2;
+  const overflow = Math.max(0, rightMostX + EDGE_MARGIN - vw);
   return RADIAL_OPTIONS.map((opt, i) => {
-    const theta = (ANGLES_DEG[i] * Math.PI) / 180;
-    const x = anchor.x + R * Math.cos(theta);
-    const y = anchor.y - R * Math.sin(theta);
+    const x = anchor.x + dx[i] - overflow;
+    const y = anchor.y + dy[i];
     return { id: opt.id, x, y, fromX: anchor.x - x, fromY: anchor.y - y };
   });
 }
