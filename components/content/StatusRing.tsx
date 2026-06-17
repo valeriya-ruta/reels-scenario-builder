@@ -107,8 +107,11 @@ export default function StatusRing(props: StatusRingProps) {
       role="img"
       aria-hidden="true"
     >
-      {/* Faint full circle, always visible (the track). */}
-      <circle cx={cx} cy={cy} r={r} fill={color} opacity={0.16} />
+      {/* Faint track behind the wedge — only once there is progress. At the idea
+          stage (no wedge) the ring is outline-only, empty inside (task 86d3c7mcn). */}
+      {published || shown > 0.0001 ? (
+        <circle cx={cx} cy={cy} r={r} fill={color} opacity={0.16} />
+      ) : null}
       {/* Solid clockwise wedge (or full disc when published). */}
       {published ? (
         <circle cx={cx} cy={cy} r={r} fill={color} />
