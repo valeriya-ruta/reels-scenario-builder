@@ -132,7 +132,7 @@ export default function ProfileClient({
   };
 
   return (
-    <div className="mx-auto w-full max-w-md pb-8">
+    <div className="mx-auto w-full max-w-md pb-4">
       <h1 className="font-display text-2xl font-semibold text-zinc-900">Профіль</h1>
 
       {/* Account header */}
