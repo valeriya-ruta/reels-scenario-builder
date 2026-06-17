@@ -144,7 +144,7 @@ export default function CarouselExportOverlay({
                 className="inline-flex flex-[7] items-center justify-center gap-2 rounded-xl bg-[#004BA8] px-4 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-50"
               >
                 <Download className="h-4 w-4" />
-                Завантажити всі{readyCount ? ` (${readyCount})` : ''}
+                <span className="whitespace-nowrap">Завантажити всі</span>
               </button>
               {/* Secondary: OS share sheet (keeps the wanted share-to-Telegram flow). */}
               <button
