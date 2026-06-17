@@ -48,17 +48,13 @@ export default function ContentLibrary({ pieces }: { pieces: ContentPiece[] }) {
             data-testid="content-empty"
             className="mt-10 rounded-2xl bg-[color:var(--surface)] px-6 py-12 text-center"
           >
-            <p className="text-base font-semibold text-[color:var(--foreground)]">
-              Тут житиме твій контент
-            </p>
-            <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed text-zinc-500">
-              Кинь ідею, збери карусель чи рілс — і все зʼявиться тут, від першої думки до
-              «Опубліковано».
+            <p className="mx-auto max-w-xs text-base font-semibold leading-relaxed text-[color:var(--foreground)]">
+              Ой, тут ще нічого немає! Можливо, саме час створити контент?
             </p>
           </div>
         ) : visible.length === 0 ? (
           <div className="mt-10 rounded-2xl bg-[color:var(--surface)] px-6 py-10 text-center" data-testid="content-filter-empty">
-            <p className="text-sm text-zinc-500">Нічого з таким статусом. Спробуй інший фільтр.</p>
+            <p className="text-sm text-zinc-500">Ой, тут ще нічого немає! Можливо, саме час створити контент?</p>
           </div>
         ) : (
           <div className="mt-4" data-testid="content-list">
