@@ -21,3 +21,15 @@ export function formatRelativeTime(input: string | number | Date, now: Date = ne
   const base = `${then.getDate()} ${months[then.getMonth()]}`;
   return sameYear ? base : `${base} ${then.getFullYear()}`;
 }
+
+const MONTHS_SHORT = [
+  'січ.', 'лют.', 'бер.', 'квіт.', 'трав.', 'черв.',
+  'лип.', 'серп.', 'вер.', 'жовт.', 'лист.', 'груд.',
+];
+
+/** Short calendar date for list meta lines, e.g. "17 черв." ("17 черв. 2025" cross-year). */
+export function formatShortDate(input: string | number | Date, now: Date = new Date()): string {
+  const d = new Date(input);
+  const base = `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`;
+  return d.getFullYear() === now.getFullYear() ? base : `${base} ${d.getFullYear()}`;
+}

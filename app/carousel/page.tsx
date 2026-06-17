@@ -1,8 +1,9 @@
 import { redirect } from 'next/navigation';
+import { LayoutGrid } from 'lucide-react';
 import { requireAuth } from '@/lib/auth';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
-import CreateCarouselProjectButton from '@/components/CreateCarouselProjectButton';
-import ContentRowsSection from '@/components/content/ContentRowsSection';
+import { createCarouselProject, deleteCarouselProject } from '@/app/carousel-actions';
+import SwipeableContentList from '@/components/content/SwipeableContentList';
 import type { ContentPiece } from '@/lib/content/contentPiece';
 import type { ContentStatus } from '@/lib/content/statusSystem';
 
@@ -29,12 +30,7 @@ export default async function CarouselListPage() {
     .order('updated_at', { ascending: false });
 
   if (error) {
-    console.warn('[carousel] list query failed:', {
-      message: error.message,
-      code: error.code,
-      details: error.details,
-      hint: error.hint,
-    });
+    console.warn('[carousel] list query failed:', { message: error.message, code: error.code });
   }
 
   const pieces: ContentPiece[] = ((projects as Row[] | null) ?? []).map((p) => ({
@@ -50,24 +46,16 @@ export default async function CarouselListPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      <div className="mx-auto max-w-2xl px-4 py-8">
-        {error && (
-          <div
-            className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
-            role="alert"
-          >
-            <p className="font-medium">Не вдалося завантажити список каруселей</p>
-            {error.message ? (
-              <p className="mt-2 font-mono text-xs text-amber-900/75">{error.message}</p>
-            ) : null}
-          </div>
-        )}
-        <div className="mb-6 flex items-center justify-between">
-          <h1 className="font-display text-2xl font-semibold text-zinc-900">Мої каруселі</h1>
-          <CreateCarouselProjectButton />
-        </div>
-        <ContentRowsSection
+      <div className="px-4 py-8">
+        <SwipeableContentList
           pieces={pieces}
+          heading="Каруселі"
+          unitWord={(n) => `${n} матеріалів`}
+          accent="#5b7cfa"
+          accentTint="#eef1ff"
+          HeaderIcon={LayoutGrid}
+          onCreate={createCarouselProject}
+          onDelete={deleteCarouselProject}
           emptyText="Тут поки що нічого немає. Створи першу карусель, щоб відкрити студію."
         />
       </div>
