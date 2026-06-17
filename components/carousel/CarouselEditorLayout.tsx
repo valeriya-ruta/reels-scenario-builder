@@ -117,6 +117,18 @@ function SortableThumb({
     boxShadow: isDragging ? '0 10px 24px rgba(0,0,0,0.28)' : undefined,
     // Allow horizontal panning of the strip; long-press still initiates drag.
     touchAction: wholeTileDrag ? 'pan-x' : undefined,
+    // On mobile the whole tile is the long-press activator. Suppress the OS
+    // text-selection / callout that a press-and-hold otherwise triggers — that
+    // native gesture was stealing the long-press, so the lift failed on the
+    // first try (task 86d3c76tt). Applied to the whole tile so the hold
+    // registers ANYWHERE, not just the top.
+    ...(wholeTileDrag
+      ? {
+          userSelect: 'none' as const,
+          WebkitUserSelect: 'none' as const,
+          WebkitTouchCallout: 'none' as const,
+        }
+      : {}),
   };
   const thumbHeight = size === 'sm' ? 58 : 78;
   const thumbWidth = Math.round((thumbHeight * CANVAS_WIDTH) / CANVAS_HEIGHT);
@@ -137,7 +149,7 @@ function SortableThumb({
         }
       }}
       className={[
-        'relative shrink-0 cursor-pointer overflow-hidden rounded-md transition-[border-color,transform] duration-150 ease-out',
+        'relative shrink-0 cursor-pointer select-none overflow-hidden rounded-md transition-[border-color,transform] duration-150 ease-out',
         active ? 'ring-2' : 'ring-1 ring-black/10',
       ].join(' ')}
       aria-label={`Слайд ${index + 1}`}
@@ -559,12 +571,17 @@ export default function CarouselEditorLayout({
   // tolerance is generous (16px) so natural finger jitter while pressing the tile
   // BODY doesn't abort the lift — fixing "reorder only grabs from the top"
   // (task 86d3btm30). Tap still selects; second tap reveals delete.
+  // Touch ONLY (plus keyboard for a11y). Previously this also registered a
+  // PointerSensor with the same delay; on a touch device BOTH sensors fired for
+  // every press and raced, so the lift often failed on the first try and needed
+  // a second tap (task 86d3c76tt). A single TouchSensor removes that race.
+  // delay ~250ms = the deliberate hold that distinguishes a reorder from a
+  // scroll; a quick horizontal swipe moves past `tolerance` first, so the strip
+  // scrolls instead. Tolerance is generous so finger jitter during the hold (on
+  // the tile body, not just the top) doesn't abort the lift.
   const mobileSensors = useSensors(
     useSensor(TouchSensor, {
-      activationConstraint: { delay: 200, tolerance: 16 },
-    }),
-    useSensor(PointerSensor, {
-      activationConstraint: { delay: 200, tolerance: 16 },
+      activationConstraint: { delay: 250, tolerance: 18 },
     }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
