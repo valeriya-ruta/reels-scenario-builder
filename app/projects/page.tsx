@@ -1,5 +1,4 @@
 import { redirect } from 'next/navigation';
-import { Play } from 'lucide-react';
 import { requireAuth } from '@/lib/auth';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import { deleteProject } from '@/app/actions';
@@ -50,10 +49,9 @@ export default async function ProjectsPage() {
         <SwipeableContentList
           pieces={pieces}
           heading="Рілси"
-          unitWord={(n) => `${n} матеріалів`}
+          iconKey="reel"
           accent="#7A3CE0"
           accentTint="#f1ecfd"
-          HeaderIcon={Play}
           onCreate={createReelProject}
           onDelete={deleteProject}
           emptyText="Тут поки що нічого немає. Створи перший сценарій рілсу."
