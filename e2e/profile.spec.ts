@@ -73,7 +73,7 @@ test.describe('Profile page — user WITH an active subscription', () => {
   test('support row opens the support popup', async ({ page }) => {
     await page.goto('/profile');
     await page.getByTestId('support-row').click();
-    await expect(page.getByTestId('support-modal')).toBeVisible();
+    await expect(page.getByTestId('support-sheet')).toBeVisible();
   });
 
   test('logout signs out and returns to the login screen', async ({ page }) => {
