@@ -4,7 +4,9 @@ import { useCallback, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import ContentRow, { type ContentRowPiece } from '@/components/content/ContentRow';
 import { setContentStatus } from '@/app/content-actions';
+import { getIdeaText } from '@/app/ideas-actions';
 import { contentHref, type ContentPiece } from '@/lib/content/contentPiece';
+import { OPEN_BRAINDUMP_IDEA_EVENT } from '@/lib/content/braindumpIdeaEvent';
 import { nextStatus, type ContentStatus } from '@/lib/content/statusSystem';
 
 /**
@@ -69,7 +71,19 @@ export default function ContentRows({
   const handleOpen = useCallback(
     (row: ContentRowPiece) => {
       const piece = pieces.find((p) => p.id === row.id);
-      if (piece) router.push(contentHref(piece));
+      if (!piece) return;
+      // An idea row reopens the braindump overlay pre-loaded with its text — it
+      // must NOT open a content editor (task 86d3cpv9x / 86d3c7u88 bug 3).
+      if (piece.type === 'idea') {
+        void (async () => {
+          const text = await getIdeaText(piece.id);
+          window.dispatchEvent(
+            new CustomEvent(OPEN_BRAINDUMP_IDEA_EVENT, { detail: { id: piece.id, text } }),
+          );
+        })();
+        return;
+      }
+      router.push(contentHref(piece));
     },
     [pieces, router],
   );
