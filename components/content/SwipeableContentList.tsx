@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronRight, Trash2, type LucideIcon } from 'lucide-react';
+import { ChevronRight, Film, LayoutGrid, Play, Trash2 } from 'lucide-react';
 import StatusRing from '@/components/content/StatusRing';
 import { contentHref, type ContentPiece } from '@/lib/content/contentPiece';
 import { STATUS_COLORS, STATUS_LABELS } from '@/lib/content/statusSystem';
@@ -28,28 +28,31 @@ function vibrate(ms: number) {
   }
 }
 
+// Icons are picked here by a serializable key — a server page can't pass a
+// component (function) prop to this client component.
+const HEADER_ICONS = { carousel: LayoutGrid, reel: Play, story: Film } as const;
+export type ListIconKey = keyof typeof HEADER_ICONS;
+
 export default function SwipeableContentList({
   pieces,
   heading,
-  unitWord,
+  iconKey,
   accent,
   accentTint,
-  HeaderIcon,
   onCreate,
   onDelete,
   emptyText,
 }: {
   pieces: ContentPiece[];
   heading: string;
-  /** Builds the subcount line, e.g. (n) => `${n} матеріалів`. */
-  unitWord: (n: number) => string;
+  iconKey: ListIconKey;
   accent: string;
   accentTint: string;
-  HeaderIcon: LucideIcon;
   onCreate: () => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   emptyText: string;
 }) {
+  const HeaderIcon = HEADER_ICONS[iconKey];
   const router = useRouter();
   const [items, setItems] = useState<ContentPiece[]>(pieces);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -126,7 +129,7 @@ export default function SwipeableContentList({
           </span>
           <div className="leading-tight">
             <h1 className="text-[21px] font-bold text-[color:var(--foreground)]">{heading}</h1>
-            <p className="text-[12.5px] text-[#9a9aa6]">{unitWord(items.length)}</p>
+            <p className="text-[12.5px] text-[#9a9aa6]">{items.length} матеріалів</p>
           </div>
         </div>
         <button

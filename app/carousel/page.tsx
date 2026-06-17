@@ -1,5 +1,4 @@
 import { redirect } from 'next/navigation';
-import { LayoutGrid } from 'lucide-react';
 import { requireAuth } from '@/lib/auth';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import { createCarouselProject, deleteCarouselProject } from '@/app/carousel-actions';
@@ -50,10 +49,9 @@ export default async function CarouselListPage() {
         <SwipeableContentList
           pieces={pieces}
           heading="Каруселі"
-          unitWord={(n) => `${n} матеріалів`}
+          iconKey="carousel"
           accent="#5b7cfa"
           accentTint="#eef1ff"
-          HeaderIcon={LayoutGrid}
           onCreate={createCarouselProject}
           onDelete={deleteCarouselProject}
           emptyText="Тут поки що нічого немає. Створи першу карусель, щоб відкрити студію."
