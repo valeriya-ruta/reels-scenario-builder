@@ -3,7 +3,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import ContentRow, { type ContentRowPiece } from '@/components/content/ContentRow';
-import StatusPickerSheet from '@/components/content/StatusPickerSheet';
 import { setContentStatus } from '@/app/content-actions';
 import { contentHref, type ContentPiece } from '@/lib/content/contentPiece';
 import { nextStatus, type ContentStatus } from '@/lib/content/statusSystem';
@@ -12,11 +11,14 @@ import { nextStatus, type ContentStatus } from '@/lib/content/statusSystem';
  * Interactive list of content rows (Status system 4/8 — task 86d3btmh7).
  * Shared by the Home recents and the full list page.
  *
+ * Status interactions (task 86d3c7mpf, final):
  * - Tap the ring → advance ONE stage along the type's track (repeat to skip);
  *   stops at Опубліковано; an idea-type piece can't advance (it must be promoted
- *   to a real type first — graceful no-op + hint for now).
- * - Long-press a row → status picker (all 7, invalid greyed).
+ *   to a real type first — graceful no-op + hint).
  * - Tap a row → open the piece's editor.
+ *
+ * There is no long-press and no status picker — ring-tap-advance is the only
+ * status control by design.
  *
  * Status changes are optimistic and persisted via the setContentStatus action;
  * on failure we roll back and surface a hint.
@@ -31,7 +33,6 @@ export default function ContentRows({
 }) {
   const router = useRouter();
   const [statusById, setStatusById] = useState<Record<string, ContentStatus>>({});
-  const [picker, setPicker] = useState<ContentPiece | null>(null);
 
   const pieces = useMemo(
     () => initialPieces.map((p) => ({ ...p, status: statusById[p.id] ?? p.status })),
@@ -73,14 +74,6 @@ export default function ContentRows({
     [pieces, router],
   );
 
-  const handleLongPress = useCallback(
-    (row: ContentRowPiece) => {
-      const piece = pieces.find((p) => p.id === row.id);
-      if (piece) setPicker(piece);
-    },
-    [pieces],
-  );
-
   return (
     <>
       {pieces.map((piece) => (
@@ -89,23 +82,8 @@ export default function ContentRows({
           piece={piece}
           onOpen={handleOpen}
           onRingClick={handleRingClick}
-          onLongPress={handleLongPress}
         />
       ))}
-
-      {picker ? (
-        <StatusPickerSheet
-          type={picker.type}
-          current={picker.status}
-          title={picker.title}
-          onSelect={(status) => {
-            const piece = pieces.find((p) => p.id === picker.id);
-            if (piece && status !== piece.status) void persist(piece, status, piece.status);
-            setPicker(null);
-          }}
-          onClose={() => setPicker(null)}
-        />
-      ) : null}
     </>
   );
 }
