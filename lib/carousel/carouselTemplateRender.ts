@@ -23,6 +23,21 @@ import { ensureCarouselFonts } from '@/lib/carousel/carouselFonts';
 import type { BrandAccentStyle } from '@/lib/brand';
 import { resolveTitleAndBodyColors, type CarouselBrandPalette } from '@/lib/carousel/colorSystem';
 
+/**
+ * Uniform export text scale (task 86d36ej91): every text role (title, body,
+ * numbered-list items, CTA, eyebrows, markers) is scaled by this single factor
+ * so relative proportions are preserved. Applied ONLY to font sizes — margins,
+ * gaps, pill/box geometry and the canvas stay fixed; vertical centring and
+ * wrapping recompute from the scaled sizes, so nothing clips. Derived
+ * line-heights (round(sizePx * ratio)) scale automatically because the base
+ * `sizePx` is scaled before they are computed.
+ */
+const TEXT_SCALE = 1.11;
+/** Scale + round a font-size in px by TEXT_SCALE. */
+function ts(px: number): number {
+  return Math.round(px * TEXT_SCALE);
+}
+
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
   const h = hex.replace(/^#/, '');
   const full =
@@ -323,16 +338,16 @@ async function renderCover(
       input.gradientEndColor,
     );
     const [l1, l2] = splitEditorialTitle(stripAccentMarkers(title));
-    ctx.font = `22px ${fonts.sansBold}`;
+    ctx.font = `${ts(22)}px ${fonts.sansBold}`;
     ctx.fillStyle = '#aaaaaa';
     ctx.textBaseline = 'alphabetic';
     const eyebrow = (label || 'Карусель').toUpperCase();
     ctx.fillText(eyebrow, PADDING, WATERMARK_Y + 56);
     let y = WATERMARK_Y + 120;
-    y = drawPlainParagraph(ctx, l1, PADDING, y, CANVAS_SIZE - PADDING * 2, 96, 102, '#1a1a1a', 'left', fonts, 'serif');
+    y = drawPlainParagraph(ctx, l1, PADDING, y, CANVAS_SIZE - PADDING * 2, ts(96), ts(102), '#1a1a1a', 'left', fonts, 'serif');
     if (l2) {
       const u = l2.toUpperCase();
-      y = drawPlainParagraph(ctx, u, PADDING, y + 8, CANVAS_SIZE - PADDING * 2, 44, 52, '#1a1a1a', 'left', fonts, 'sansBold');
+      y = drawPlainParagraph(ctx, u, PADDING, y + 8, CANVAS_SIZE - PADDING * 2, ts(44), ts(52), '#1a1a1a', 'left', fonts, 'sansBold');
     }
     ctx.strokeStyle = '#c8c0b4';
     ctx.lineWidth = 1;
@@ -341,10 +356,10 @@ async function renderCover(
     ctx.lineTo(CANVAS_SIZE - PADDING, y);
     ctx.stroke();
     y += 40;
-    ctx.font = `22px ${fonts.sans}`;
+    ctx.font = `${ts(22)}px ${fonts.sans}`;
     ctx.fillStyle = '#bbbbbb';
     const meta = stripAccentMarkers(body).trim() ? stripAccentMarkers(body) : designNote || '';
-    if (meta) drawPlainParagraph(ctx, meta, PADDING, y, CANVAS_SIZE - PADDING * 2, 22, 28, '#bbbbbb', 'left', fonts);
+    if (meta) drawPlainParagraph(ctx, meta, PADDING, y, CANVAS_SIZE - PADDING * 2, ts(22), ts(28), '#bbbbbb', 'left', fonts);
   } else {
     // Bold cover — mirror CarouselSlidePreview's cover exactly: the text block is
     // vertically CENTERED, title is CENTER-aligned and BOLD at 88px (70px for M),
@@ -361,7 +376,7 @@ async function renderCover(
     );
     const contentW = CANVAS_SIZE - PADDING * 2;
     const align: 'left' | 'center' | 'right' = 'center';
-    const titleSizePx = (input.titleSize ?? 'L') === 'M' ? 78 : 96;
+    const titleSizePx = ts((input.titleSize ?? 'L') === 'M' ? 78 : 96);
     const titleLineH = Math.round(titleSizePx * 0.98);
     const titleWords = segmentsToWords(parseAccentSpans(title));
     const titleLines = layoutWords(
@@ -377,7 +392,7 @@ async function renderCover(
     const bodyLine = stripAccentMarkers(body).trim();
     const fallbackSub = (label || designNote || '').trim();
     const hasSub = Boolean(bodyLine || fallbackSub);
-    const subSizePx = 30;
+    const subSizePx = ts(30);
     const subLineH = Math.round(subSizePx * 1.3);
     const subLines = hasSub
       ? Math.max(1, wrapPlain(ctx, bodyLine || fallbackSub, contentW, subSizePx, fonts.sans).length)
@@ -475,16 +490,16 @@ async function renderContent(
     ctx.strokeRect(0.25, 0.25, CANVAS_SIZE - 0.5, CANVAS_HEIGHT - 0.5);
     const [l1, l2] = splitEditorialTitle(stripAccentMarkers(title));
     let y = WATERMARK_Y + 48;
-    ctx.font = `22px ${fonts.sansBold}`;
+    ctx.font = `${ts(22)}px ${fonts.sansBold}`;
     ctx.fillStyle = '#bbbbbb';
     const eyebrow = (label || '').trim().toUpperCase() || 'ФРАГМЕНТ';
     ctx.fillText(eyebrow, PADDING, y);
     y += 40;
-    ctx.font = `72px ${fonts.serifItalic}`;
-    y = drawPlainParagraph(ctx, l1, PADDING, y, CANVAS_SIZE - PADDING * 2, 72, 78, '#1a1a1a', 'left', fonts);
+    ctx.font = `${ts(72)}px ${fonts.serifItalic}`;
+    y = drawPlainParagraph(ctx, l1, PADDING, y, CANVAS_SIZE - PADDING * 2, ts(72), ts(78), '#1a1a1a', 'left', fonts);
     y += 8;
     if (l2) {
-      y = drawPlainParagraph(ctx, l2.toUpperCase(), PADDING, y, CANVAS_SIZE - PADDING * 2, 38, 44, '#1a1a1a', 'left', fonts);
+      y = drawPlainParagraph(ctx, l2.toUpperCase(), PADDING, y, CANVAS_SIZE - PADDING * 2, ts(38), ts(44), '#1a1a1a', 'left', fonts);
       y += 8;
     }
     ctx.strokeStyle = '#1a1a1a';
@@ -494,7 +509,7 @@ async function renderContent(
     ctx.lineTo(PADDING + 44, y);
     ctx.stroke();
     y += 28;
-    drawPlainParagraph(ctx, stripAccentMarkers(body), PADDING, y, CANVAS_SIZE - PADDING * 2, 32, 40, '#777777', 'left', fonts);
+    drawPlainParagraph(ctx, stripAccentMarkers(body), PADDING, y, CANVAS_SIZE - PADDING * 2, ts(32), ts(40), '#777777', 'left', fonts);
   } else {
     // Bold content slide — mirror CarouselSlidePreview's default slide: the block
     // is vertically placed (placement), the label pill is a rounded-full chip with
@@ -507,7 +522,7 @@ async function renderContent(
     const contentW = CANVAS_SIZE - PADDING * 2;
     const lab = (label || '').trim();
 
-    const titleSizePx = (input.titleSize ?? 'L') === 'M' ? 58 : 72;
+    const titleSizePx = ts((input.titleSize ?? 'L') === 'M' ? 58 : 72);
     const titleLineH = Math.round(titleSizePx * 1.05);
     const titleLines = layoutWords(
       (t) => {
@@ -520,13 +535,13 @@ async function renderContent(
     const titleBlockH = title.trim() ? Math.max(1, titleLines.length) * titleLineH : 0;
 
     const bodyText = stripAccentMarkers(body);
-    const bodySizePx = (input.bodySize ?? 'M') === 'S' ? 30 : 38;
+    const bodySizePx = ts((input.bodySize ?? 'M') === 'S' ? 30 : 38);
     const bodyLineH = Math.round(bodySizePx * 1.625); // leading-relaxed
     const bodyLines = wrapPlain(ctx, bodyText, contentW, bodySizePx, fonts.sans);
     const bodyBlockH = bodyLines.length * bodyLineH;
 
     // Pill geometry (rounded-full, white text). px-5 / py-2 / text-22.
-    const pillTextSize = 22;
+    const pillTextSize = ts(22);
     const pillPadX = 20;
     const pillH = lab ? 40 : 0;
     const pillToTitle = lab ? 32 : 0; // mt-8
@@ -612,15 +627,15 @@ async function renderStatement(
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
     let y = CANVAS_HEIGHT / 2 - 80;
-    ctx.font = `100px ${fonts.serifItalic}`;
+    ctx.font = `${ts(100)}px ${fonts.serifItalic}`;
     y = drawPlainParagraph(
       ctx,
       stripAccentMarkers(title),
       PADDING,
       y,
       CANVAS_SIZE - PADDING * 2,
-      100,
-      105,
+      ts(100),
+      ts(105),
       '#ffffff',
       'center',
       fonts,
@@ -634,7 +649,7 @@ async function renderStatement(
     ctx.lineTo((CANVAS_SIZE + 44) / 2, y);
     ctx.stroke();
     y += 40;
-    ctx.font = `22px ${fonts.sansBold}`;
+    ctx.font = `${ts(22)}px ${fonts.sansBold}`;
     ctx.fillStyle = 'rgba(255,255,255,0.35)';
     const sub = (input.label || '').trim().toUpperCase();
     if (sub) {
@@ -654,13 +669,15 @@ async function renderStatement(
     const statementTextColor = titleColor;
     const align = input.textAlign ?? 'left';
     const isTestimonial = input.layoutPreset === 'testimonial';
-    const sizePx = isTestimonial
-      ? (input.titleSize ?? 'L') === 'M'
-        ? 46
-        : 52
-      : (input.titleSize ?? 'L') === 'M'
-        ? 70
-        : 82;
+    const sizePx = ts(
+      isTestimonial
+        ? (input.titleSize ?? 'L') === 'M'
+          ? 46
+          : 52
+        : (input.titleSize ?? 'L') === 'M'
+          ? 70
+          : 82,
+    );
     const lineH = Math.round(sizePx * 1.25); // leading-tight
     const contentW = CANVAS_SIZE - PADDING * 2;
     const lines = layoutWords(
@@ -720,8 +737,8 @@ async function renderBullets(
       PADDING,
       y,
       CANVAS_SIZE - PADDING * 2,
-      72,
-      78,
+      ts(72),
+      ts(78),
       '#1a1a1a',
       'left',
       fonts,
@@ -729,14 +746,14 @@ async function renderBullets(
     y += 28;
     let n = 1;
     for (const row of list.slice(0, 8)) {
-      ctx.font = `52px ${fonts.serifItalic}`;
+      ctx.font = `${ts(52)}px ${fonts.serifItalic}`;
       ctx.fillStyle = '#c8c0b4';
       ctx.textBaseline = 'alphabetic';
       ctx.fillText(String(n), PADDING, y + 32);
-      ctx.font = `32px ${fonts.sans}`;
+      ctx.font = `${ts(32)}px ${fonts.sans}`;
       ctx.fillStyle = '#555555';
       const colX = PADDING + 56;
-      const yy = drawPlainParagraph(ctx, row, colX, y + 32, CANVAS_SIZE - colX - PADDING, 32, 38, '#555555', 'left', fonts);
+      const yy = drawPlainParagraph(ctx, row, colX, y + 32, CANVAS_SIZE - colX - PADDING, ts(32), ts(38), '#555555', 'left', fonts);
       y = yy + 16;
       ctx.strokeStyle = '#ddd8d0';
       ctx.lineWidth = 1;
@@ -764,7 +781,7 @@ async function renderBullets(
     const rows = (list.length ? list : ['Пункт 1', 'Пункт 2', 'Пункт 3']).slice(0, 8);
     const bulletStyle = input.bulletStyle ?? 'numbered-padded';
 
-    const titleSizePx = (input.titleSize ?? 'L') === 'M' ? 45 : 56;
+    const titleSizePx = ts((input.titleSize ?? 'L') === 'M' ? 45 : 56);
     const titleLineH = Math.round(titleSizePx * 1.25); // leading-tight
     const titleLines = layoutWords(
       (t) => {
@@ -783,8 +800,8 @@ async function renderBullets(
     const markerGap = 16;
     const textX = PADDING + markerColW + markerGap;
     const textW = contentW - markerColW - markerGap;
-    const markerSizePx = 28; // text-[28px]
-    const bodySizePx = (input.bodySize ?? 'M') === 'S' ? 29 : 36;
+    const markerSizePx = ts(28); // text-[28px]
+    const bodySizePx = ts((input.bodySize ?? 'M') === 'S' ? 29 : 36);
     const bodyLineH = Math.round(bodySizePx * 1.375); // leading-snug
     const itemGap = 12; // space-y-3 (bold)
 
@@ -865,12 +882,12 @@ async function renderCta(
     ctx.lineWidth = 0.5;
     ctx.strokeRect(0.25, 0.25, CANVAS_SIZE - 0.5, CANVAS_HEIGHT - 0.5);
     let y = WATERMARK_Y + 56;
-    ctx.font = `22px ${fonts.sansBold}`;
+    ctx.font = `${ts(22)}px ${fonts.sansBold}`;
     ctx.fillStyle = '#bbbbbb';
     ctx.fillText((label || 'ЗАКЛИК').toUpperCase(), PADDING, y);
     y += 48;
     const [l1, l2] = splitEditorialTitle(stripAccentMarkers(title));
-    y = drawPlainParagraph(ctx, l1, PADDING, y, CANVAS_SIZE - PADDING * 2, 96, 102, '#1a1a1a', 'left', fonts, 'serif');
+    y = drawPlainParagraph(ctx, l1, PADDING, y, CANVAS_SIZE - PADDING * 2, ts(96), ts(102), '#1a1a1a', 'left', fonts, 'serif');
     y += 8;
     if (l2) {
       y = drawPlainParagraph(
@@ -879,8 +896,8 @@ async function renderCta(
         PADDING,
         y,
         CANVAS_SIZE - PADDING * 2,
-        44,
-        52,
+        ts(44),
+        ts(52),
         '#1a1a1a',
         'left',
         fonts,
@@ -895,7 +912,7 @@ async function renderCta(
     ctx.lineTo(CANVAS_SIZE - PADDING, y);
     ctx.stroke();
     y += 36;
-    ctx.font = `28px ${fonts.sans}`;
+    ctx.font = `${ts(28)}px ${fonts.sans}`;
     ctx.fillStyle = '#888888';
     const action = stripAccentMarkers(body);
     const yAfterAction = drawPlainParagraph(
@@ -904,8 +921,8 @@ async function renderCta(
       PADDING,
       y,
       CANVAS_SIZE - PADDING * 2 - 60,
-      28,
-      34,
+      ts(28),
+      ts(34),
       '#888888',
       'left',
       fonts,
@@ -917,7 +934,7 @@ async function renderCta(
     ctx.lineWidth = 1;
     ctx.stroke();
     ctx.fillStyle = '#1a1a1a';
-    ctx.font = `18px ${fonts.sans}`;
+    ctx.font = `${ts(18)}px ${fonts.sans}`;
     ctx.fillText('→', CANVAS_SIZE - PADDING - 30, circleY + 6);
   } else {
     // Bold CTA/final (goal) — mirror CarouselSlidePreview's final slide: NO
@@ -929,7 +946,7 @@ async function renderCta(
     const { r, g, b } = hexToRgb(accent);
     const contentW = CANVAS_SIZE - PADDING * 2;
 
-    const titleSizePx = (input.titleSize ?? 'L') === 'M' ? 58 : 72;
+    const titleSizePx = ts((input.titleSize ?? 'L') === 'M' ? 58 : 72);
     const titleLineH = Math.round(titleSizePx * 1.05);
     const titleLines = layoutWords(
       (t) => {
@@ -946,7 +963,7 @@ async function renderCta(
     // 86d36ejc6): the body uses the SAME content margins (PADDING..CANVAS-PADDING)
     // as the title, so both start at the same x for whatever alignment is set.
     const boxBodyText = stripAccentMarkers(body).trim() || 'Підпишись';
-    const boxBodySize = 36;
+    const boxBodySize = ts(36);
     const boxPadY = 24; // py-6
     const boxBodyLineH = Math.round(boxBodySize * 1.2);
     const boxBodyLines = wrapPlain(ctx, boxBodyText, contentW, boxBodySize, fonts.sansBold);
@@ -1040,9 +1057,9 @@ export async function renderCarouselTemplatePng(input: CarouselTemplateInput): P
       const name = author?.name?.trim() || 'Автор';
       const handle = author?.handle?.trim() || '@handle';
       ctx.fillStyle = refined ? '#ffffff' : '#ffffff';
-      ctx.font = `bold 28px ${fonts.sansBold}`;
+      ctx.font = `bold ${ts(28)}px ${fonts.sansBold}`;
       ctx.fillText(name, PADDING + 66, y);
-      ctx.font = `24px ${fonts.sans}`;
+      ctx.font = `${ts(24)}px ${fonts.sans}`;
       ctx.fillStyle = 'rgba(255,255,255,0.75)';
       ctx.fillText(handle, PADDING + 66, y + 30);
       ctx.beginPath();
@@ -1060,7 +1077,7 @@ export async function renderCarouselTemplatePng(input: CarouselTemplateInput): P
       await renderCta(ctx, { ...input, title: input.ctaTitle || input.title, body: '' }, refined, fonts);
       const kw = (input.ctaKeyword || '').trim() || 'РУТА';
       ctx.textBaseline = 'alphabetic';
-      ctx.font = refined ? `italic 128px ${fonts.serifItalic}` : `900 128px ${fonts.sansBold}`;
+      ctx.font = refined ? `italic ${ts(128)}px ${fonts.serifItalic}` : `900 ${ts(128)}px ${fonts.sansBold}`;
       ctx.fillStyle = refined ? '#1a1a1a' : '#ffffff';
       const tw = ctx.measureText(kw).width;
       ctx.fillText(kw, (CANVAS_SIZE - tw) / 2, CANVAS_HEIGHT * 0.62);
