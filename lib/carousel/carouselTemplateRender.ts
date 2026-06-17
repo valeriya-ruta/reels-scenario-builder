@@ -941,13 +941,15 @@ async function renderCta(
     );
     const titleBlockH = title.trim() ? Math.max(1, titleLines.length) * titleLineH : 0;
 
-    // Accent box (rounded-2xl, px-8 / py-6) with bold 36px body.
+    // Accent box (rounded-2xl, py-6) with bold 36px body. The CTA body shares the
+    // title's left edge — no extra horizontal indent inside the box (task
+    // 86d36ejc6): the body uses the SAME content margins (PADDING..CANVAS-PADDING)
+    // as the title, so both start at the same x for whatever alignment is set.
     const boxBodyText = stripAccentMarkers(body).trim() || 'Підпишись';
     const boxBodySize = 36;
-    const boxInnerPad = 32; // px-8
     const boxPadY = 24; // py-6
     const boxBodyLineH = Math.round(boxBodySize * 1.2);
-    const boxBodyLines = wrapPlain(ctx, boxBodyText, contentW - boxInnerPad * 2, boxBodySize, fonts.sansBold);
+    const boxBodyLines = wrapPlain(ctx, boxBodyText, contentW, boxBodySize, fonts.sansBold);
     const boxBodyH = Math.max(1, boxBodyLines.length) * boxBodyLineH;
     const boxH = boxPadY * 2 + boxBodyH;
 
@@ -984,8 +986,8 @@ async function renderCta(
     // The body sits on the ACCENT box, so its text must contrast with the box
     // color (not the slide background) — prevents black-on-red.
     const ctaBoxTextColor = resolveTitleAndBodyColors('color', accent, input.palette).bodyColor;
-    const boxLeft = PADDING + boxInnerPad;
-    const boxRight = CANVAS_SIZE - PADDING - boxInnerPad;
+    const boxLeft = PADDING; // share the title's left edge — no extra indent
+    const boxRight = CANVAS_SIZE - PADDING;
     let by = firstBaseline(ctx, boxBodySize, boxBodyLineH, boxY + boxPadY, fonts.sansBold);
     ctx.font = `${boxBodySize}px ${fonts.sansBold}`;
     for (const ln of boxBodyLines) {
