@@ -1,9 +1,21 @@
 import { redirect } from 'next/navigation';
 import { requireAuth } from '@/lib/auth';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
-import type { StorytellingProject } from '@/lib/domain';
-import StorytellingProjectsList from '@/components/StorytellingProjectsList';
 import NewReelSubmitButton from '@/components/NewReelSubmitButton';
+import ContentRowsSection from '@/components/content/ContentRowsSection';
+import type { ContentPiece } from '@/lib/content/contentPiece';
+import type { ContentStatus } from '@/lib/content/statusSystem';
+
+export const dynamic = 'force-dynamic';
+
+type Row = {
+  id: string;
+  user_id: string;
+  name: string | null;
+  status: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
 
 export default async function StorytellingsPage() {
   const user = await requireAuth();
@@ -12,20 +24,35 @@ export default async function StorytellingsPage() {
   const supabase = await createServerSupabaseClient();
   const { data: projects, error } = await supabase
     .from('storytelling_projects')
-    .select('*')
+    .select('id, user_id, name, status, created_at, updated_at')
     .eq('user_id', user.id)
     .order('updated_at', { ascending: false });
 
   if (error) console.error('Error fetching storytelling projects:', error);
 
+  const now = new Date().toISOString();
+  const pieces: ContentPiece[] = ((projects as Row[] | null) ?? []).map((p) => ({
+    id: p.id,
+    userId: p.user_id,
+    type: 'story',
+    status: (p.status ?? 'idea') as ContentStatus,
+    title: p.name?.trim() || 'Без назви',
+    refTable: 'storytelling_projects',
+    createdAt: p.created_at ?? now,
+    updatedAt: p.updated_at ?? now,
+  }));
+
   return (
     <div className="min-h-screen">
-      <div className="mx-auto max-w-4xl px-4 py-8">
-        <div className="mb-8 flex items-center justify-between">
+      <div className="mx-auto max-w-2xl px-4 py-8">
+        <div className="mb-6 flex items-center justify-between">
           <h1 className="font-display text-2xl font-semibold text-zinc-900">Мої сторітелінги</h1>
           <CreateButton />
         </div>
-        <StorytellingProjectsList projects={(projects as StorytellingProject[]) || []} />
+        <ContentRowsSection
+          pieces={pieces}
+          emptyText="Тут поки що нічого немає. Створи перший сторітелінг."
+        />
       </div>
     </div>
   );
@@ -34,10 +61,7 @@ export default async function StorytellingsPage() {
 function CreateButton() {
   return (
     <form action={createProject}>
-      <NewReelSubmitButton
-        idleLabel="Новий сторітелінг"
-        pendingLabel="Створюю сторітелінг..."
-      />
+      <NewReelSubmitButton idleLabel="Новий сторітелінг" pendingLabel="Створюю сторітелінг..." />
     </form>
   );
 }
