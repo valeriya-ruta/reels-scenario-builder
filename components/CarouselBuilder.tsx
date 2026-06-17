@@ -605,6 +605,12 @@ export default function CarouselBuilder({
     });
   };
 
+  // In-flight export control: an AbortController cancels the current slide fetch,
+  // and a monotonically-increasing run id invalidates a cancelled run so a late
+  // resolve can't write state / fire a completion popup (task 86d3cpv8f).
+  const exportAbortRef = useRef<AbortController | null>(null);
+  const exportRunRef = useRef(0);
+
   const runGeneration = async () => {
     const valid = slides.some((s) => s.title.trim().length > 0 || s.body.trim().length > 0);
     if (!valid) {
@@ -621,6 +627,12 @@ export default function CarouselBuilder({
     setHasGenerated(false);
     let currentSlideIndex = 0;
 
+    // New export run: fresh abort signal + run id. Cancelling (✕) aborts `ac`
+    // and bumps the run id so everything below no-ops for the cancelled run.
+    const myRun = ++exportRunRef.current;
+    const ac = new AbortController();
+    exportAbortRef.current = ac;
+
     try {
       // Flush the persisted slide model first so the server-side export renders
       // from exactly what the editor holds (no race with the debounced autosave).
@@ -634,6 +646,7 @@ export default function CarouselBuilder({
           saved.error ? `Save before export failed: ${saved.error}` : 'Save before export failed',
         );
       }
+      if (ac.signal.aborted || exportRunRef.current !== myRun) return;
       // Brand-level inputs (font, accent, vibe, palette colours) also affect the
       // render, so they're part of every slide's fingerprint — a brand change
       // busts the whole carousel's cache.
@@ -665,6 +678,7 @@ export default function CarouselBuilder({
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ project_id: projectId, slide_index: i + 1 }),
+          signal: ac.signal,
         });
         const responseText = await res.text();
         let data: { image_base64?: string; error?: string } = {};
@@ -692,9 +706,19 @@ export default function CarouselBuilder({
           return next;
         });
       }
+      if (exportRunRef.current !== myRun) return; // cancelled mid-flight
       setHasGenerated(true);
       setHasDownloaded(false);
     } catch (e) {
+      // A cancelled export (✕) aborts the fetch / bumps the run id — swallow it:
+      // no error UI, no late completion popup.
+      if (
+        (e instanceof DOMException && e.name === 'AbortError') ||
+        ac.signal.aborted ||
+        exportRunRef.current !== myRun
+      ) {
+        return;
+      }
       const normalizedError = normalizeGenerationError(e);
       const errorContext = {
         target: 'carousel',
@@ -742,8 +766,13 @@ export default function CarouselBuilder({
       setValidationError(mappedError.main);
       setValidationErrorDetail(mappedError.detail);
     } finally {
-      setIsGenerating(false);
-      setGeneratingIndex(0);
+      // Only the current run resets shared UI state (a cancelled run already had
+      // it reset by closeExport, and a newer run owns it now).
+      if (exportRunRef.current === myRun) {
+        setIsGenerating(false);
+        setGeneratingIndex(0);
+      }
+      if (exportAbortRef.current === ac) exportAbortRef.current = null;
     }
   };
 
@@ -836,6 +865,15 @@ export default function CarouselBuilder({
   };
 
   const closeExport = () => {
+    // Tapping ✕ mid-export ABORTS it fully (task 86d3cpv8f): cancel the in-flight
+    // slide fetch and bump the run id so a late resolve writes no state, fires no
+    // completion popup, and triggers no download. A fresh export afterwards starts
+    // a brand-new run cleanly.
+    exportAbortRef.current?.abort();
+    exportAbortRef.current = null;
+    exportRunRef.current++;
+    setIsGenerating(false);
+    setGeneratingIndex(0);
     setExportOpen(false);
   };
 
