@@ -2,6 +2,11 @@ import { existsSync } from 'fs';
 import { join } from 'path';
 import { GlobalFonts } from '@napi-rs/canvas';
 import type { CarouselFonts } from '@/lib/carousel/canvasSegmentedText';
+import { resolveBrandFont } from '@/lib/brandFonts';
+
+/** @fontsource package used for body text when a brand font is titles-only
+ *  (bodyAvailable === false). Mirrors the editor's BODY_FALLBACK_FONT (Inter). */
+const BODY_FALLBACK_PACKAGE = 'inter';
 
 // `GlobalFonts` is process-global with no unregister API. To stay correct
 // across concurrent requests on a warm worker we register every brand font
@@ -110,14 +115,27 @@ export function ensureCarouselFonts(fontPairing?: string | null): CarouselFonts 
     const safe = packageName.replace(/[^a-zA-Z0-9]/g, '_');
     const prefix = `Brand_${safe}`;
 
-    const bodyFams = registerSubsetStack(fontsourceDir, packageName, `${prefix}_sans`, '400', 'normal');
+    // The body font may differ from the title font. Brand fonts with
+    // bodyAvailable === false (e.g. Cormorant, Days One, Climate Crisis) are
+    // titles-only: the editor renders their BODY in the sans fallback (Inter),
+    // NOT in the title typeface. Mirror that here so exported body text doesn't
+    // fall into the serif title face (task 86d3c75bx). Title roles (sansBold,
+    // serifItalic) always come from the brand package; body roles (sans,
+    // sansItalic) come from the brand package only when it has a real body face.
+    const brandFont = resolveBrandFont(requestedFontId);
+    const bodyPackage =
+      brandFont.bodyAvailable ? packageName : (FONT_PACKAGE_BY_ID[BODY_FALLBACK_PACKAGE] ?? packageName);
+    const bodySafe = bodyPackage.replace(/[^a-zA-Z0-9]/g, '_');
+    const bodyPrefix = `Brand_${bodySafe}`;
+
+    const bodyFams = registerSubsetStack(fontsourceDir, bodyPackage, `${bodyPrefix}_sans`, '400', 'normal');
     const titleFams = (() => {
       const w700 = registerSubsetStack(fontsourceDir, packageName, `${prefix}_sansBold`, '700', 'normal');
       return w700.length ? w700 : registerSubsetStack(fontsourceDir, packageName, `${prefix}_sansBold`, '400', 'normal');
     })();
     const sansItalicFams = (() => {
-      const it = registerSubsetStack(fontsourceDir, packageName, `${prefix}_sansItalic`, '400', 'italic');
-      return it.length ? it : registerSubsetStack(fontsourceDir, packageName, `${prefix}_sansItalic`, '400', 'normal');
+      const it = registerSubsetStack(fontsourceDir, bodyPackage, `${bodyPrefix}_sansItalic`, '400', 'italic');
+      return it.length ? it : registerSubsetStack(fontsourceDir, bodyPackage, `${bodyPrefix}_sansItalic`, '400', 'normal');
     })();
     const serifItalicFams = (() => {
       const a = registerSubsetStack(fontsourceDir, packageName, `${prefix}_serifItalic`, '700', 'italic');
