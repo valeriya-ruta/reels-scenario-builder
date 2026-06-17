@@ -8,6 +8,7 @@ import CreateRadialMenu, {
   type RadialOptionId,
 } from './CreateRadialMenu';
 import BraindumpOverlay from './BraindumpOverlay';
+import { OPEN_BRAINDUMP_IDEA_EVENT, type OpenBraindumpIdeaDetail } from '@/lib/content/braindumpIdeaEvent';
 import { CONTENT_TYPES } from '@/lib/contentTypes';
 
 /**
@@ -78,6 +79,8 @@ export default function BottomNav() {
   const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null);
   const [highlightedId, setHighlightedId] = useState<RadialOptionId | null>(null);
   const [braindumpOpen, setBraindumpOpen] = useState(false);
+  // Set when an idea row reopens the braindump pre-loaded; null = fresh capture.
+  const [braindumpIdea, setBraindumpIdea] = useState<{ id: string; text: string } | null>(null);
 
   const fabRef = useRef<HTMLButtonElement>(null);
   const bubbleEls = useRef<Map<RadialOptionId, HTMLButtonElement>>(new Map());
@@ -114,10 +117,23 @@ export default function BottomNav() {
     closeMenu();
   }, [pathname, closeMenu]);
 
+  // An idea row anywhere in the app asks to reopen the braindump pre-loaded.
+  useEffect(() => {
+    const onOpenIdea = (e: Event) => {
+      const detail = (e as CustomEvent<OpenBraindumpIdeaDetail>).detail;
+      if (!detail) return;
+      setBraindumpIdea({ id: detail.id, text: detail.text });
+      setBraindumpOpen(true);
+    };
+    window.addEventListener(OPEN_BRAINDUMP_IDEA_EVENT, onOpenIdea);
+    return () => window.removeEventListener(OPEN_BRAINDUMP_IDEA_EVENT, onOpenIdea);
+  }, []);
+
   const selectOption = useCallback(
     (id: RadialOptionId) => {
       closeMenu();
       if (id === 'ideas') {
+        setBraindumpIdea(null); // fresh capture from the FAB
         setBraindumpOpen(true);
         return;
       }
@@ -307,7 +323,14 @@ export default function BottomNav() {
         registerBubble={registerBubble}
       />
 
-      <BraindumpOverlay open={braindumpOpen} onClose={() => setBraindumpOpen(false)} />
+      <BraindumpOverlay
+        open={braindumpOpen}
+        initialIdea={braindumpIdea}
+        onClose={() => {
+          setBraindumpOpen(false);
+          setBraindumpIdea(null);
+        }}
+      />
     </>
   );
 }

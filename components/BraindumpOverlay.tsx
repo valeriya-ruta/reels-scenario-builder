@@ -49,9 +49,12 @@ function pickRecorderMime(): string | undefined {
 interface BraindumpOverlayProps {
   open: boolean;
   onClose: () => void;
+  /** When opening from an existing idea row: preload its text + update that idea
+   *  (instead of a fresh capture). Task 86d3cpv9x. */
+  initialIdea?: { id: string; text: string } | null;
 }
 
-export default function BraindumpOverlay({ open, onClose }: BraindumpOverlayProps) {
+export default function BraindumpOverlay({ open, onClose, initialIdea = null }: BraindumpOverlayProps) {
   const [phase, setPhase] = useState<Phase>('A');
   const [text, setText] = useState('');
   const [inputMode, setInputMode] = useState<InputMode>('voice');
@@ -80,19 +83,30 @@ export default function BraindumpOverlay({ open, onClose }: BraindumpOverlayProp
     textRef.current = text;
   }, [text]);
 
-  // Reset to a fresh capture each time the overlay opens; pick a new prompt.
+  // On open: either reopen an existing idea pre-loaded in result-state (so it
+  // saves back to that idea + lets the user edit / promote), or start a fresh
+  // capture with a new prompt.
   useEffect(() => {
     if (!open) return;
     const next = pickBraindumpPrompt(prevPromptRef.current);
     prevPromptRef.current = next;
     setPrompt(next);
-    setPhase('A');
-    setText('');
-    setInputMode('voice');
+    setInputMode('type');
     setError(null);
-    setSaveStatus('idle');
-    setSavedId(null);
     setTypeStatus({ reels: 'idle', carousel: 'idle', stories: 'idle' });
+    if (initialIdea) {
+      setPhase('B');
+      setText(initialIdea.text);
+      setSavedId(initialIdea.id);
+      setSaveStatus('saved');
+    } else {
+      setPhase('A');
+      setText('');
+      setInputMode('voice');
+      setSaveStatus('idle');
+      setSavedId(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const stopStream = useCallback(() => {
