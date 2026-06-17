@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState, type ComponentType } from 'react';
-import { Home, CalendarDays, Plus, X, BarChart3, User } from 'lucide-react';
+import { Home, CalendarDays, Plus, BarChart3, User } from 'lucide-react';
 import CreateRadialMenu, {
   RADIAL_OPTIONS,
   type RadialOptionId,
@@ -142,14 +142,27 @@ export default function BottomNav() {
     else bubbleEls.current.delete(id);
   }, []);
 
+  // Nearest-bubble hit test with a generous capture radius (not exact-hit only),
+  // so a glide that lands NEAR a bubble still arms it (task 86d3ca3jy). The
+  // bubble (46px) sits at the bottom of its column, so its centre is the column
+  // x-centre and ~23px up from the column's bottom edge.
   const bubbleUnderPoint = useCallback((x: number, y: number): RadialOptionId | null => {
+    const CAPTURE_RADIUS = 60;
+    let bestId: RadialOptionId | null = null;
+    let bestDist = CAPTURE_RADIUS;
     for (const opt of RADIAL_OPTIONS) {
       const el = bubbleEls.current.get(opt.id);
       if (!el) continue;
       const r = el.getBoundingClientRect();
-      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return opt.id;
+      const cx = r.left + r.width / 2;
+      const cy = r.bottom - 23;
+      const d = Math.hypot(x - cx, y - cy);
+      if (d <= bestDist) {
+        bestDist = d;
+        bestId = opt.id;
+      }
     }
-    return null;
+    return bestId;
   }, []);
 
   const clearGlideTimer = useCallback(() => {
@@ -236,7 +249,7 @@ export default function BottomNav() {
   return (
     <>
       <nav
-        className="fixed inset-x-0 bottom-0 z-50 md:hidden"
+        className="fixed inset-x-0 bottom-0 z-[70] md:hidden"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
         aria-label="Основна навігація"
       >
@@ -264,14 +277,18 @@ export default function BottomNav() {
               aria-expanded={menuOpen}
               aria-haspopup="menu"
               data-testid="create-fab"
-              className="-mt-5 flex h-12 w-12 touch-none items-center justify-center rounded-2xl text-white shadow-[0_6px_16px_rgba(0,75,168,0.4)] transition-transform active:scale-95"
-              style={{ backgroundColor: ACCENT }}
+              className="-mt-5 flex h-12 w-12 touch-none items-center justify-center rounded-2xl text-white shadow-[0_6px_16px_rgba(0,75,168,0.4)] transition-[transform,background-color] duration-200 active:scale-95"
+              style={{ backgroundColor: menuOpen ? '#0C447C' : '#185FA5' }}
             >
-              {menuOpen ? (
-                <X className="h-6 w-6" strokeWidth={2.6} />
-              ) : (
-                <Plus className="h-6 w-6" strokeWidth={2.4} />
-              )}
+              {/* The + rotates 135° into an × on open (and back on close). */}
+              <Plus
+                className="h-6 w-6"
+                strokeWidth={2.4}
+                style={{
+                  transform: menuOpen ? 'rotate(135deg)' : 'rotate(0deg)',
+                  transition: 'transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+                }}
+              />
             </button>
           </div>
 
