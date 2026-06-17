@@ -23,7 +23,8 @@ export default function CarouselExportOverlay({
   errorMessage,
   onDownloadAll,
   onShareAll,
-  onDownloadOne,
+  onSaveOne,
+  onShareOne,
   onClose,
 }: {
   open: boolean;
@@ -38,7 +39,10 @@ export default function CarouselExportOverlay({
   onDownloadAll: () => void;
   /** Secondary: open the OS share sheet (Telegram / Save image …). */
   onShareAll: () => void;
-  onDownloadOne: (index: number) => void;
+  /** Per-slide: save this one slide to the gallery as a real file. */
+  onSaveOne: (index: number) => void;
+  /** Per-slide: share this one slide via the OS share sheet. */
+  onShareOne: (index: number) => void;
   onClose: () => void;
 }) {
   if (!open) return null;
@@ -101,7 +105,8 @@ export default function CarouselExportOverlay({
               <p className="mb-3 text-sm text-zinc-600">
                 <b>«Завантажити всі»</b> збереже кожен слайд окремим файлом на
                 пристрій. <b>«Поділитися»</b> відкриє меню (Telegram, «Зберегти
-                зображення» тощо). Або збережи окремий слайд кнопкою на плитці.
+                зображення» тощо). На кожній плитці є дві кнопки: зберегти цей
+                слайд у галерею (⤓) або поділитися ним.
               </p>
               <div className="grid grid-cols-3 gap-2">
                 {generatedImages.map((b64, i) =>
@@ -116,15 +121,27 @@ export default function CarouselExportOverlay({
                         alt={`Слайд ${i + 1}`}
                         className="aspect-[4/5] w-full object-cover"
                       />
-                      <button
-                        type="button"
-                        onClick={() => onDownloadOne(i)}
-                        aria-label={`Завантажити слайд ${i + 1}`}
-                        className="absolute bottom-1 right-1 inline-flex items-center gap-1 rounded-lg bg-white/90 px-1.5 py-1 text-[11px] font-medium text-zinc-800 shadow-sm backdrop-blur transition hover:bg-white"
-                      >
-                        <Download className="h-3.5 w-3.5" />
-                        {i + 1}
-                      </button>
+                      <div className="absolute bottom-1 right-1 flex items-center gap-1">
+                        {/* Save this slide to the gallery as a real file. */}
+                        <button
+                          type="button"
+                          onClick={() => onSaveOne(i)}
+                          aria-label={`Зберегти слайд ${i + 1}`}
+                          className="inline-flex items-center gap-1 rounded-lg bg-white/90 px-1.5 py-1 text-[11px] font-medium text-zinc-800 shadow-sm backdrop-blur transition hover:bg-white"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                          {i + 1}
+                        </button>
+                        {/* Share this slide via the OS share sheet. */}
+                        <button
+                          type="button"
+                          onClick={() => onShareOne(i)}
+                          aria-label={`Поділитися слайдом ${i + 1}`}
+                          className="inline-flex items-center justify-center rounded-lg bg-white/90 p-1 text-zinc-800 shadow-sm backdrop-blur transition hover:bg-white"
+                        >
+                          <Share2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </div>
                   ) : null,
                 )}

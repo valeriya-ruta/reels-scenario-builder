@@ -22,7 +22,7 @@ import Link from 'next/link';
 import { resolveBrandFont } from '@/lib/brandFonts';
 import CarouselEditorLayout from '@/components/carousel/CarouselEditorLayout';
 import CarouselExportOverlay from '@/components/carousel/CarouselExportOverlay';
-import { saveSlideImage, saveSlidesToFiles, shareSlides } from '@/lib/carousel/downloadImage';
+import { saveSlideImage, saveSlideToFile, saveSlidesToFiles, shareSlides } from '@/lib/carousel/downloadImage';
 import {
   DEFAULT_BG_PHOTO_TRANSFORM,
   getBgPhotoTransform,
@@ -739,19 +739,38 @@ export default function CarouselBuilder({
     })();
   };
 
-  const downloadOne = (i: number) => {
+  // Per-slide SAVE to gallery — a real file download, same mechanism as the bulk
+  // "Завантажити всі" (never the share sheet), so per-slide save is consistent
+  // with bulk across devices (task 86d3c75hu).
+  const saveOne = (i: number) => {
     const b64 = slides[i].generatedImageBase64;
     if (!b64) return;
     void (async () => {
-      const outcome = await saveSlideImage(b64, `ruta-carousel-${i + 1}.png`, projectName);
+      const outcome = await saveSlideToFile(b64, `ruta-carousel-${i + 1}.png`);
       if (outcome === 'failed') {
         showToast('Не вдалося зберегти слайд');
         return;
       }
       clearBadge('carousel');
       setHasDownloaded(true);
+      showToast(`Слайд ${i + 1} завантажується…`);
+    })();
+  };
+
+  // Per-slide SHARE — the native share sheet (Telegram / "Зберегти зображення" …).
+  const shareOne = (i: number) => {
+    const b64 = slides[i].generatedImageBase64;
+    if (!b64) return;
+    void (async () => {
+      const outcome = await saveSlideImage(b64, `ruta-carousel-${i + 1}.png`, projectName);
+      if (outcome === 'failed') {
+        showToast('Не вдалося поділитися слайдом');
+        return;
+      }
+      clearBadge('carousel');
+      setHasDownloaded(true);
       showToast(
-        outcome === 'shared' ? `Зберігаємо слайд ${i + 1}…` : `Слайд ${i + 1} завантажується…`,
+        outcome === 'shared' ? `Відкриваємо меню для слайда ${i + 1}…` : `Слайд ${i + 1} завантажується…`,
       );
     })();
   };
@@ -945,7 +964,8 @@ export default function CarouselBuilder({
         errorMessage={validationError}
         onDownloadAll={downloadAll}
         onShareAll={shareAll}
-        onDownloadOne={downloadOne}
+        onSaveOne={saveOne}
+        onShareOne={shareOne}
         onClose={closeExport}
       />
 
