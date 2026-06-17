@@ -104,6 +104,27 @@ export async function saveSlideImage(
 }
 
 /**
+ * Save ONE slide as a real FILE on the device — the SAME mechanism as the bulk
+ * "Завантажити всі" (a freshly-built, torn-down anchor download), never the
+ * share sheet. This is the per-slide save-to-gallery action (task 86d3c75hu),
+ * separate from saveSlideImage which routes through the share sheet. Keeping it
+ * identical to the bulk path means per-slide save behaves consistently across
+ * devices wherever bulk save does.
+ */
+export async function saveSlideToFile(
+  base64: string | null,
+  filename: string,
+): Promise<SaveOutcome> {
+  if (typeof document === 'undefined' || !base64) return 'failed';
+  try {
+    anchorDownload(base64ToBlob(base64), filename);
+    return 'downloaded';
+  } catch {
+    return 'failed';
+  }
+}
+
+/**
  * Bulk save — each slide as its OWN file, in order, never a ZIP.
  *
  * On platforms that support multi-file sharing we hand the whole set to the
