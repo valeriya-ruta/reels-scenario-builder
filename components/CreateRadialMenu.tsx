@@ -1,26 +1,24 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Video, LayoutGrid, Circle, Lightbulb, type LucideIcon } from 'lucide-react';
+import { Play, LayoutGrid, Circle, Lightbulb, type LucideIcon } from 'lucide-react';
 import BlurScrim from '@/components/BlurScrim';
 
 /**
- * Create radial menu — fans 4 option bubbles into a thumb-friendly arc anchored
- * on the Create FAB. The arc is a BALANCED half-fan centred on 12 o'clock (up):
- * items spread symmetrically to the LEFT and RIGHT of straight-up rather than a
- * hard quarter-circle pinned to the right corner, so the cluster sits toward
- * screen-centre and is easy to read. Each option's text label sits ABOVE its
- * button so the thumb (arriving from the FAB below) never covers it.
- * All options share the same blue treatment (no per-option colour).
- * Tasks 86d39dnam (animation/glide) + 86d3a1a33 (centre/labels-above/both-sides).
+ * Create radial menu — a Pinterest-style TIGHT arc cluster that fans out to the
+ * RIGHT of the centered Create FAB (task 86d3ca3jy, geometry signed off in the
+ * mockup). Small bubbles, each type's chip colour, label ABOVE the bubble.
+ *
+ * Arc math (LOCKED):
+ *   anchor = FAB centre (cx, cy)
+ *   radius R = min(viewportWidth * 0.32, 128)px
+ *   spread 104°, centre 64° → angles 116°…12° (CCW from +x), evenly over 4 items
+ *   x = cx + R·cos(deg); y = cy − R·sin(deg)
  *
  * Interaction is owned by the parent (BottomNav): this component is presentational.
- * It renders the dimming blur backdrop + bubbles for the FAB anchor and the
- * currently glide-highlighted id, and reports taps / backdrop dismiss back up.
- * Tap-to-open → tap-option is the guaranteed core; long-press glide is layered on
- * via `highlightedId` + pointer hit-testing in the parent. The backdrop uses the
- * shared <BlurScrim> (portaled to body) so the blur is uniform over the whole
- * screen including the nav.
+ * It reports taps / backdrop dismiss back up and reflects the glide-armed bubble
+ * via `highlightedId`. The backdrop reuses the shared <BlurScrim> (the same
+ * component the braindump / export overlays use) — no parallel scrim.
  */
 
 export type RadialOptionId = 'reels' | 'carousel' | 'stories' | 'ideas';
@@ -29,27 +27,37 @@ export interface RadialOption {
   id: RadialOptionId;
   label: string;
   Icon: LucideIcon;
+  color: string;
 }
 
+/** Order along the arc, index 0→3 (upper-left → right): Карусель, Рілс, Сторіс, Ідея.
+ *  Bubble colours = each type's chip colour. */
 export const RADIAL_OPTIONS: RadialOption[] = [
-  { id: 'reels', label: 'Рілс', Icon: Video },
-  { id: 'carousel', label: 'Карусель', Icon: LayoutGrid },
-  { id: 'stories', label: 'Сторіс', Icon: Circle },
-  { id: 'ideas', label: 'Ідеї', Icon: Lightbulb },
+  { id: 'carousel', label: 'Карусель', Icon: LayoutGrid, color: '#185FA5' },
+  { id: 'reels', label: 'Рілс', Icon: Play, color: '#534AB7' },
+  { id: 'stories', label: 'Сторіс', Icon: Circle, color: '#D85A30' },
+  { id: 'ideas', label: 'Ідея', Icon: Lightbulb, color: '#5F5E5A' },
 ];
 
-const ACCENT = '#004BA8';
-const RADIUS = 150;
-/** Balanced half-fan symmetric about 12 o'clock (90° = straight up): the four
- *  items spread to the LEFT and RIGHT of centre instead of leaning into the
- *  right corner. Read left → right: Рілс → Карусель → Сторіс → Ідеї. */
-const ANGLES_DEG = [145, 108, 72, 35];
-/** Horizontal half-width of a bubble button (w-16 = 64px) — used to centre the
- *  icon on its computed arc point. */
-const BUBBLE_HALF_W = 32;
-/** Distance from a button's top edge down to its ICON centre (label block +
- *  gap + half the 56px icon), so labels-above don't push the icon off the arc. */
-const ICON_CENTER_OFFSET = 54;
+/** Tight, right-biased arc: spread 104°, centre 64°, evenly across 4 items. */
+const ARC_CENTER_DEG = 64;
+const ARC_SPREAD_DEG = 104;
+const ANGLES_DEG = RADIAL_OPTIONS.map((_, i) =>
+  ARC_CENTER_DEG + ARC_SPREAD_DEG / 2 - (i * ARC_SPREAD_DEG) / (RADIAL_OPTIONS.length - 1),
+);
+
+/** Radius scales with the viewport, capped at 128px (LOCKED). */
+function arcRadius(): number {
+  const vw = typeof window === 'undefined' ? 390 : window.innerWidth;
+  return Math.min(vw * 0.32, 128);
+}
+
+/** Bubble = 46px circle; the column is wider so the label can sit centred above. */
+const BUBBLE_PX = 46;
+const COLUMN_W = 72;
+const COLUMN_HALF_W = COLUMN_W / 2;
+/** Top edge of the column → bubble centre = label(≈16) + gap(4) + half bubble. */
+const ICON_CENTER_OFFSET = 16 + 4 + BUBBLE_PX / 2;
 /** ms the close/collapse animation runs before the menu unmounts. */
 const CLOSE_MS = 200;
 
@@ -64,10 +72,11 @@ export interface BubblePos {
 
 /** Computes the on-screen center of each bubble for a given FAB anchor point. */
 export function bubblePositions(anchor: { x: number; y: number }): BubblePos[] {
+  const R = arcRadius();
   return RADIAL_OPTIONS.map((opt, i) => {
     const theta = (ANGLES_DEG[i] * Math.PI) / 180;
-    const x = anchor.x + RADIUS * Math.cos(theta);
-    const y = anchor.y - RADIUS * Math.sin(theta);
+    const x = anchor.x + R * Math.cos(theta);
+    const y = anchor.y - R * Math.sin(theta);
     return { id: opt.id, x, y, fromX: anchor.x - x, fromY: anchor.y - y };
   });
 }
@@ -80,6 +89,9 @@ interface CreateRadialMenuProps {
   onDismiss: () => void;
   /** Registers each bubble's DOM node so the parent can hit-test glide gestures. */
   registerBubble: (id: RadialOptionId, el: HTMLButtonElement | null) => void;
+  /** Phase-2 hook: when true, labels are hidden once the user is familiar. v1
+   *  always shows them — the hiding logic is intentionally NOT implemented here. */
+  hideLabels?: boolean;
 }
 
 export default function CreateRadialMenu({
@@ -89,6 +101,7 @@ export default function CreateRadialMenu({
   onSelect,
   onDismiss,
   registerBubble,
+  hideLabels = false,
 }: CreateRadialMenuProps) {
   const positions = useMemo(() => (anchor ? bubblePositions(anchor) : []), [anchor]);
 
@@ -126,8 +139,8 @@ export default function CreateRadialMenu({
   return (
     <BlurScrim
       zIndex={60}
-      blurPx={10}
-      tint="rgba(10,12,20,0.45)"
+      blurPx={12}
+      tint="rgba(20,20,30,0.55)"
       className="md:hidden"
       style={{ transition: `opacity ${CLOSE_MS}ms ease`, opacity: closing ? 0 : 1 }}
       data-testid="radial-backdrop"
@@ -154,40 +167,49 @@ export default function CreateRadialMenu({
               data-highlighted={highlighted ? 'true' : 'false'}
               onClick={() => onSelect(opt.id)}
               aria-label={opt.label}
-              className="pointer-events-auto absolute flex w-16 flex-col items-center gap-1"
+              className="pointer-events-auto absolute flex flex-col items-center gap-1"
               style={{
                 left: pos.x,
                 top: pos.y,
-                // Centre the ICON on the computed arc point: pull left by half the
-                // button width and up by the label-block + half-icon offset so the
-                // label sits above without shoving the icon off the arc.
-                marginLeft: -BUBBLE_HALF_W,
+                width: COLUMN_W,
+                // Centre the BUBBLE on the computed arc point: pull left by half the
+                // column and up by the label-block + half-bubble so the label sits
+                // above without shoving the bubble off the arc.
+                marginLeft: -COLUMN_HALF_W,
                 marginTop: -ICON_CENTER_OFFSET,
                 ['--from-x' as string]: `${pos.fromX}px`,
                 ['--from-y' as string]: `${pos.fromY}px`,
                 animation: closing
-                  ? `radial-bubble-collapse ${CLOSE_MS}ms ease-in ${(positions.length - 1 - i) * 30}ms both`
-                  : `radial-bubble-pop 320ms cubic-bezier(0.34, 1.56, 0.64, 1) ${i * 45}ms both`,
+                  ? `radial-bubble-collapse ${CLOSE_MS}ms ease-in ${(positions.length - 1 - i) * 35}ms both`
+                  : `radial-bubble-pop 400ms cubic-bezier(0.34, 1.56, 0.64, 1) ${i * 50}ms both`,
               }}
             >
-              {/* Label ABOVE the icon — the thumb arrives from the FAB below, so a
-                  label under the button would be covered by the finger. */}
-              <span className="rounded-md bg-white/95 px-1.5 py-0.5 text-[11px] font-semibold text-zinc-800 shadow-sm">
-                {opt.label}
-              </span>
+              {/* Label ABOVE the bubble — white with a shadow for legibility (the
+                  thumb arrives from the FAB below, so a label under would be
+                  covered). v1 always shows it; `hideLabels` is the phase-2 hook. */}
+              {hideLabels ? null : (
+                <span
+                  className="select-none text-[11px] font-semibold leading-none text-white"
+                  style={{ textShadow: '0 1px 3px rgba(0,0,0,0.55)' }}
+                >
+                  {opt.label}
+                </span>
+              )}
               <span
-                className="flex h-14 w-14 items-center justify-center rounded-full text-white"
+                className="flex items-center justify-center rounded-full text-white"
                 style={{
-                  backgroundColor: ACCENT,
-                  // Glide target grows (scale-up feedback) — not a colour change.
-                  transform: highlighted ? 'scale(1.32)' : 'scale(1)',
-                  transition: 'transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+                  width: BUBBLE_PX,
+                  height: BUBBLE_PX,
+                  backgroundColor: opt.color,
+                  // Glide-armed bubble: white ring + slight scale-up.
+                  transform: highlighted ? 'scale(1.15)' : 'scale(1)',
+                  transition: 'transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1)',
                   boxShadow: highlighted
-                    ? '0 12px 28px rgba(0,75,168,0.55)'
-                    : '0 6px 16px rgba(0,75,168,0.4)',
+                    ? '0 0 0 3px rgba(255,255,255,0.95), 0 4px 13px rgba(0,0,0,0.22)'
+                    : '0 4px 13px rgba(0,0,0,0.22)',
                 }}
               >
-                <Icon className="h-6 w-6" strokeWidth={2} />
+                <Icon style={{ width: 21, height: 21 }} strokeWidth={2} />
               </span>
             </button>
           );
