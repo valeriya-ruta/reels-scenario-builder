@@ -71,7 +71,7 @@ export default function CarouselEditorBackgroundTab({
   }, []);
 
   return (
-    <div className="space-y-5 pb-4">
+    <div className="space-y-4 pb-3">
       <div className="flex gap-2 text-xs">
         {[
           { id: 'color', label: 'Колір' },
@@ -370,10 +370,10 @@ export default function CarouselEditorBackgroundTab({
               </div>
 
               <div>
-                <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-zinc-500">
+                <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-zinc-500">
                   Колір оверлею
                 </label>
-                <div className="flex flex-wrap gap-3">
+                <div className="flex flex-wrap gap-2">
                   {brandColorOptions.map((color) => {
                     const active = normalizeHex(slide.overlayColor) === normalizeHex(color);
                     return (
@@ -383,7 +383,7 @@ export default function CarouselEditorBackgroundTab({
                         aria-label={`Оверлей ${color}`}
                         onClick={() => setOverlayPatch({ overlayColor: color })}
                         className={[
-                          'relative h-11 w-11 rounded-full border-2 transition-transform duration-[120ms] ease-out',
+                          'relative h-9 w-9 rounded-full border-2 transition-transform duration-[120ms] ease-out',
                           active ? 'scale-[1.08] border-zinc-900 shadow-sm' : 'border-[color:var(--border)]',
                         ].join(' ')}
                         style={{ backgroundColor: color }}
