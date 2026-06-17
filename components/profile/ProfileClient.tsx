@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabaseClient';
 import { useToast } from '@/components/ToastProvider';
+import SupportSheet from '@/components/SupportSheet';
 
 const ACCENT = '#004BA8';
 
@@ -387,7 +388,12 @@ export default function ProfileClient({
       </section>
 
       {supportOpen && (
-        <SupportModal onClose={() => setSupportOpen(false)} />
+        <SupportSheet
+          onClose={() => setSupportOpen(false)}
+          userId={userId}
+          email={email}
+          handle={instagramHandle}
+        />
       )}
     </div>
   );
@@ -401,49 +407,3 @@ function SoonPill() {
   );
 }
 
-/**
- * Placeholder support popup. The dedicated "Support popup + report submission"
- * task owns the real component; this row is wired to open it. Until that lands,
- * this interim popup surfaces a direct contact path so the row is functional.
- */
-function SupportModal({ onClose }: { onClose: () => void }) {
-  return (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="support-modal-title"
-      data-testid="support-modal"
-    >
-      <button type="button" className="absolute inset-0 cursor-default" aria-label="Закрити" onClick={onClose} />
-      <div
-        className="relative z-[101] w-full max-w-sm cursor-default rounded-2xl border border-[color:var(--border)] bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute right-3 top-3 rounded-lg p-1.5 text-zinc-500 transition hover:bg-[color:var(--surface)] hover:text-zinc-900"
-          aria-label="Закрити"
-        >
-          <X className="h-5 w-5" />
-        </button>
-        <h2 id="support-modal-title" className="font-display pr-8 text-xl font-semibold text-zinc-900">
-          Підтримка
-        </h2>
-        <p className="mt-3 text-sm leading-normal text-zinc-600">
-          Виникло питання чи щось не працює? Напиши нам — ми на звʼязку.
-        </p>
-        <a
-          href="https://t.me/valeriya_ruta"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-5 flex w-full items-center justify-center rounded-xl px-4 py-3 text-sm font-medium text-white transition hover:brightness-110"
-          style={{ backgroundColor: ACCENT }}
-        >
-          Написати в Телеграм
-        </a>
-      </div>
-    </div>
-  );
-}
