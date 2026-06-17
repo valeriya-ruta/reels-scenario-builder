@@ -187,6 +187,9 @@ function drawPlainParagraph(
         ? `bold ${fontSize}px ${fonts.sansBold}`
         : `${fontSize}px ${fonts.sans}`;
   ctx.font = fontFace;
+  // Cormorant (serif) titles must render at line-height 1.0 to match the editor
+  // (it wraps to 2 lines where the editor shows 1 otherwise) — task 86d3cpv1m.
+  const effLineHeight = fontFamily === 'serif' ? fontSize : lineHeight;
   const words = trimmed.split(/\s+/);
   const lines: string[] = [];
   let line = '';
@@ -208,7 +211,7 @@ function drawPlainParagraph(
     ctx.fillStyle = `rgb(${r},${g},${b})`;
     ctx.textBaseline = 'alphabetic';
     ctx.fillText(ln, lx, y);
-    y += lineHeight;
+    y += effLineHeight;
   }
   return y;
 }
@@ -966,7 +969,11 @@ async function renderCta(
     const boxBodySize = ts(36);
     const boxPadY = 24; // py-6
     const boxBodyLineH = Math.round(boxBodySize * 1.2);
-    const boxBodyLines = wrapPlain(ctx, boxBodyText, contentW, boxBodySize, fonts.sansBold);
+    // CTA body uses the BODY sans face (not the title face) like every other slide
+    // type — for a titles-only brand (e.g. Cormorant) `fonts.sansBold` is the serif
+    // title face, which is the bug. Keep a bold WEIGHT so the CTA still reads as
+    // emphasised, but on the body sans face (task 86d3cpv57).
+    const boxBodyLines = wrapPlain(ctx, boxBodyText, contentW, boxBodySize, fonts.sans);
     const boxBodyH = Math.max(1, boxBodyLines.length) * boxBodyLineH;
     const boxH = boxPadY * 2 + boxBodyH;
 
@@ -1005,8 +1012,8 @@ async function renderCta(
     const ctaBoxTextColor = resolveTitleAndBodyColors('color', accent, input.palette).bodyColor;
     const boxLeft = PADDING; // share the title's left edge — no extra indent
     const boxRight = CANVAS_SIZE - PADDING;
-    let by = firstBaseline(ctx, boxBodySize, boxBodyLineH, boxY + boxPadY, fonts.sansBold);
-    ctx.font = `${boxBodySize}px ${fonts.sansBold}`;
+    let by = firstBaseline(ctx, boxBodySize, boxBodyLineH, boxY + boxPadY, fonts.sans);
+    ctx.font = `bold ${boxBodySize}px ${fonts.sans}`;
     for (const ln of boxBodyLines) {
       const tw = ctx.measureText(ln).width;
       const lx = align === 'right' ? boxRight - tw : align === 'center' ? (CANVAS_SIZE - tw) / 2 : boxLeft;
