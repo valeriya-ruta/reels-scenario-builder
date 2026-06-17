@@ -252,6 +252,29 @@ export interface CarouselBuilderProps {
   initialSlides: Slide[];
 }
 
+/** Small, fast string hash (djb2) — keeps the export fingerprint cache keys
+ *  compact even when a slide carries a multi-MB base64 background photo. */
+function hashString(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+
+/**
+ * Fingerprint of everything that affects a slide's exported pixels: ALL of the
+ * slide's fields (title, body, colors, alignment/placement, backgroundType,
+ * background image + transform, overlay type/color/opacity, bullet style, CTA,
+ * sizes, label, items, designNote…) EXCEPT the cached output image itself, plus
+ * a brand key (font, accent, vibe, palette colours). Any edit to a render-
+ * relevant field changes the fingerprint and busts that slide's cache, so a
+ * stale image is never reused (correctness > speed — task 86d39e17k).
+ */
+function slideRenderFingerprint(slide: Slide, brandKey: string): string {
+  const { generatedImageBase64: _omitCachedImage, ...renderRelevant } = slide;
+  void _omitCachedImage;
+  return hashString(`${JSON.stringify(renderRelevant)}|${brandKey}`);
+}
+
 export default function CarouselBuilder({
   projectId,
   initialProjectName,
@@ -282,6 +305,11 @@ export default function CarouselBuilder({
   const supabase = useMemo(() => createClient(), []);
 
   const slideListTopRef = useRef<HTMLDivElement | null>(null);
+  // Export cache: slide id -> fingerprint of the render that produced its current
+  // generatedImageBase64. On re-export, a slide whose fingerprint still matches
+  // is served from its existing image instead of re-running the pipeline
+  // (task 86d39e17k). Session-scoped (survives reopening the export overlay).
+  const exportFingerprintsRef = useRef<Map<string, string>>(new Map());
   const slidesRef = useRef<Slide[]>(slides);
   const prevSlidesRef = useRef<Slide[]>(slides);
   const saveSlidesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -606,9 +634,30 @@ export default function CarouselBuilder({
           saved.error ? `Save before export failed: ${saved.error}` : 'Save before export failed',
         );
       }
+      // Brand-level inputs (font, accent, vibe, palette colours) also affect the
+      // render, so they're part of every slide's fingerprint — a brand change
+      // busts the whole carousel's cache.
+      const brandKey = JSON.stringify(brandSettings ?? {});
+
       for (let i = 0; i < snapshot.length; i++) {
         currentSlideIndex = i;
         setGeneratingIndex(i);
+
+        // Skip regeneration when this slide already has a generated image whose
+        // fingerprint still matches — repeat exports of an unchanged slide are
+        // near-instant and served from the existing image (task 86d39e17k).
+        const fingerprint = slideRenderFingerprint(snapshot[i], brandKey);
+        if (
+          snapshot[i].generatedImageBase64 &&
+          exportFingerprintsRef.current.get(snapshot[i].id) === fingerprint
+        ) {
+          setDoneMask((prev) => {
+            const next = [...prev];
+            next[i] = true;
+            return next;
+          });
+          continue;
+        }
 
         // The export reads the slide's full visual state from the persisted
         // model; the client only identifies which slide to render.
@@ -634,6 +683,9 @@ export default function CarouselBuilder({
         setSlides((prev) =>
           prev.map((row, j) => (j === i ? { ...row, generatedImageBase64: data.image_base64! } : row)),
         );
+        // Record the fingerprint that produced this image so the next export can
+        // reuse it if nothing render-relevant changed.
+        exportFingerprintsRef.current.set(snapshot[i].id, fingerprint);
         setDoneMask((prev) => {
           const next = [...prev];
           next[i] = true;
