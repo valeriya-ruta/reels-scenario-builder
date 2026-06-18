@@ -41,3 +41,25 @@ export async function setContentStatus(
   }
   return { ok: true };
 }
+
+/**
+ * Delete a content piece from whichever table it lives in (ref_table), enforcing
+ * ownership. Used by swipe-to-delete on the all-content rows (Home + «Твій
+ * контент»), where pieces are a mix of types — task 86d3d2fqy.
+ */
+export async function deleteContentPiece(
+  refTable: ContentPiece['refTable'],
+  id: string,
+): Promise<{ ok: boolean }> {
+  const user = await requireAuth();
+  if (!user) return { ok: false };
+  if (!ALLOWED_TABLES.includes(refTable)) return { ok: false };
+
+  const supabase = await createServerSupabaseClient();
+  const { error } = await supabase.from(refTable).delete().eq('id', id).eq('user_id', user.id);
+  if (error) {
+    console.error('[content] deleteContentPiece failed', { refTable, id, message: error.message });
+    return { ok: false };
+  }
+  return { ok: true };
+}
