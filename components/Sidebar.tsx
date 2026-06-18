@@ -2,8 +2,11 @@
 
 import { useState, useRef, useEffect, type ComponentType } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import { Plus, ChevronDown, Mic, Play, LayoutGrid, Circle, type LucideIcon } from 'lucide-react';
 import { createClient } from '@/lib/supabaseClient';
 import { useNavBadges, type NavBadgeKey } from '@/components/NavBadgeContext';
+import { CONTENT_TYPES } from '@/lib/contentTypes';
+import { OPEN_BRAINDUMP_FRESH_EVENT } from '@/lib/content/braindumpIdeaEvent';
 
 interface SidebarProps {
   userName?: string | null;
@@ -62,9 +65,51 @@ const navItems: NavItem[] = [
   { label: 'Календар', href: null, matchPrefixes: [], active: false },
 ];
 
+/**
+ * Desktop equivalent of the mobile ➕ FAB radial menu (task 86d3d2t4j): the 4
+ * create options, expressed as children of a collapsible "Створювати" sidebar
+ * group. Each reuses the EXACT flow the mobile FAB launches — Наговорити opens
+ * the shared braindump overlay (via OPEN_BRAINDUMP_FRESH_EVENT), the other three
+ * navigate to their existing create routes (CONTENT_TYPES[*].createHref). No new
+ * create logic. Icons/colours mirror the radial menu options.
+ */
+type CreateOption = { id: string; label: string; Icon: LucideIcon; color: string } & (
+  | { kind: 'braindump' }
+  | { kind: 'route'; href: string }
+);
+
+const createOptions: CreateOption[] = [
+  { id: 'ideas', label: 'Наговорити', Icon: Mic, color: '#5F5E5A', kind: 'braindump' },
+  {
+    id: 'carousel',
+    label: 'Карусель',
+    Icon: LayoutGrid,
+    color: CONTENT_TYPES.carousel.color,
+    kind: 'route',
+    href: CONTENT_TYPES.carousel.createHref,
+  },
+  {
+    id: 'reels',
+    label: 'Рілс',
+    Icon: Play,
+    color: CONTENT_TYPES.reels.color,
+    kind: 'route',
+    href: CONTENT_TYPES.reels.createHref,
+  },
+  {
+    id: 'stories',
+    label: 'Сторітелінг',
+    Icon: Circle,
+    color: CONTENT_TYPES.stories.color,
+    kind: 'route',
+    href: CONTENT_TYPES.stories.createHref,
+  },
+];
+
 export default function Sidebar({ userName, userEmail }: SidebarProps) {
   const [accountOpen, setAccountOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -77,6 +122,16 @@ export default function Sidebar({ userName, userEmail }: SidebarProps) {
     await supabase.auth.signOut();
     router.push('/');
     router.refresh();
+  };
+
+  const handleCreateOption = (opt: CreateOption) => {
+    setCreateOpen(false);
+    if (opt.kind === 'braindump') {
+      // Opens the shared braindump overlay owned by BottomNav (same as mobile FAB).
+      window.dispatchEvent(new Event(OPEN_BRAINDUMP_FRESH_EVENT));
+      return;
+    }
+    router.push(opt.href);
   };
 
   useEffect(() => {
@@ -103,6 +158,42 @@ export default function Sidebar({ userName, userEmail }: SidebarProps) {
   return (
     <aside className="relative flex h-full w-full flex-col overflow-hidden border-r border-[color:var(--border)] bg-white px-2 pb-4 pt-3">
       <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
+        {/* Create entry point — desktop equivalent of the mobile ➕ FAB (task
+            86d3d2t4j). Collapsible group: the trigger toggles 4 indented children. */}
+        <button
+          type="button"
+          onClick={() => setCreateOpen((v) => !v)}
+          aria-expanded={createOpen}
+          aria-controls="sidebar-create-options"
+          data-testid="sidebar-create-trigger"
+          className="relative flex items-center gap-2 rounded-lg border-l-[3px] border-transparent py-2.5 pl-3 pr-3 text-sm font-semibold text-[color:var(--accent)] transition-[background,color] duration-150 ease-out hover:bg-[color:var(--accent-soft)]"
+        >
+          <Plus className="h-4 w-4 shrink-0" strokeWidth={2.4} />
+          <span className="min-w-0 flex-1 truncate text-left">Створювати</span>
+          <ChevronDown
+            className="h-4 w-4 shrink-0 transition-transform duration-200"
+            strokeWidth={2.2}
+            style={{ transform: createOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
+          />
+        </button>
+
+        {createOpen && (
+          <div id="sidebar-create-options" className="mb-0.5 flex flex-col gap-0.5">
+            {createOptions.map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => handleCreateOption(opt)}
+                data-testid={`sidebar-create-${opt.id}`}
+                className="relative flex items-center gap-2 rounded-lg border-l-[3px] border-transparent py-2 pl-7 pr-3 text-sm font-medium text-zinc-600 transition-[background,color] duration-150 ease-out hover:bg-[color:var(--surface)] hover:text-zinc-900"
+              >
+                <opt.Icon className="h-4 w-4 shrink-0" strokeWidth={2} style={{ color: opt.color }} />
+                <span className="min-w-0 flex-1 truncate text-left">{opt.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
         {navItems.map((item) => {
           if (!item.active) {
             return (

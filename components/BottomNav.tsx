@@ -8,7 +8,11 @@ import CreateRadialMenu, {
   type RadialOptionId,
 } from './CreateRadialMenu';
 import BraindumpOverlay from './BraindumpOverlay';
-import { OPEN_BRAINDUMP_IDEA_EVENT, type OpenBraindumpIdeaDetail } from '@/lib/content/braindumpIdeaEvent';
+import {
+  OPEN_BRAINDUMP_IDEA_EVENT,
+  OPEN_BRAINDUMP_FRESH_EVENT,
+  type OpenBraindumpIdeaDetail,
+} from '@/lib/content/braindumpIdeaEvent';
 import { CONTENT_TYPES } from '@/lib/contentTypes';
 
 /**
@@ -127,6 +131,17 @@ export default function BottomNav() {
     };
     window.addEventListener(OPEN_BRAINDUMP_IDEA_EVENT, onOpenIdea);
     return () => window.removeEventListener(OPEN_BRAINDUMP_IDEA_EVENT, onOpenIdea);
+  }, []);
+
+  // The desktop sidebar's "Наговорити" option asks to open the braindump fresh
+  // (no pre-loaded idea) — same overlay the FAB opens. The FAB itself is untouched.
+  useEffect(() => {
+    const onOpenFresh = () => {
+      setBraindumpIdea(null);
+      setBraindumpOpen(true);
+    };
+    window.addEventListener(OPEN_BRAINDUMP_FRESH_EVENT, onOpenFresh);
+    return () => window.removeEventListener(OPEN_BRAINDUMP_FRESH_EVENT, onOpenFresh);
   }, []);
 
   const selectOption = useCallback(
