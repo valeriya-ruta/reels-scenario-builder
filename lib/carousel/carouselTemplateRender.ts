@@ -961,19 +961,22 @@ async function renderCta(
     );
     const titleBlockH = title.trim() ? Math.max(1, titleLines.length) * titleLineH : 0;
 
-    // Accent box (rounded-2xl, py-6) with bold 36px body. The CTA body shares the
-    // title's left edge — no extra horizontal indent inside the box (task
-    // 86d36ejc6): the body uses the SAME content margins (PADDING..CANVAS-PADDING)
-    // as the title, so both start at the same x for whatever alignment is set.
+    // Accent box (rounded-2xl, px-8 py-6). The BOX shares the title's left edge
+    // (its left side sits at PADDING), but the body text inside is inset by the
+    // box's own px-8 padding — exactly like the editor's `rounded-2xl px-8 py-6`.
+    // Without that inset the text rammed flush into the rounded corner and read
+    // as a "dent" on the export (task 86d3czfb3); the earlier "no indent" change
+    // (86d36ejc6) had dropped the box's horizontal padding entirely.
     const boxBodyText = stripAccentMarkers(body).trim() || 'Підпишись';
     const boxBodySize = ts(36);
     const boxPadY = 24; // py-6
+    const boxPadX = 32; // px-8
     const boxBodyLineH = Math.round(boxBodySize * 1.2);
     // CTA body uses the BODY sans face (not the title face) like every other slide
     // type — for a titles-only brand (e.g. Cormorant) `fonts.sansBold` is the serif
     // title face, which is the bug. Keep a bold WEIGHT so the CTA still reads as
     // emphasised, but on the body sans face (task 86d3cpv57).
-    const boxBodyLines = wrapPlain(ctx, boxBodyText, contentW, boxBodySize, fonts.sans);
+    const boxBodyLines = wrapPlain(ctx, boxBodyText, contentW - boxPadX * 2, boxBodySize, fonts.sans);
     const boxBodyH = Math.max(1, boxBodyLines.length) * boxBodyLineH;
     const boxH = boxPadY * 2 + boxBodyH;
 
@@ -1010,8 +1013,8 @@ async function renderCta(
     // The body sits on the ACCENT box, so its text must contrast with the box
     // color (not the slide background) — prevents black-on-red.
     const ctaBoxTextColor = resolveTitleAndBodyColors('color', accent, input.palette).bodyColor;
-    const boxLeft = PADDING; // share the title's left edge — no extra indent
-    const boxRight = CANVAS_SIZE - PADDING;
+    const boxLeft = PADDING + boxPadX; // px-8 inset inside the accent box
+    const boxRight = CANVAS_SIZE - PADDING - boxPadX;
     let by = firstBaseline(ctx, boxBodySize, boxBodyLineH, boxY + boxPadY, fonts.sans);
     ctx.font = `bold ${boxBodySize}px ${fonts.sans}`;
     for (const ln of boxBodyLines) {

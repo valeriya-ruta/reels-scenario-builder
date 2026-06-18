@@ -4,7 +4,6 @@ import { useCallback, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import ContentRow, { type ContentRowPiece } from '@/components/content/ContentRow';
 import { setContentStatus } from '@/app/content-actions';
-import { getIdeaText } from '@/app/ideas-actions';
 import { contentHref, type ContentPiece } from '@/lib/content/contentPiece';
 import { OPEN_BRAINDUMP_IDEA_EVENT } from '@/lib/content/braindumpIdeaEvent';
 import { nextStatus, type ContentStatus } from '@/lib/content/statusSystem';
@@ -53,19 +52,33 @@ export default function ContentRows({
     [onHint],
   );
 
+  // Reopen the braindump overlay pre-loaded with the idea's text. The full text
+  // is carried on the piece (getAllContent attaches it), so this fires
+  // synchronously — the overlay rises instantly, no server round-trip lag
+  // (task 86d3czeyc).
+  const openIdea = useCallback((piece: ContentPiece) => {
+    window.dispatchEvent(
+      new CustomEvent(OPEN_BRAINDUMP_IDEA_EVENT, {
+        detail: { id: piece.id, text: piece.text ?? piece.title },
+      }),
+    );
+  }, []);
+
   const handleRingClick = useCallback(
     (row: ContentRowPiece) => {
       const piece = pieces.find((p) => p.id === row.id);
       if (!piece) return;
+      // An idea has no status to advance, so its ring defaults to the row's open
+      // action (open the braindump overlay) — task 86d3czeyc.
       if (piece.type === 'idea') {
-        onHint?.('Зроби з цього контент');
+        openIdea(piece);
         return;
       }
       const next = nextStatus(piece.type, piece.status);
       if (!next) return; // already at Опубліковано → gentle no-op
       void persist(piece, next, piece.status);
     },
-    [pieces, persist, onHint],
+    [pieces, persist, openIdea],
   );
 
   const handleOpen = useCallback(
@@ -75,17 +88,12 @@ export default function ContentRows({
       // An idea row reopens the braindump overlay pre-loaded with its text — it
       // must NOT open a content editor (task 86d3cpv9x / 86d3c7u88 bug 3).
       if (piece.type === 'idea') {
-        void (async () => {
-          const text = await getIdeaText(piece.id);
-          window.dispatchEvent(
-            new CustomEvent(OPEN_BRAINDUMP_IDEA_EVENT, { detail: { id: piece.id, text } }),
-          );
-        })();
+        openIdea(piece);
         return;
       }
       router.push(contentHref(piece));
     },
-    [pieces, router],
+    [pieces, router, openIdea],
   );
 
   return (

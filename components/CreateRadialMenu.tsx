@@ -60,6 +60,10 @@ const IDEA_DX = -15; // Ідея sits ~15px left of the FAB centre
 const ROW_DY = -100; // row bubble centres ~100px above the FAB centre
 const STORIS_RISE = 82; // Сторіс ~82px above the row
 const EDGE_MARGIN = 10; // keep bubbles clear of the screen edge
+// Whole-menu position nudge — shifts every bubble together, leaving the L-shape,
+// spacing and the spring-from-FAB origin untouched (task 86d3czfrc).
+const MENU_NUDGE_X = 30; // +30px right
+const MENU_NUDGE_Y = 50; // +50px down
 
 export interface BubblePos {
   id: RadialOptionId;
@@ -77,11 +81,14 @@ export function bubblePositions(anchor: { x: number; y: number }): BubblePos[] {
   const dx = [IDEA_DX, IDEA_DX + ROW_GAP_PX, IDEA_DX + 2 * ROW_GAP_PX, IDEA_DX + 2 * ROW_GAP_PX];
   const dy = [ROW_DY, ROW_DY, ROW_DY, ROW_DY - STORIS_RISE];
   // Keep the right column (Карусель/Сторіс) on-screen: shift the whole L left if it would overflow.
-  const rightMostX = anchor.x + IDEA_DX + 2 * ROW_GAP_PX + BUBBLE_PX / 2;
+  // The +30px nudge is part of the on-screen position, so include it here too.
+  const rightMostX = anchor.x + MENU_NUDGE_X + IDEA_DX + 2 * ROW_GAP_PX + BUBBLE_PX / 2;
   const overflow = Math.max(0, rightMostX + EDGE_MARGIN - vw);
   return RADIAL_OPTIONS.map((opt, i) => {
-    const x = anchor.x + dx[i] - overflow;
-    const y = anchor.y + dy[i];
+    const x = anchor.x + dx[i] - overflow + MENU_NUDGE_X;
+    const y = anchor.y + dy[i] + MENU_NUDGE_Y;
+    // fromX/fromY stay relative to the real FAB centre so bubbles still spring
+    // from the + (only the resting positions move).
     return { id: opt.id, x, y, fromX: anchor.x - x, fromY: anchor.y - y };
   });
 }

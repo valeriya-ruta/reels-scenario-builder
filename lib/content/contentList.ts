@@ -68,5 +68,25 @@ export async function getAllContent(limit?: number): Promise<ContentPiece[]> {
     if (error) console.error('[content] getAllContent failed:', error.message);
     return [];
   }
-  return data.map(rowToPiece);
+  const pieces = data.map(rowToPiece);
+
+  // Attach the full idea text to idea pieces (the view only carries an 80-char
+  // title) so an idea row can reopen the braindump overlay with no round-trip
+  // (task 86d3czeyc). One batched query, RLS-scoped to the owner.
+  const ideaIds = pieces.filter((p) => p.refTable === 'ideas').map((p) => p.id);
+  if (ideaIds.length > 0) {
+    const { data: ideaRows } = await supabase
+      .from('ideas')
+      .select('id,content')
+      .in('id', ideaIds)
+      .returns<{ id: string; content: string | null }[]>();
+    if (ideaRows) {
+      const textById = new Map(ideaRows.map((r) => [r.id, r.content ?? '']));
+      for (const piece of pieces) {
+        if (piece.refTable === 'ideas') piece.text = textById.get(piece.id) ?? piece.title;
+      }
+    }
+  }
+
+  return pieces;
 }
