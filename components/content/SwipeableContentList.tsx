@@ -4,8 +4,9 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPoi
 import { useRouter } from 'next/navigation';
 import { ChevronRight, Film, LayoutGrid, Play, Trash2 } from 'lucide-react';
 import StatusRing from '@/components/content/StatusRing';
+import { setContentStatus } from '@/app/content-actions';
 import { contentHref, type ContentPiece } from '@/lib/content/contentPiece';
-import { STATUS_COLORS, STATUS_LABELS } from '@/lib/content/statusSystem';
+import { STATUS_COLORS, STATUS_LABELS, nextStatus, type ContentStatus } from '@/lib/content/statusSystem';
 import { formatShortDate } from '@/lib/content/relativeTime';
 
 /**
@@ -55,6 +56,8 @@ export default function SwipeableContentList({
   const HeaderIcon = HEADER_ICONS[iconKey];
   const router = useRouter();
   const [items, setItems] = useState<ContentPiece[]>(pieces);
+  // Optimistic status overrides for ring-tap-advance (task 86d3czf78).
+  const [statusById, setStatusById] = useState<Record<string, ContentStatus>>({});
   const [openId, setOpenId] = useState<string | null>(null);
   const [armedId, setArmedId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -116,6 +119,22 @@ export default function SwipeableContentList({
     void onCreate().finally(() => setCreating(false));
   };
 
+  // Ring-tap-advance — the only status control (task 86d3czf78). One tap moves
+  // the piece exactly one stage along its track; optimistic with rollback.
+  const advance = useCallback(
+    (piece: ContentPiece) => {
+      const current = statusById[piece.id] ?? piece.status;
+      const next = nextStatus(piece.type, current);
+      if (!next) return; // already at the final stage → gentle no-op
+      vibrate(8);
+      setStatusById((m) => ({ ...m, [piece.id]: next }));
+      void setContentStatus(piece.refTable, piece.id, piece.type, next).then((res) => {
+        if (!res.ok) setStatusById((m) => ({ ...m, [piece.id]: current })); // roll back
+      });
+    },
+    [statusById],
+  );
+
   return (
     <div className="mx-auto w-full max-w-2xl">
       {/* Header */}
@@ -151,9 +170,10 @@ export default function SwipeableContentList({
           {items.map((piece) => (
             <SwipeRow
               key={piece.id}
-              piece={piece}
+              piece={statusById[piece.id] ? { ...piece, status: statusById[piece.id] } : piece}
               open={openId === piece.id}
               armed={armedId === piece.id}
+              onAdvance={() => advance(piece)}
               onRequestOpen={() => {
                 setOpenId(piece.id);
                 setArmedId(null);
@@ -208,6 +228,7 @@ function SwipeRow({
   onArm,
   onDelete,
   onNavigate,
+  onAdvance,
 }: {
   piece: ContentPiece;
   open: boolean;
@@ -217,19 +238,28 @@ function SwipeRow({
   onArm: () => void;
   onDelete: () => void;
   onNavigate: () => void;
+  onAdvance: () => void;
 }) {
   const [dragX, setDragX] = useState(0); // live finger offset while dragging
   const [removing, setRemoving] = useState(false);
-  const start = useRef<{ x: number; base: number; moved: boolean } | null>(null);
+  // `offset` tracks the live position in the ref too, so endDrag's snap decision
+  // never reads a stale React state value on a fast flick (that stale read could
+  // miss the open threshold and snap back, forcing a re-swipe) — task 86d3czf4h.
+  const start = useRef<{ x: number; base: number; moved: boolean; offset: number } | null>(null);
+  // `dragging` mirrors start.current as state so render never reads the ref
+  // (react-hooks/refs) — drives whether we follow the finger or rest position.
+  const [dragging, setDragging] = useState(false);
 
   // Resting offset: armed = full-width red, open = trash width, else closed.
   const restX = armed ? -9999 : open ? -TRASH_W : 0;
-  const x = start.current ? dragX : restX;
+  const x = dragging ? dragX : restX;
 
   const onPointerDown = (e: ReactPointerEvent) => {
     if (armed || removing) return;
-    start.current = { x: e.clientX, base: open ? -TRASH_W : 0, moved: false };
-    setDragX(start.current.base);
+    const base = open ? -TRASH_W : 0;
+    start.current = { x: e.clientX, base, moved: false, offset: base };
+    setDragX(base);
+    setDragging(true);
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   };
   const onPointerMove = (e: ReactPointerEvent) => {
@@ -237,11 +267,16 @@ function SwipeRow({
     if (!s) return;
     const dx = e.clientX - s.x;
     if (Math.abs(dx) > 6) s.moved = true;
-    setDragX(Math.max(-TRASH_W, Math.min(0, s.base + dx)));
+    // Clamp to [-TRASH_W, 0]: only a LEFT drag exposes the trash on the right;
+    // a right drag is pinned closed (task 86d3czf4h — reveal on swipe LEFT).
+    const next = Math.max(-TRASH_W, Math.min(0, s.base + dx));
+    s.offset = next;
+    setDragX(next);
   };
   const endDrag = () => {
     const s = start.current;
     start.current = null;
+    setDragging(false);
     if (!s) return;
     if (!s.moved) {
       // Tap (no real drag): closed → open editor; open → close.
@@ -249,7 +284,7 @@ function SwipeRow({
       else onNavigate();
       return;
     }
-    if (dragX <= -OPEN_THRESHOLD) {
+    if (s.offset <= -OPEN_THRESHOLD) {
       if (!open) vibrate(10);
       onRequestOpen();
     } else {
@@ -297,10 +332,25 @@ function SwipeRow({
         className="relative flex touch-pan-y items-center gap-3 bg-[color:var(--background)] px-2 py-3"
         style={{
           transform: `translateX(${armed ? -9999 : x}px)`,
-          transition: start.current ? 'none' : 'transform 220ms cubic-bezier(0.22,1,0.36,1)',
+          transition: dragging ? 'none' : 'transform 220ms cubic-bezier(0.22,1,0.36,1)',
         }}
       >
-        <StatusRing type={piece.type} status={piece.status} size={34} />
+        {/* Ring is its own hit target — one tap advances status by a stage and
+            must NOT open the item; stopping pointer/click propagation keeps the
+            swipe + tap-to-open handlers below from firing (task 86d3czf78). */}
+        <button
+          type="button"
+          aria-label="Змінити статус"
+          onPointerDown={(e) => e.stopPropagation()}
+          onPointerUp={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onAdvance();
+          }}
+          className="shrink-0 rounded-full p-0.5 transition active:scale-95"
+        >
+          <StatusRing type={piece.type} status={piece.status} size={34} />
+        </button>
         <div className="min-w-0 flex-1">
           <div className="truncate text-[15.5px] font-semibold text-[color:var(--foreground)]">
             {piece.title}

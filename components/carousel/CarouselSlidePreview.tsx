@@ -503,7 +503,10 @@ export default function CarouselSlidePreview({
                     <AccentRuns text={slide.title} accentStyle={brand.accentStyle} accentColor={accent} />
                   </p>
                   <div className="mt-10 rounded-2xl px-8 py-6" style={{ backgroundColor: accent }}>
-                    <p className="text-[36px] font-bold" style={{ color: resolveTitleAndBodyColors('color', accent, brandPalette).bodyColor, fontFamily: titleFont }}>
+                    {/* CTA body is body copy → body-sans, never the Cormorant title
+                        face. The export renderer already uses the body sans; this
+                        keeps the editor 1:1 with it (task 86d3czfb3 / 86d3cpv57). */}
+                    <p className="text-[36px] font-bold" style={{ color: resolveTitleAndBodyColors('color', accent, brandPalette).bodyColor, fontFamily: bodyFont }}>
                       {bodyClean || 'Підпишись'}
                     </p>
                   </div>

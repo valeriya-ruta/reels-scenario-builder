@@ -10,6 +10,10 @@ export type ContentPiece = {
   type: ContentType;
   status: ContentStatus;
   title: string;
+  /** Full idea text, present only for idea pieces. Carried with the list so an
+   *  idea row can reopen the braindump overlay instantly, without a round-trip
+   *  (task 86d3czeyc — the list `title` is only the first 80 chars). */
+  text?: string;
   /** Underlying table the piece lives in (for opening the right editor). */
   refTable: 'carousel_projects' | 'projects' | 'storytelling_projects' | 'ideas';
   createdAt: string;
