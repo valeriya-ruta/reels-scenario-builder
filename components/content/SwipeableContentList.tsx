@@ -251,12 +251,14 @@ function SwipeRow({
   const [dragging, setDragging] = useState(false);
 
   // Resting offset: armed = full-width red, open = trash width, else closed.
-  const restX = armed ? -9999 : open ? -TRASH_W : 0;
+  // Positive offset = row slid RIGHT to expose the trash pinned to the LEFT edge
+  // (task 86d3czf4h — trash on the left, revealed by a rightward drag).
+  const restX = armed ? 9999 : open ? TRASH_W : 0;
   const x = dragging ? dragX : restX;
 
   const onPointerDown = (e: ReactPointerEvent) => {
     if (armed || removing) return;
-    const base = open ? -TRASH_W : 0;
+    const base = open ? TRASH_W : 0;
     start.current = { x: e.clientX, base, moved: false, offset: base };
     setDragX(base);
     setDragging(true);
@@ -267,9 +269,9 @@ function SwipeRow({
     if (!s) return;
     const dx = e.clientX - s.x;
     if (Math.abs(dx) > 6) s.moved = true;
-    // Clamp to [-TRASH_W, 0]: only a LEFT drag exposes the trash on the right;
-    // a right drag is pinned closed (task 86d3czf4h — reveal on swipe LEFT).
-    const next = Math.max(-TRASH_W, Math.min(0, s.base + dx));
+    // Clamp to [0, TRASH_W]: only a RIGHT drag exposes the trash on the LEFT
+    // edge; a left drag is pinned closed (task 86d3czf4h — reveal on swipe RIGHT).
+    const next = Math.min(TRASH_W, Math.max(0, s.base + dx));
     s.offset = next;
     setDragX(next);
   };
@@ -284,7 +286,7 @@ function SwipeRow({
       else onNavigate();
       return;
     }
-    if (s.offset <= -OPEN_THRESHOLD) {
+    if (s.offset >= OPEN_THRESHOLD) {
       if (!open) vibrate(10);
       onRequestOpen();
     } else {
@@ -309,7 +311,7 @@ function SwipeRow({
             onArm();
           }
         }}
-        className="absolute inset-y-0 right-0 flex items-center justify-center bg-red-600 text-white"
+        className="absolute inset-y-0 left-0 flex items-center justify-center bg-red-600 text-white"
         style={{ width: armed ? '100%' : TRASH_W }}
       >
         {armed ? <span className="text-[16px] font-bold">Точно?</span> : <Trash2 className="h-5 w-5" />}
@@ -331,7 +333,7 @@ function SwipeRow({
         }}
         className="relative flex touch-pan-y items-center gap-3 bg-[color:var(--background)] px-2 py-3"
         style={{
-          transform: `translateX(${armed ? -9999 : x}px)`,
+          transform: `translateX(${armed ? 9999 : x}px)`,
           transition: dragging ? 'none' : 'transform 220ms cubic-bezier(0.22,1,0.36,1)',
         }}
       >
