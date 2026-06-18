@@ -294,25 +294,41 @@ function SwipeRow({
     }
   };
 
+  // First tap arms (shows «Точно?»), second tap confirms the delete.
+  const act = () => {
+    if (armed) {
+      setRemoving(true);
+      window.setTimeout(onDelete, 300);
+    } else {
+      onArm();
+    }
+  };
+
   return (
     <li
       className="relative overflow-hidden transition-[max-height,opacity] duration-300 ease-in"
       style={{ maxHeight: removing ? 0 : 240, opacity: removing ? 0 : 1 }}
     >
-      {/* Red destructive layer behind the row. */}
+      {/* Red destructive layer behind the row. Stops 1px short of the bottom so
+          it never bleeds through the inset hairline divider (a thin red line). */}
       <button
         type="button"
         aria-label={armed ? 'Підтвердити видалення' : 'Видалити'}
-        onClick={() => {
-          if (armed) {
-            setRemoving(true);
-            window.setTimeout(onDelete, 300);
-          } else {
-            onArm();
-          }
+        // Arm/confirm on pointerup, not onClick: after the reveal swipe the
+        // browser suppresses the first synthetic click (ghost-click), which is
+        // why arming used to need a second tap. touch-action:manipulation also
+        // drops the mobile tap delay (task 86d3czf4h).
+        onPointerUp={(e) => {
+          e.stopPropagation();
+          act();
         }}
-        className="absolute inset-y-0 left-0 flex items-center justify-center bg-red-600 text-white"
-        style={{ width: armed ? '100%' : TRASH_W }}
+        onKeyDown={(e) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          e.preventDefault();
+          act();
+        }}
+        className="absolute left-0 top-0 bottom-px flex items-center justify-center bg-red-600 text-white"
+        style={{ width: armed ? '100%' : TRASH_W, touchAction: 'manipulation' }}
       >
         {armed ? <span className="text-[16px] font-bold">Точно?</span> : <Trash2 className="h-5 w-5" />}
       </button>
