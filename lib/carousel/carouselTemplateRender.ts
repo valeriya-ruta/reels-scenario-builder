@@ -872,159 +872,101 @@ async function renderBullets(
 async function renderCta(
   ctx: SKRSContext2D,
   input: CarouselTemplateInput,
-  refined: boolean,
   fonts: CarouselFonts,
 ): Promise<void> {
-  const { brand, title, body, label } = input;
+  const { brand, title, body } = input;
   const accent = brand.accentColor || DEFAULT_ACCENT;
   const titleColor = input.titleColor || '#000000';
-  if (refined) {
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
-    ctx.strokeStyle = '#e8e3dc';
-    ctx.lineWidth = 0.5;
-    ctx.strokeRect(0.25, 0.25, CANVAS_SIZE - 0.5, CANVAS_HEIGHT - 0.5);
-    let y = WATERMARK_Y + 56;
-    ctx.font = `${ts(22)}px ${fonts.sansBold}`;
-    ctx.fillStyle = '#bbbbbb';
-    ctx.fillText((label || 'ЗАКЛИК').toUpperCase(), PADDING, y);
-    y += 48;
-    const [l1, l2] = splitEditorialTitle(stripAccentMarkers(title));
-    y = drawPlainParagraph(ctx, l1, PADDING, y, CANVAS_SIZE - PADDING * 2, ts(96), ts(102), '#1a1a1a', 'left', fonts, 'serif');
-    y += 8;
-    if (l2) {
-      y = drawPlainParagraph(
-        ctx,
-        l2.toUpperCase(),
-        PADDING,
-        y,
-        CANVAS_SIZE - PADDING * 2,
-        ts(44),
-        ts(52),
-        '#1a1a1a',
-        'left',
-        fonts,
-        'sansBold',
-      );
-    }
-    y += 32;
-    ctx.strokeStyle = '#e8e3dc';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(PADDING, y);
-    ctx.lineTo(CANVAS_SIZE - PADDING, y);
-    ctx.stroke();
-    y += 36;
-    ctx.font = `${ts(28)}px ${fonts.sans}`;
-    ctx.fillStyle = '#888888';
-    const action = stripAccentMarkers(body);
-    const yAfterAction = drawPlainParagraph(
+
+  // The goal / final CTA is rendered IDENTICALLY for both `bold` and `refined`
+  // vibes — exactly like the editor (CarouselSlidePreview's `final` slide, which
+  // does NOT branch on vibe): a bold title at 72px (58 for M) then a full-width
+  // accent box with the CTA word, vertically centred.
+  //
+  // The renderer USED to draw a divergent "editorial" layout for `refined`
+  // brands (white plate, eyebrow, serif title, divider, and an arrow-in-a-circle
+  // at the bottom-right). The editor never drew that, so on a refined brand the
+  // export looked nothing like the editor — and the stray arrow circle read as
+  // the reported "dent/notch" artifact. Removing that branch brings the export
+  // back in sync with the shared slide model the editor renders (task 86d3dcmyf).
+  const align = input.textAlign ?? 'left';
+  ctx.fillStyle = input.backgroundColor || DEFAULT_DARK;
+  ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
+  const { r, g, b } = hexToRgb(accent);
+  const contentW = CANVAS_SIZE - PADDING * 2;
+
+  const titleSizePx = ts((input.titleSize ?? 'L') === 'M' ? 58 : 72);
+  const titleLineH = Math.round(titleSizePx * 1.05);
+  const titleLines = layoutWords(
+    (t) => {
+      ctx.font = `${titleSizePx}px ${fonts.sansBold}`;
+      return ctx.measureText(t).width;
+    },
+    segmentsToWords(parseAccentSpans(title)),
+    contentW,
+  );
+  const titleBlockH = title.trim() ? Math.max(1, titleLines.length) * titleLineH : 0;
+
+  // Accent box (rounded-2xl, px-8 py-6). The BOX shares the title's left edge
+  // (its left side sits at PADDING), but the body text inside is inset by the
+  // box's own px-8 padding — exactly like the editor's `rounded-2xl px-8 py-6`.
+  const boxBodyText = stripAccentMarkers(body).trim() || 'Підпишись';
+  const boxBodySize = ts(36);
+  const boxPadY = 24; // py-6
+  const boxPadX = 32; // px-8
+  const boxBodyLineH = Math.round(boxBodySize * 1.2);
+  // CTA body uses the BODY sans face (not the title face) like every other slide
+  // type — for a titles-only brand (e.g. Cormorant) `fonts.sansBold` is the serif
+  // title face, which is the bug. Keep a bold WEIGHT so the CTA still reads as
+  // emphasised, but on the body sans face (task 86d3cpv57).
+  const boxBodyLines = wrapPlain(ctx, boxBodyText, contentW - boxPadX * 2, boxBodySize, fonts.sans);
+  const boxBodyH = Math.max(1, boxBodyLines.length) * boxBodyLineH;
+  const boxH = boxPadY * 2 + boxBodyH;
+
+  const gap = titleBlockH ? 40 : 0; // mt-10
+  const blockH = titleBlockH + gap + boxH;
+  let y = placementTopY('center', blockH);
+
+  let baseline = firstBaseline(ctx, titleSizePx, titleLineH, y, fonts.sansBold);
+  for (let i = 0; i < titleLines.length; i++) {
+    drawSegmentedLine(
       ctx,
-      action,
+      titleLines[i],
       PADDING,
-      y,
-      CANVAS_SIZE - PADDING * 2 - 60,
-      ts(28),
-      ts(34),
-      '#888888',
-      'left',
-      fonts,
-    );
-    const circleY = yAfterAction - 20;
-    ctx.beginPath();
-    ctx.arc(CANVAS_SIZE - PADDING - 24, circleY, 20, 0, Math.PI * 2);
-    ctx.strokeStyle = '#1a1a1a';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.fillStyle = '#1a1a1a';
-    ctx.font = `${ts(18)}px ${fonts.sans}`;
-    ctx.fillText('→', CANVAS_SIZE - PADDING - 30, circleY + 6);
-  } else {
-    // Bold CTA/final (goal) — mirror CarouselSlidePreview's final slide: NO
-    // eyebrow, BOLD title at 72px (58 for M), then a full-width accent box with
-    // the CTA word. The whole block is vertically CENTERED.
-    const align = input.textAlign ?? 'left';
-    ctx.fillStyle = input.backgroundColor || DEFAULT_DARK;
-    ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
-    const { r, g, b } = hexToRgb(accent);
-    const contentW = CANVAS_SIZE - PADDING * 2;
-
-    const titleSizePx = ts((input.titleSize ?? 'L') === 'M' ? 58 : 72);
-    const titleLineH = Math.round(titleSizePx * 1.05);
-    const titleLines = layoutWords(
-      (t) => {
-        ctx.font = `${titleSizePx}px ${fonts.sansBold}`;
-        return ctx.measureText(t).width;
-      },
-      segmentsToWords(parseAccentSpans(title)),
+      baseline,
+      titleSizePx,
+      titleColor,
+      accent,
+      brand.accentStyle,
+      align,
       contentW,
+      false,
+      700 + i,
+      fonts,
+      true,
     );
-    const titleBlockH = title.trim() ? Math.max(1, titleLines.length) * titleLineH : 0;
+    baseline += titleLineH;
+  }
+  y += titleBlockH + gap;
 
-    // Accent box (rounded-2xl, px-8 py-6). The BOX shares the title's left edge
-    // (its left side sits at PADDING), but the body text inside is inset by the
-    // box's own px-8 padding — exactly like the editor's `rounded-2xl px-8 py-6`.
-    // Without that inset the text rammed flush into the rounded corner and read
-    // as a "dent" on the export (task 86d3czfb3); the earlier "no indent" change
-    // (86d36ejc6) had dropped the box's horizontal padding entirely.
-    const boxBodyText = stripAccentMarkers(body).trim() || 'Підпишись';
-    const boxBodySize = ts(36);
-    const boxPadY = 24; // py-6
-    const boxPadX = 32; // px-8
-    const boxBodyLineH = Math.round(boxBodySize * 1.2);
-    // CTA body uses the BODY sans face (not the title face) like every other slide
-    // type — for a titles-only brand (e.g. Cormorant) `fonts.sansBold` is the serif
-    // title face, which is the bug. Keep a bold WEIGHT so the CTA still reads as
-    // emphasised, but on the body sans face (task 86d3cpv57).
-    const boxBodyLines = wrapPlain(ctx, boxBodyText, contentW - boxPadX * 2, boxBodySize, fonts.sans);
-    const boxBodyH = Math.max(1, boxBodyLines.length) * boxBodyLineH;
-    const boxH = boxPadY * 2 + boxBodyH;
-
-    const gap = titleBlockH ? 40 : 0; // mt-10
-    const blockH = titleBlockH + gap + boxH;
-    let y = placementTopY('center', blockH);
-
-    let baseline = firstBaseline(ctx, titleSizePx, titleLineH, y, fonts.sansBold);
-    for (let i = 0; i < titleLines.length; i++) {
-      drawSegmentedLine(
-        ctx,
-        titleLines[i],
-        PADDING,
-        baseline,
-        titleSizePx,
-        titleColor,
-        accent,
-        brand.accentStyle,
-        align,
-        contentW,
-        false,
-        700 + i,
-        fonts,
-        true,
-      );
-      baseline += titleLineH;
-    }
-    y += titleBlockH + gap;
-
-    const boxY = y;
-    roundRectPath(ctx, PADDING, boxY, contentW, boxH, 16);
-    ctx.fillStyle = `rgb(${r},${g},${b})`;
-    ctx.fill();
-    // The body sits on the ACCENT box, so its text must contrast with the box
-    // color (not the slide background) — prevents black-on-red.
-    const ctaBoxTextColor = resolveTitleAndBodyColors('color', accent, input.palette).bodyColor;
-    const boxLeft = PADDING + boxPadX; // px-8 inset inside the accent box
-    const boxRight = CANVAS_SIZE - PADDING - boxPadX;
-    let by = firstBaseline(ctx, boxBodySize, boxBodyLineH, boxY + boxPadY, fonts.sans);
-    ctx.font = `bold ${boxBodySize}px ${fonts.sans}`;
-    for (const ln of boxBodyLines) {
-      const tw = ctx.measureText(ln).width;
-      const lx = align === 'right' ? boxRight - tw : align === 'center' ? (CANVAS_SIZE - tw) / 2 : boxLeft;
-      ctx.fillStyle = ctaBoxTextColor;
-      ctx.textBaseline = 'alphabetic';
-      ctx.fillText(ln, lx, by);
-      by += boxBodyLineH;
-    }
+  const boxY = y;
+  roundRectPath(ctx, PADDING, boxY, contentW, boxH, 16);
+  ctx.fillStyle = `rgb(${r},${g},${b})`;
+  ctx.fill();
+  // The body sits on the ACCENT box, so its text must contrast with the box
+  // color (not the slide background) — prevents black-on-red.
+  const ctaBoxTextColor = resolveTitleAndBodyColors('color', accent, input.palette).bodyColor;
+  const boxLeft = PADDING + boxPadX; // px-8 inset inside the accent box
+  const boxRight = CANVAS_SIZE - PADDING - boxPadX;
+  let by = firstBaseline(ctx, boxBodySize, boxBodyLineH, boxY + boxPadY, fonts.sans);
+  ctx.font = `bold ${boxBodySize}px ${fonts.sans}`;
+  for (const ln of boxBodyLines) {
+    const tw = ctx.measureText(ln).width;
+    const lx = align === 'right' ? boxRight - tw : align === 'center' ? (CANVAS_SIZE - tw) / 2 : boxLeft;
+    ctx.fillStyle = ctaBoxTextColor;
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(ln, lx, by);
+    by += boxBodyLineH;
   }
 }
 
@@ -1084,7 +1026,7 @@ export async function renderCarouselTemplatePng(input: CarouselTemplateInput): P
     }
   } else {
     if (preset === 'reaction') {
-      await renderCta(ctx, { ...input, title: input.ctaTitle || input.title, body: '' }, refined, fonts);
+      await renderCta(ctx, { ...input, title: input.ctaTitle || input.title, body: '' }, fonts);
       const kw = (input.ctaKeyword || '').trim() || 'РУТА';
       ctx.textBaseline = 'alphabetic';
       ctx.font = refined ? `italic ${ts(128)}px ${fonts.serifItalic}` : `900 ${ts(128)}px ${fonts.sansBold}`;
@@ -1095,7 +1037,7 @@ export async function renderCarouselTemplatePng(input: CarouselTemplateInput): P
       // Match the editor's goal slide: the accent box shows the slide's body
       // (else the «Підпишись» default), NOT a CTA-action word. renderCta falls
       // back to «Підпишись» when body is empty.
-      await renderCta(ctx, input, refined, fonts);
+      await renderCta(ctx, input, fonts);
     }
   }
 
