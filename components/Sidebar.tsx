@@ -35,27 +35,6 @@ type NavItem =
 const navItems: NavItem[] = [
   { label: 'Головна', href: '/dashboard', matchPrefixes: ['/dashboard'], active: true },
   {
-    label: 'Рілси',
-    href: '/projects',
-    matchPrefixes: ['/projects', '/project/'],
-    active: true,
-    badgeKey: 'reels',
-  },
-  {
-    label: 'Каруселі',
-    href: '/carousel',
-    matchPrefixes: ['/carousel'],
-    active: true,
-    badgeKey: 'carousel',
-  },
-  {
-    label: 'Сторітели',
-    href: '/storytellings',
-    matchPrefixes: ['/storytellings', '/storytelling/'],
-    active: true,
-    badgeKey: 'storytelling',
-  },
-  {
     label: 'Аналіз профілю',
     href: '/competitor-analysis',
     matchPrefixes: ['/competitor-analysis'],
@@ -155,9 +134,56 @@ export default function Sidebar({ userName, userEmail }: SidebarProps) {
     return () => document.removeEventListener('keydown', onKey);
   }, [feedbackOpen]);
 
+  const renderNavItem = (item: NavItem) => {
+    if (!item.active) {
+      return (
+        <div
+          key={item.label}
+          className="flex cursor-not-allowed select-none items-center justify-between rounded-lg px-3 py-2.5 text-sm text-zinc-500 opacity-40"
+        >
+          <span className="truncate">{item.label}</span>
+          <span className="ml-2 shrink-0 rounded-full bg-[color:var(--surface2)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide leading-none text-zinc-600">
+            Soon
+          </span>
+        </div>
+      );
+    }
+
+    const isCurrentPage = item.matchPrefixes.some((p) => pathname.startsWith(p));
+    const hasNewBadge = item.badgeKey ? badges[item.badgeKey] : false;
+
+    return (
+      <a
+        key={item.label}
+        href={item.href}
+        className={[
+          'relative flex items-center gap-2 rounded-lg py-2.5 pl-3 pr-3 text-sm font-medium transition-[background,color] duration-150 ease-out',
+          isCurrentPage
+            ? 'border-l-[3px] border-[color:var(--accent)] bg-[color:var(--accent-soft)] text-[color:var(--accent)]'
+            : 'border-l-[3px] border-transparent text-zinc-600 hover:bg-[color:var(--surface)] hover:text-zinc-900',
+        ].join(' ')}
+      >
+        {item.icon ? <item.icon className="h-4 w-4 shrink-0" /> : null}
+        <span className="min-w-0 flex-1 truncate pr-2">{item.label}</span>
+        {hasNewBadge && (
+          <span
+            className="ml-2 shrink-0 rounded-full bg-[color:var(--accent)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide leading-none text-white"
+            title="Є нове"
+            aria-hidden
+          >
+            NEW
+          </span>
+        )}
+      </a>
+    );
+  };
+
   return (
     <aside className="relative flex h-full w-full flex-col overflow-hidden border-r border-[color:var(--border)] bg-white px-2 pb-4 pt-3">
       <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
+        {/* Головна first, then the create entry point. */}
+        {renderNavItem(navItems[0])}
+
         {/* Create entry point — desktop equivalent of the mobile ➕ FAB (task
             86d3d2t4j). Collapsible group: the trigger toggles 4 indented children. */}
         <button
@@ -194,49 +220,8 @@ export default function Sidebar({ userName, userEmail }: SidebarProps) {
           </div>
         )}
 
-        {navItems.map((item) => {
-          if (!item.active) {
-            return (
-              <div
-                key={item.label}
-                className="flex cursor-not-allowed select-none items-center justify-between rounded-lg px-3 py-2.5 text-sm text-zinc-500 opacity-40"
-              >
-                <span className="truncate">{item.label}</span>
-                <span className="ml-2 shrink-0 rounded-full bg-[color:var(--surface2)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide leading-none text-zinc-600">
-                  Soon
-                </span>
-              </div>
-            );
-          }
-
-          const isCurrentPage = item.matchPrefixes.some((p) => pathname.startsWith(p));
-          const hasNewBadge = item.badgeKey ? badges[item.badgeKey] : false;
-
-          return (
-            <a
-              key={item.label}
-              href={item.href}
-              className={[
-                'relative flex items-center gap-2 rounded-lg py-2.5 pl-3 pr-3 text-sm font-medium transition-[background,color] duration-150 ease-out',
-                isCurrentPage
-                  ? 'border-l-[3px] border-[color:var(--accent)] bg-[color:var(--accent-soft)] text-[color:var(--accent)]'
-                  : 'border-l-[3px] border-transparent text-zinc-600 hover:bg-[color:var(--surface)] hover:text-zinc-900',
-              ].join(' ')}
-            >
-              {item.icon ? <item.icon className="h-4 w-4 shrink-0" /> : null}
-              <span className="min-w-0 flex-1 truncate pr-2">{item.label}</span>
-              {hasNewBadge && (
-                <span
-                  className="ml-2 shrink-0 rounded-full bg-[color:var(--accent)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide leading-none text-white"
-                  title="Є нове"
-                  aria-hidden
-                >
-                  NEW
-                </span>
-              )}
-            </a>
-          );
-        })}
+        {/* Remaining nav items below the create group. */}
+        {navItems.slice(1).map(renderNavItem)}
       </nav>
 
       <div className="relative mt-auto border-t border-[color:var(--border)] pt-3" ref={popoverRef}>
