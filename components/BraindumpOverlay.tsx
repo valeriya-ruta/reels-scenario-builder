@@ -10,6 +10,7 @@ import { generateReelFromRant } from '@/app/actions';
 import { createStorytellingProjectFromRant } from '@/app/storytelling-actions';
 import { createCarouselProjectFromRant } from '@/app/carousel-actions';
 import type { CarouselRantOutput } from '@/lib/carouselTypes';
+import { startDeepgramLive, type DeepgramLiveSession } from '@/lib/ai/deepgramLive';
 
 /**
  * Braindump overlay (task 86d38zghd) — voice-primary quick capture.
@@ -27,7 +28,13 @@ import type { CarouselRantOutput } from '@/lib/carouselTypes';
  * audio code. Auto-save posts to /api/ideas/braindump.
  */
 
-const SOFT_WORD_TARGET = 50;
+/**
+ * Minimum words a braindump must contain before it can be turned into content
+ * (task 86d3dcwyy). The green create button is inactive below this; active at or
+ * above it. While recording the count comes from the Deepgram live stream; after
+ * stop it recalibrates to the Groq Whisper transcript (the source of truth).
+ */
+const WORD_GATE = 50;
 const ACCENT = '#004BA8';
 
 type Phase = 'A' | 'B';
@@ -60,6 +67,9 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
   const [inputMode, setInputMode] = useState<InputMode>('voice');
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
+  /** Live word count for the CURRENT recording segment (Deepgram). Reset to 0
+   *  when a recording starts and again once Whisper recalibrates `text` on stop. */
+  const [liveSegmentWords, setLiveSegmentWords] = useState(0);
   const [prompt, setPrompt] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -75,6 +85,7 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
+  const deepgramRef = useRef<DeepgramLiveSession | null>(null);
   const textRef = useRef('');
   const typeTextarea = useRef<HTMLTextAreaElement>(null);
   const saveDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -120,6 +131,8 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
     }
+    deepgramRef.current?.stop();
+    deepgramRef.current = null;
     stopStream();
     if (saveDebounce.current) clearTimeout(saveDebounce.current);
   }, [open, stopStream]);
@@ -147,10 +160,18 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
         setError(e instanceof Error ? e.message : 'Не вдалося розпізнати запис.');
       } finally {
         setTranscribing(false);
+        // Whisper is now the count source again — clear the live segment estimate
+        // so the counter shows the recalibrated (accurate) Whisper-based count.
+        setLiveSegmentWords(0);
       }
     },
     [appendTranscript]
   );
+
+  const stopDeepgram = useCallback(() => {
+    deepgramRef.current?.stop();
+    deepgramRef.current = null;
+  }, []);
 
   const startRecording = useCallback(async () => {
     setError(null);
@@ -160,28 +181,45 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
       const mime = pickRecorderMime();
       const recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
       chunksRef.current = [];
+      setLiveSegmentWords(0);
+
+      // Live word counter (Deepgram) — best-effort, drives ONLY the counter/gate.
+      // Groq Whisper (on stop) stays the saved-transcript source of truth. If the
+      // key is unconfigured or anything fails, this is a no-op session and the
+      // counter simply waits for the Whisper recalibration (never errors).
+      const dg = await startDeepgramLive((w) => setLiveSegmentWords(w));
+      deepgramRef.current = dg;
+
       recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
+        if (e.data && e.data.size > 0) {
+          chunksRef.current.push(e.data);
+          deepgramRef.current?.send(e.data);
+        }
       };
       recorder.onstop = () => {
+        stopDeepgram();
         const blob = new Blob(chunksRef.current, { type: mime || 'audio/webm' });
         stopStream();
         if (blob.size > 0) void transcribe(blob);
       };
       mediaRecorderRef.current = recorder;
-      recorder.start();
+      // Timeslice so chunks flow to Deepgram continuously while recording (and so
+      // the final Whisper blob is still assembled from the same chunks on stop).
+      recorder.start(250);
       setRecording(true);
     } catch {
+      stopDeepgram();
       setError('Немає доступу до мікрофона. Дозволь доступ або введи текст.');
       setInputMode('type');
     }
-  }, [stopStream, transcribe]);
+  }, [stopStream, transcribe, stopDeepgram]);
 
   const stopRecording = useCallback(() => {
     const recorder = mediaRecorderRef.current;
     if (recorder && recorder.state !== 'inactive') recorder.stop();
+    else stopDeepgram();
     setRecording(false);
-  }, []);
+  }, [stopDeepgram]);
 
   const toggleRecording = useCallback(() => {
     if (recording) stopRecording();
@@ -227,13 +265,12 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
     []
   );
 
-  // Done → transition to State B and auto-save.
+  // Done → transition to State B and auto-save. Gated: a braindump must hold at
+  // least WORD_GATE words before it can become content (task 86d3dcwyy). The
+  // button is also visually disabled below the gate; this is the logic backstop.
   const handleDone = useCallback(() => {
     if (recording) stopRecording();
-    if (!text.trim()) {
-      setError('Спочатку запиши або введи ідею.');
-      return;
-    }
+    if (countWords(text) < WORD_GATE) return;
     setPhase('B');
     void saveIdea(text, null);
   }, [recording, stopRecording, text, saveIdea]);
@@ -303,7 +340,11 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
 
   if (!open) return null;
 
-  const words = countWords(text);
+  // While recording, the live (Deepgram) estimate adds to whatever was already
+  // finalized by Whisper; once recording stops it recalibrates to the Whisper
+  // count (liveSegmentWords resets to 0). A few words of drift is expected.
+  const words = recording ? countWords(text) + liveSegmentWords : countWords(text);
+  const canCreate = words >= WORD_GATE;
 
   return (
     // One shared full-screen scrim for EVERY page braindump can open from (it is
@@ -331,69 +372,56 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
           }}
         />
 
-        {/* Top bar: × close (+ saved confirmation in State B). Stays pinned at the
-            top — only the content+controls below rise from the bottom. */}
-        <div className="relative z-10 flex shrink-0 items-center justify-between px-5 pt-6">
-          <div className="min-h-[20px]">
-            {phase === 'B' && saveStatus === 'saved' && (
-              <span data-testid="braindump-saved" className="text-xs font-medium text-zinc-400">
-                ✓ Збережено в ідеї
-              </span>
-            )}
+        {/* ── PINNED TOP: × close, saved confirmation, and (State A) the prompt
+            title. Stays fixed at the top at any transcript length (task 86d3dezu4). */}
+        <div className="relative z-10 shrink-0 px-5 pt-6">
+          <div className="flex items-start justify-between">
+            <div className="min-h-[20px]">
+              {phase === 'B' && saveStatus === 'saved' && (
+                <span data-testid="braindump-saved" className="text-xs font-medium text-zinc-400">
+                  ✓ Збережено в ідеї
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={close}
+              aria-label="Закрити"
+              data-testid="braindump-close"
+              className="rounded-full p-1.5 text-zinc-500 transition-colors hover:bg-zinc-200/60 hover:text-zinc-800"
+            >
+              <X className="h-5 w-5" strokeWidth={2} />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={close}
-            aria-label="Закрити"
-            data-testid="braindump-close"
-            className="rounded-full p-1.5 text-zinc-500 transition-colors hover:bg-zinc-200/60 hover:text-zinc-800"
-          >
-            <X className="h-5 w-5" strokeWidth={2} />
-          </button>
-        </div>
-
-        {/* Spacer biases the content block toward just-below-centre and collapses
-            the dead gap to the bottom controls. */}
-        <div className="flex-1" aria-hidden />
-
-        {/* Content + controls rise TOGETHER from the bottom (not just the buttons).
-            Raised ~100px off the bottom so the two zones sit close together. */}
-        <div
-          className="relative z-10 px-6 pb-[150px]"
-          style={{ animation: 'braindump-rise 320ms ease-out both' }}
-        >
-          {phase === 'A' ? (
+          {phase === 'A' && (
             <h2
               data-testid="braindump-prompt"
-              className="text-2xl font-bold leading-snug tracking-tight text-black"
+              className="mt-2 px-1 text-2xl font-bold leading-snug tracking-tight text-black"
             >
               {prompt}
             </h2>
-          ) : (
-            <textarea
-              data-testid="braindump-edit"
-              value={text}
-              onChange={(e) => handleEditInB(e.target.value)}
-              rows={4}
-              aria-label="Текст ідеї"
-              className="w-full resize-none bg-transparent text-xl font-semibold leading-snug tracking-tight text-black outline-none"
-            />
           )}
+        </div>
 
-          {phase === 'A' && (
-            <div className="mt-3">
-              {inputMode === 'type' ? (
-                <textarea
-                  ref={typeTextarea}
-                  data-testid="braindump-text"
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                  placeholder="Накидай ідею..."
-                  rows={4}
-                  aria-label="Ідея"
-                  className="w-full resize-none bg-transparent text-lg leading-relaxed text-zinc-500 outline-none placeholder:text-zinc-400"
-                />
-              ) : (
+        {/* ── SCROLLABLE MIDDLE: the transcript occupies the space between the
+            pinned title and the pinned controls and scrolls INTERNALLY. A long
+            transcript (100+, 200+ words) never grows the layout or covers the
+            controls — it scrolls within this fixed-height region (task 86d3dezu4).
+            `min-h-0` is what lets a flex child actually shrink and scroll. */}
+        <div className="relative z-10 flex min-h-0 flex-1 flex-col px-6 pt-3">
+          {phase === 'A' ? (
+            inputMode === 'type' ? (
+              <textarea
+                ref={typeTextarea}
+                data-testid="braindump-text"
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder="Накидай ідею..."
+                aria-label="Ідея"
+                className="min-h-0 w-full flex-1 resize-none overflow-y-auto bg-transparent text-lg leading-relaxed text-zinc-500 outline-none placeholder:text-zinc-400"
+              />
+            ) : (
+              <div className="min-h-0 flex-1 overflow-y-auto">
                 <p
                   data-testid="braindump-text"
                   className="whitespace-pre-wrap text-lg leading-relaxed text-zinc-500"
@@ -404,23 +432,36 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
                     </span>
                   )}
                 </p>
-              )}
-            </div>
+              </div>
+            )
+          ) : (
+            <textarea
+              data-testid="braindump-edit"
+              value={text}
+              onChange={(e) => handleEditInB(e.target.value)}
+              aria-label="Текст ідеї"
+              className="min-h-0 w-full flex-1 resize-none overflow-y-auto bg-transparent text-xl font-semibold leading-snug tracking-tight text-black outline-none"
+            />
           )}
+        </div>
 
+        {/* ── PINNED BOTTOM: mic + green create button + word counter (State A) or
+            the content-type buttons (State B). Always visible and tappable at any
+            transcript length; never covered by the transcript (tasks 86d3dezu4 +
+            86d3dcwyy). `braindump-rise` keeps the original rise-from-bottom feel. */}
+        <div
+          className="relative z-10 shrink-0 px-6 pt-3 pb-[max(28px,env(safe-area-inset-bottom))]"
+          style={{ animation: 'braindump-rise 320ms ease-out both' }}
+        >
           {error && (
-            <p data-testid="braindump-error" className="mt-3 text-sm font-medium text-zinc-500">
+            <p data-testid="braindump-error" className="mb-3 text-sm font-medium text-zinc-500">
               {error}
             </p>
           )}
 
-          {/* State A controls (task 86d3a1aqk): mic (primary) with the green
-              "done" check BESIDE it, the word counter bottom-LEFT and the
-              keyboard/voice toggle bottom-RIGHT. The whole cluster is raised off
-              the bottom (pb on the rising block) so it sits in thumb reach. */}
           {phase === 'A' && (
-            <div className="mt-6">
-              <div className="flex items-center justify-center gap-5 pb-4">
+            <>
+              <div className="flex items-center justify-center gap-5 pb-3">
                 {inputMode === 'voice' && (
                   <button
                     type="button"
@@ -440,13 +481,16 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
                     <Mic className="h-8 w-8" strokeWidth={2} />
                   </button>
                 )}
+                {/* Green CREATE button — gated: inactive (greyed, non-tappable) below
+                    WORD_GATE words, active at or above it (task 86d3dcwyy). */}
                 <button
                   type="button"
                   onClick={handleDone}
                   data-testid="braindump-done"
-                  aria-label="Готово"
-                  disabled={transcribing}
-                  className="flex h-14 w-14 items-center justify-center rounded-full text-white shadow-md transition-transform active:scale-95 disabled:opacity-50"
+                  aria-label="Створити контент"
+                  aria-disabled={!canCreate || transcribing}
+                  disabled={!canCreate || transcribing}
+                  className="flex h-14 w-14 items-center justify-center rounded-full text-white shadow-md transition-transform active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100"
                   style={{ backgroundColor: 'var(--success)' }}
                 >
                   <Check className="h-7 w-7" strokeWidth={2.4} />
@@ -454,8 +498,12 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
               </div>
 
               <div className="flex items-center justify-between">
-                <span data-testid="braindump-counter" className="text-xs tabular-nums text-zinc-400">
-                  {words}/{SOFT_WORD_TARGET}
+                <span
+                  data-testid="braindump-counter"
+                  className="text-xs font-medium tabular-nums"
+                  style={{ color: canCreate ? 'var(--success)' : '#a1a1aa' }}
+                >
+                  {words}/{WORD_GATE}
                 </span>
 
                 <button
@@ -472,12 +520,11 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
                   )}
                 </button>
               </div>
-            </div>
+            </>
           )}
 
-          {/* State B controls: three independent content-type buttons. */}
           {phase === 'B' && (
-            <div className="mt-6">
+            <>
               {saveStatus === 'error' && (
                 <p className="mb-3 text-sm font-medium text-zinc-500">
                   Не вдалося зберегти — текст збережено локально, спробуй ще раз.
@@ -519,7 +566,7 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
                   );
                 })}
               </div>
-            </div>
+            </>
           )}
         </div>
       </div>

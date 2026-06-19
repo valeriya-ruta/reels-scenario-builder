@@ -45,6 +45,9 @@ async function openBraindump(page: Page) {
   await expect(page.getByTestId('braindump-overlay')).toBeVisible();
 }
 
+/** ≥ 50 words, to clear the create-content gate (task 86d3dcwyy). */
+const FIFTY_WORDS = Array.from({ length: 52 }, (_, i) => `слово${i + 1}`).join(' ');
+
 test.describe('Braindump overlay', () => {
   test.skip(!hasActive, 'Requires E2E_ACTIVE_* credentials and a seeded authenticated user.');
   test.use({ storageState: ACTIVE_STATE });
@@ -56,6 +59,11 @@ test.describe('Braindump overlay', () => {
     );
     await page.route('**/api/ideas/braindump', (route) =>
       route.fulfill({ json: { ok: true, id: 'idea-123' } })
+    );
+    // Live (Deepgram) word count is off in tests — the gate falls back to the
+    // Whisper/typed word count. 503 = unconfigured, the graceful-degrade path.
+    await page.route('**/api/ideas/deepgram-token', (route) =>
+      route.fulfill({ status: 503, json: { error: 'deepgram_unconfigured' } })
     );
   });
 
@@ -100,25 +108,43 @@ test.describe('Braindump overlay', () => {
     await expect(page.getByTestId('braindump-counter')).toContainText('3/50');
   });
 
-  test('green check → State B auto-saves the idea and shows the confirmation', async ({ page }) => {
+  test('create-content gate: green arrow inactive below 50 words, active at ≥50', async ({ page }) => {
+    await openBraindump(page);
+    await page.getByTestId('braindump-toggle-input').click();
+    const textarea = page.getByTestId('braindump-text');
+
+    // Below the gate → disabled + counter shows progress, no navigation on tap.
+    await textarea.fill('одне два три');
+    await expect(page.getByTestId('braindump-counter')).toContainText('3/50');
+    await expect(page.getByTestId('braindump-done')).toBeDisabled();
+    await page.getByTestId('braindump-done').click({ force: true });
+    await expect(page.getByTestId('braindump-overlay')).toHaveAttribute('data-phase', 'A');
+
+    // At / above the gate → enabled.
+    await textarea.fill(FIFTY_WORDS);
+    await expect(page.getByTestId('braindump-counter')).toContainText('52/50');
+    await expect(page.getByTestId('braindump-done')).toBeEnabled();
+  });
+
+  test('green arrow (≥50 words) → State B auto-saves the idea and shows the confirmation', async ({ page }) => {
     const saveCall = page.waitForRequest(
       (r) => r.url().includes('/api/ideas/braindump') && r.method() === 'POST'
     );
     await openBraindump(page);
     await page.getByTestId('braindump-toggle-input').click();
-    await page.getByTestId('braindump-text').fill('моя ідея для рілса');
+    await page.getByTestId('braindump-text').fill(FIFTY_WORDS);
     await page.getByTestId('braindump-done').click();
 
     await expect(page.getByTestId('braindump-overlay')).toHaveAttribute('data-phase', 'B');
     const req = await saveCall;
-    expect(JSON.parse(req.postData() ?? '{}').content).toContain('моя ідея');
+    expect(JSON.parse(req.postData() ?? '{}').content).toContain('слово1');
     await expect(page.getByTestId('braindump-saved')).toBeVisible();
   });
 
   test('State B shows three independent content-type buttons and × closes', async ({ page }) => {
     await openBraindump(page);
     await page.getByTestId('braindump-toggle-input').click();
-    await page.getByTestId('braindump-text').fill('ідея для контенту про щось цікаве');
+    await page.getByTestId('braindump-text').fill(FIFTY_WORDS);
     await page.getByTestId('braindump-done').click();
 
     for (const type of ['reels', 'carousel', 'stories']) {
@@ -133,7 +159,7 @@ test.describe('Braindump overlay', () => {
   test('editing in State B re-saves the edited version', async ({ page }) => {
     await openBraindump(page);
     await page.getByTestId('braindump-toggle-input').click();
-    await page.getByTestId('braindump-text').fill('початковий текст');
+    await page.getByTestId('braindump-text').fill(FIFTY_WORDS);
     await page.getByTestId('braindump-done').click();
     await expect(page.getByTestId('braindump-overlay')).toHaveAttribute('data-phase', 'B');
 
@@ -143,7 +169,7 @@ test.describe('Braindump overlay', () => {
         r.method() === 'POST' &&
         (r.postData() ?? '').includes('відредаговано')
     );
-    await page.getByTestId('braindump-edit').fill('початковий текст відредаговано');
+    await page.getByTestId('braindump-edit').fill(`${FIFTY_WORDS} відредаговано`);
     await editSave;
   });
 
@@ -154,10 +180,10 @@ test.describe('Braindump overlay', () => {
     );
     await openBraindump(page);
     await page.getByTestId('braindump-toggle-input').click();
-    await page.getByTestId('braindump-text').fill('важлива ідея');
+    await page.getByTestId('braindump-text').fill(FIFTY_WORDS);
     await page.getByTestId('braindump-done').click();
 
     await expect(page.getByTestId('braindump-error')).toBeVisible();
-    await expect(page.getByTestId('braindump-edit')).toHaveValue(/важлива ідея/);
+    await expect(page.getByTestId('braindump-edit')).toHaveValue(/слово1/);
   });
 });
