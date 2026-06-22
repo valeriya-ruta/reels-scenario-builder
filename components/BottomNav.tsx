@@ -14,6 +14,7 @@ import {
   type OpenBraindumpIdeaDetail,
 } from '@/lib/content/braindumpIdeaEvent';
 import { CONTENT_TYPES } from '@/lib/contentTypes';
+import { isImmersiveEditorRoute } from '@/lib/immersiveEditorRoute';
 
 /**
  * Floating bottom navigation: 4 destination tabs + a center Create FAB.
@@ -271,9 +272,9 @@ export default function BottomNav() {
   // Clear any pending long-press timer on unmount.
   useEffect(() => () => clearGlideTimer(), [clearGlideTimer]);
 
-  // Keep the full-screen carousel editor uncovered (matches prior behaviour).
-  const isCarouselEditor = pathname.startsWith('/carousel/') && pathname !== '/carousel';
-  if (isCarouselEditor) return null;
+  // Keep full-screen editors (carousel / reel-script / story) uncovered — they
+  // own their own back-arrow exit; the global nav only steals space (86d3d23qu).
+  if (isImmersiveEditorRoute(pathname)) return null;
 
   const isActive = (prefixes: string[]) => prefixes.some((p) => pathname.startsWith(p));
 
