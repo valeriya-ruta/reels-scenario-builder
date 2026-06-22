@@ -78,6 +78,9 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
   const textRef = useRef('');
   const typeTextarea = useRef<HTMLTextAreaElement>(null);
   const saveDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The transcript lives in a fixed-height scroll region; keep the newest text
+  // in view as it grows so a long transcript never hides behind the fold.
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     textRef.current = text;
@@ -291,6 +294,14 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
     [typeStatus]
   );
 
+  // Keep the transcript scrolled to its newest content (State A) so appended
+  // speech stays visible without the user having to scroll down each time.
+  useEffect(() => {
+    if (phase !== 'A') return;
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [text, phase, inputMode]);
+
   // Lock body scroll while open.
   useEffect(() => {
     if (!open) return;
@@ -352,75 +363,86 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
           </button>
         </div>
 
-        {/* Spacer biases the content block toward just-below-centre and collapses
-            the dead gap to the bottom controls. */}
-        <div className="flex-1" aria-hidden />
-
-        {/* Content + controls rise TOGETHER from the bottom (not just the buttons).
-            Raised ~100px off the bottom so the two zones sit close together. */}
+        {/* The rising block fills the space under the pinned top bar and splits
+            into a SCROLLABLE transcript region + a PINNED controls footer. A long
+            transcript now scrolls inside its own fixed-height region instead of
+            growing to fill the screen and shoving the mic / green check / word
+            counter off-screen (86d3dezu4). `mt-auto` keeps short content
+            bottom-biased so the layout reads unchanged at small lengths. */}
         <div
-          className="relative z-10 px-6 pb-[150px]"
+          className="relative z-10 flex min-h-0 flex-1 flex-col px-6 pb-[40px]"
           style={{ animation: 'braindump-rise 320ms ease-out both' }}
         >
-          {phase === 'A' ? (
-            <h2
-              data-testid="braindump-prompt"
-              className="text-2xl font-bold leading-snug tracking-tight text-black"
-            >
-              {prompt}
-            </h2>
-          ) : (
-            <textarea
-              data-testid="braindump-edit"
-              value={text}
-              onChange={(e) => handleEditInB(e.target.value)}
-              rows={4}
-              aria-label="Текст ідеї"
-              className="w-full resize-none bg-transparent text-xl font-semibold leading-snug tracking-tight text-black outline-none"
-            />
-          )}
-
-          {phase === 'A' && (
-            <div className="mt-3">
-              {inputMode === 'type' ? (
-                <textarea
-                  ref={typeTextarea}
-                  data-testid="braindump-text"
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                  placeholder="Накидай ідею..."
-                  rows={4}
-                  aria-label="Ідея"
-                  className="w-full resize-none bg-transparent text-lg leading-relaxed text-zinc-500 outline-none placeholder:text-zinc-400"
-                />
-              ) : (
-                <p
-                  data-testid="braindump-text"
-                  className="whitespace-pre-wrap text-lg leading-relaxed text-zinc-500"
+          {/* Scrollable transcript region — occupies the space between the title
+              and the pinned controls; scrolls internally when text is long. */}
+          <div
+            ref={scrollRef}
+            data-testid="braindump-scroll"
+            className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+          >
+            <div className="mt-auto pb-4">
+              {phase === 'A' ? (
+                <h2
+                  data-testid="braindump-prompt"
+                  className="text-2xl font-bold leading-snug tracking-tight text-black"
                 >
-                  {text || (
-                    <span className="text-zinc-400">
-                      {transcribing ? 'Розпізнаю…' : 'Натисни мікрофон і говори…'}
-                    </span>
+                  {prompt}
+                </h2>
+              ) : (
+                <textarea
+                  data-testid="braindump-edit"
+                  value={text}
+                  onChange={(e) => handleEditInB(e.target.value)}
+                  rows={4}
+                  aria-label="Текст ідеї"
+                  className="w-full resize-none bg-transparent text-xl font-semibold leading-snug tracking-tight text-black outline-none"
+                />
+              )}
+
+              {phase === 'A' && (
+                <div className="mt-3">
+                  {inputMode === 'type' ? (
+                    <textarea
+                      ref={typeTextarea}
+                      data-testid="braindump-text"
+                      value={text}
+                      onChange={(e) => setText(e.target.value)}
+                      placeholder="Накидай ідею..."
+                      rows={4}
+                      aria-label="Ідея"
+                      className="w-full resize-none bg-transparent text-lg leading-relaxed text-zinc-500 outline-none placeholder:text-zinc-400"
+                    />
+                  ) : (
+                    <p
+                      data-testid="braindump-text"
+                      className="whitespace-pre-wrap text-lg leading-relaxed text-zinc-500"
+                    >
+                      {text || (
+                        <span className="text-zinc-400">
+                          {transcribing ? 'Розпізнаю…' : 'Натисни мікрофон і говори…'}
+                        </span>
+                      )}
+                    </p>
                   )}
-                </p>
+                </div>
               )}
             </div>
-          )}
+          </div>
 
-          {error && (
-            <p data-testid="braindump-error" className="mt-3 text-sm font-medium text-zinc-500">
-              {error}
-            </p>
-          )}
+          {/* Pinned controls footer — never scrolls away, never covered. */}
+          <div className="shrink-0 pt-3">
+            {error && (
+              <p data-testid="braindump-error" className="mb-3 text-sm font-medium text-zinc-500">
+                {error}
+              </p>
+            )}
 
-          {/* State A controls (task 86d3a1aqk): mic (primary) with the green
-              "done" check BESIDE it, the word counter bottom-LEFT and the
-              keyboard/voice toggle bottom-RIGHT. The whole cluster is raised off
-              the bottom (pb on the rising block) so it sits in thumb reach. */}
-          {phase === 'A' && (
-            <div className="mt-6">
-              <div className="flex items-center justify-center gap-5 pb-4">
+            {/* State A controls (task 86d3a1aqk): mic (primary) with the green
+                "done" check BESIDE it, the word counter bottom-LEFT and the
+                keyboard/voice toggle bottom-RIGHT. */}
+            {phase === 'A' && (
+              <div>
+                <div className="flex items-center justify-center gap-5 pb-4">
                 {inputMode === 'voice' && (
                   <button
                     type="button"
@@ -475,9 +497,9 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
             </div>
           )}
 
-          {/* State B controls: three independent content-type buttons. */}
-          {phase === 'B' && (
-            <div className="mt-6">
+            {/* State B controls: three independent content-type buttons. */}
+            {phase === 'B' && (
+              <div>
               {saveStatus === 'error' && (
                 <p className="mb-3 text-sm font-medium text-zinc-500">
                   Не вдалося зберегти — текст збережено локально, спробуй ще раз.
@@ -519,8 +541,9 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
                   );
                 })}
               </div>
-            </div>
-          )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </BlurScrim>
