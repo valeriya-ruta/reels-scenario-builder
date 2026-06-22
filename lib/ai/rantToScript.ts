@@ -45,13 +45,19 @@ function buildSystemPrompt(outputLanguage: OutputLanguage): string {
 
 ОБОВ'ЯЗКОВА ДРАМАТУРГІЯ (це ЕТАПИ історії, а не кількість сцен — кожен етап може займати кілька сцен по 3–5 с):
 
-**1. ХУК (перша сцена, 0–3 секунди)**
+‼️ КРИТИЧНО ПРО ХУК І CTA:
+- Хук — це ОКРЕМЕ поле "hook". CTA — це ОКРЕМЕ поле "cta".
+- Масив "scenes" містить ТІЛЬКИ середні етапи (проблема, поворот, рішення).
+- НІКОЛИ не дублюй хук чи CTA всередині "scenes". Рівно ОДИН хук (у полі hook) і рівно ОДИН CTA (у полі cta) на весь рілс.
+
+**1. ХУК (поле "hook", 0–3 секунди)**
 - Перший рядок, який зупиняє скролінг
 - Формати: провокаційне твердження / незручна правда / риторичне питання / несподіваний факт
 - НЕ починай зі "Сьогодні я розповім..." або "Привіт, друзі"
 - Одне коротке речення. Має цепляти одразу.
+- Повертається ОКРЕМО в полі "hook", а НЕ як елемент "scenes".
 
-**2. ПРОБЛЕМА / КОНФЛІКТ**
+**2. ПРОБЛЕМА / КОНФЛІКТ** (це вже "scenes")
 - Озвуч біль, з яким глядач себе ідентифікує
 - Будь конкретним, не абстрактним. Не "багато людей стикаються з цим" — а "ти сидиш і дивишся на порожній екран вже 40 хвилин"
 - Покажи, що ти розумієш ситуацію зсередини
@@ -67,9 +73,10 @@ function buildSystemPrompt(outputLanguage: OutputLanguage): string {
 - Кожен крок — окрема сцена 3–5 с, а не один довгий перелік
 - Глядач має відчути: "це я можу зробити"
 
-**5. CTA (остання сцена)**
+**5. CTA (поле "cta", остання репліка)**
 - Один конкретний заклик: зберегти, підписатись, написати в коментарях, спробувати
 - Прив'яжи CTA до теми відео. Не загальне "підписуйся якщо сподобалось"
+- Повертається ОКРЕМО в полі "cta", а НЕ як елемент "scenes".
 
 ---
 
@@ -84,19 +91,20 @@ ${languageRule}
 
 ФОРМАТ ВІДПОВІДІ:
 Повертай тільки JSON. Без markdown, без пояснень, без вступних слів.
+"scenes" — це ЛИШЕ середні сцени (проблема → поворот → рішення). БЕЗ хука і БЕЗ CTA всередині "scenes": вони йдуть лише в окремих полях "hook" та "cta".
 
 {
   "title": "Назва сценарію (коротка, описова)",
-  "hook": "Текст хука",
+  "hook": "Текст хука (рівно один)",
   "scenes": [
     {
       "id": 1,
       "label": "Проблема",
-      "text": "Текст сцени"
+      "text": "Текст сцени (середина, без хука/CTA)"
     },
     ...
   ],
-  "cta": "Текст CTA"
+  "cta": "Текст CTA (рівно один)"
 }`;
 }
 
@@ -115,6 +123,27 @@ ${rant}
 ${languageHint}`;
 }
 
+/** Loose key for comparing two beats: lowercased, punctuation/space-stripped. */
+function beatKey(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '')
+    .trim();
+}
+
+/** A scene LABEL that marks it as a hook or CTA beat (any language/casing). */
+function isHookOrCtaLabel(label: string): boolean {
+  const l = label.toLowerCase().trim();
+  return (
+    l === 'хук' ||
+    l === 'hook' ||
+    l === 'cta' ||
+    l === 'заклик' ||
+    l === 'заклик до дії' ||
+    l === 'call to action'
+  );
+}
+
 function flattenToSceneDrafts(parsed: RantResponse, outputLanguage: OutputLanguage): RantSceneDraft[] {
   const rows: RantSceneDraft[] = [];
 
@@ -123,10 +152,22 @@ function flattenToSceneDrafts(parsed: RantResponse, outputLanguage: OutputLangua
     rows.push({ text: hook, name: outputLanguage === 'en' ? 'HOOK' : 'ХУК', editor_note: null });
   }
 
+  const cta = (parsed.cta ?? '').trim();
+
+  // Guard against the model ALSO emitting the hook/CTA inside `scenes` (the
+  // dramaturgy frames them as the first/last beat): drop any middle scene that
+  // duplicates the hook/CTA by text or is explicitly labelled as one, so the
+  // reel keeps exactly one hook and exactly one CTA (86d3dcn4d).
+  const hookKey = hook ? beatKey(hook) : '';
+  const ctaKey = cta ? beatKey(cta) : '';
+
   for (const s of parsed.scenes ?? []) {
     const text = (s.text ?? '').trim();
     if (!text) continue;
     const label = (s.label ?? '').trim();
+    if (isHookOrCtaLabel(label)) continue;
+    const key = beatKey(text);
+    if (key && (key === hookKey || key === ctaKey)) continue;
     rows.push({
       text,
       name: label || null,
@@ -134,7 +175,6 @@ function flattenToSceneDrafts(parsed: RantResponse, outputLanguage: OutputLangua
     });
   }
 
-  const cta = (parsed.cta ?? '').trim();
   if (cta) {
     rows.push({ text: cta, name: 'CTA', editor_note: null });
   }
