@@ -878,7 +878,19 @@ async function renderCta(
   const { brand, title, body, label } = input;
   const accent = brand.accentColor || DEFAULT_ACCENT;
   const titleColor = input.titleColor || '#000000';
-  if (refined) {
+  // The GOAL (CTA) slide must mirror the editor (CarouselSlidePreview's final
+  // slide) for BOTH vibes: a title in the brand title face + a full-width accent
+  // box holding the body. The editor has no vibe-specific final layout, so the
+  // refined "editorial" treatment below (eyebrow + split italic/small-caps title
+  // + divider + a circled → glyph) only EVER ran on the export — it read as a
+  // dent/notch artifact and a wholesale geometry divergence (86d3dcmyf). Keep that
+  // editorial branch solely for the `reaction` preset (where it is intentional);
+  // route the goal CTA through the unified title+box layout regardless of vibe.
+  // `fonts.sansBold` already resolves to the brand TITLE face (serif for refined
+  // brands like Cormorant) and `fonts.sans` to the body face, so the unified
+  // branch renders the serif title + body-sans box the editor shows.
+  const useEditorialLayout = refined && input.layoutPreset === 'reaction';
+  if (useEditorialLayout) {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
     ctx.strokeStyle = '#e8e3dc';
