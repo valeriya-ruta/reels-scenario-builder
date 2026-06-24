@@ -489,7 +489,7 @@ export default function CarouselSlidePreview({
             <>
               {slide.layoutPreset === 'reaction' ? (
                 <>
-                  <p className="text-[28px] whitespace-pre-wrap" style={{ color: resolvedBodyColor, fontFamily: bodyFont }}>{slide.ctaTitle || slide.title || 'Напиши в коментарі'}</p>
+                  <p className="text-[28px] whitespace-pre-wrap" style={{ color: resolvedBodyColor, fontFamily: bodyFont, fontSize: scaleBodyPx(28) }}>{slide.ctaTitle || slide.title || 'Напиши в коментарі'}</p>
                   <p className="mt-8 text-center text-[120px] leading-none" style={{ color: resolvedTitleColor, fontFamily: refined ? "'Cormorant Garamond', serif" : titleFont }}>{slide.ctaKeyword || 'РУТА'}</p>
                   <div className="mt-8 flex items-center justify-center gap-8" style={{ color: resolvedBodyColor }}>
                     {['save', 'share', 'like'].map((name) => (
@@ -507,7 +507,7 @@ export default function CarouselSlidePreview({
                     {/* CTA body is body copy → body-sans, never the Cormorant title
                         face. The export renderer already uses the body sans; this
                         keeps the editor 1:1 with it (task 86d3czfb3 / 86d3cpv57). */}
-                    <p className="text-[36px] font-bold" style={{ color: resolveTitleAndBodyColors('color', accent, brandPalette).bodyColor, fontFamily: bodyFont }}>
+                    <p className="text-[36px] font-bold" style={{ color: resolveTitleAndBodyColors('color', accent, brandPalette).bodyColor, fontFamily: bodyFont, fontSize: scaleBodyPx(36) }}>
                       {bodyClean || 'Підпишись'}
                     </p>
                   </div>
