@@ -51,6 +51,9 @@ function registerSubsetStack(
   const exts = ['woff2', 'woff', 'ttf', 'otf'];
   const families: string[] = [];
   for (const subset of subsets) {
+    const family = `${aliasPrefix}_${subset.replace(/-/g, '')}`;
+    const attempted: string[] = [];
+    let registered = false;
     for (const ext of exts) {
       const filePath = join(
         fontsourceDir,
@@ -58,11 +61,29 @@ function registerSubsetStack(
         'files',
         `${packageName}-${subset}-${weight}-${style}.${ext}`,
       );
-      if (existsSync(filePath)) {
-        const family = `${aliasPrefix}_${subset.replace(/-/g, '')}`;
-        if (GlobalFonts.registerFromPath(filePath, family)) families.push(family);
-        break; // one extension per subset is enough
+      if (!existsSync(filePath)) continue;
+      attempted.push(filePath);
+      // Do NOT treat "file exists" as "font registered": @napi-rs/canvas
+      // GlobalFonts.registerFromPath returns false when the file is present but
+      // fails to load (corrupt/unsupported), which would otherwise leave the
+      // slide rendering in a silent fallback face. Only stop once a file has
+      // ACTUALLY registered; if this extension failed, fall through to the next
+      // one (woff2 → woff → ttf → otf) before giving up on this subset.
+      if (GlobalFonts.registerFromPath(filePath, family)) {
+        families.push(family);
+        registered = true;
+        break;
       }
+    }
+    // A subset whose files all exist but never registered is a real failure
+    // (not just an absent subset) — surface it loudly so it shows up in Vercel
+    // logs instead of failing silently into the wrong font.
+    if (!registered && attempted.length > 0) {
+      console.error(
+        `[carousel][fonts] FAILED to register "${aliasPrefix}" (${packageName} ${subset} ${weight} ${style}) ` +
+          `from ${attempted.length} candidate file(s) — all GlobalFonts.registerFromPath calls returned false: ` +
+          attempted.join(', '),
+      );
     }
   }
   return families;

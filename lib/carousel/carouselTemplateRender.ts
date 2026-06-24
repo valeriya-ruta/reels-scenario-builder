@@ -331,6 +331,14 @@ async function renderCover(
   const titleColor = input.titleColor || '#000000';
   const bodyColor = input.bodyColor || '#000000';
   if (refined) {
+    // Refined cover — unified to match the editor (task 86d3ezr9d). The old
+    // editorial branch (grey eyebrow + italic serif headline + divider + meta,
+    // hardcoded #1a1a1a) diverged from CarouselSlidePreview's refined cover and
+    // rendered the title illegibly on dark backgrounds. The editor's refined
+    // cover is: the brand font UPRIGHT + bold, CENTER-aligned, the text block
+    // BOTTOM-aligned within an inset box (top:140 / bottom:100 / x:88), with an
+    // optional subline below; NO accent bar, NO eyebrow, NO divider, and the
+    // title colour follows the resolved auto-contrast colour. Mirror that here.
     fillCoverBackground(
       ctx,
       true,
@@ -340,29 +348,95 @@ async function renderCover(
       input.gradientMidColor,
       input.gradientEndColor,
     );
-    const [l1, l2] = splitEditorialTitle(stripAccentMarkers(title));
-    ctx.font = `${ts(22)}px ${fonts.sansBold}`;
-    ctx.fillStyle = '#aaaaaa';
-    ctx.textBaseline = 'alphabetic';
-    const eyebrow = (label || 'Карусель').toUpperCase();
-    ctx.fillText(eyebrow, PADDING, WATERMARK_Y + 56);
-    let y = WATERMARK_Y + 120;
-    y = drawPlainParagraph(ctx, l1, PADDING, y, CANVAS_SIZE - PADDING * 2, ts(96), ts(102), '#1a1a1a', 'left', fonts, 'serif');
-    if (l2) {
-      const u = l2.toUpperCase();
-      y = drawPlainParagraph(ctx, u, PADDING, y + 8, CANVAS_SIZE - PADDING * 2, ts(44), ts(52), '#1a1a1a', 'left', fonts, 'sansBold');
+    const contentW = CANVAS_SIZE - PADDING * 2;
+    const align: 'left' | 'center' | 'right' = 'center';
+    const titleSizePx = ts((input.titleSize ?? 'L') === 'M' ? 78 : 96);
+    const titleLineH = Math.round(titleSizePx * 1.0); // leading-[1.0]
+    const titleLines = layoutWords(
+      (t) => {
+        ctx.font = `${titleSizePx}px ${fonts.sansBold}`;
+        return ctx.measureText(t).width;
+      },
+      segmentsToWords(parseAccentSpans(title)),
+      contentW,
+    );
+    const titleBlockH = title.trim() ? Math.max(1, titleLines.length) * titleLineH : 0;
+
+    const bodyLine = stripAccentMarkers(body).trim();
+    const fallbackSub = (label || designNote || '').trim();
+    const hasSub = Boolean(bodyLine || fallbackSub);
+    const subSizePx = ts(32);
+    const subLineH = Math.round(subSizePx * 1.375); // leading-snug
+    const subMt = 24; // mt-6
+    const subLines = hasSub
+      ? Math.max(1, wrapPlain(ctx, bodyLine || fallbackSub, contentW, subSizePx, fonts.sans).length)
+      : 0;
+
+    const blockH = titleBlockH + (hasSub ? subMt + subLines * subLineH : 0);
+
+    // Editor: `absolute top-[140px] bottom-[100px] flex flex-col justify-end`
+    // → the block sits at the BOTTOM of the inset region.
+    const regionTop = 140;
+    const regionBottom = CANVAS_HEIGHT - 100;
+    let y = Math.max(regionTop, regionBottom - blockH);
+
+    let baseline = firstBaseline(ctx, titleSizePx, titleLineH, y, fonts.sansBold);
+    for (let li = 0; li < titleLines.length; li++) {
+      drawSegmentedLine(
+        ctx,
+        titleLines[li],
+        PADDING,
+        baseline,
+        titleSizePx,
+        titleColor,
+        accent,
+        brand.accentStyle,
+        align,
+        contentW,
+        false,
+        800 + li,
+        fonts,
+        true,
+      );
+      baseline += titleLineH;
     }
-    ctx.strokeStyle = '#c8c0b4';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(PADDING, y);
-    ctx.lineTo(CANVAS_SIZE - PADDING, y);
-    ctx.stroke();
-    y += 40;
-    ctx.font = `${ts(22)}px ${fonts.sans}`;
-    ctx.fillStyle = '#bbbbbb';
-    const meta = stripAccentMarkers(body).trim() ? stripAccentMarkers(body) : designNote || '';
-    if (meta) drawPlainParagraph(ctx, meta, PADDING, y, CANVAS_SIZE - PADDING * 2, ts(22), ts(28), '#bbbbbb', 'left', fonts);
+    y += titleBlockH;
+
+    if (hasSub) {
+      y += subMt;
+      const subBaseline = firstBaseline(ctx, subSizePx, subLineH, y, fonts.sans);
+      if (bodyLine) {
+        drawParagraphSegmented(
+          ctx,
+          body,
+          PADDING,
+          subBaseline,
+          contentW,
+          subSizePx,
+          subLineH,
+          bodyColor,
+          accent,
+          brand.accentStyle,
+          align,
+          false,
+          850,
+          fonts,
+        );
+      } else {
+        drawPlainParagraph(
+          ctx,
+          fallbackSub,
+          PADDING,
+          subBaseline,
+          contentW,
+          subSizePx,
+          subLineH,
+          bodyColor,
+          align,
+          fonts,
+        );
+      }
+    }
   } else {
     // Bold cover — mirror CarouselSlidePreview's cover exactly: the text block is
     // vertically CENTERED, title is CENTER-aligned and BOLD at 88px (70px for M),
@@ -478,43 +552,20 @@ async function renderCover(
 async function renderContent(
   ctx: SKRSContext2D,
   input: CarouselTemplateInput,
-  refined: boolean,
+  _refined: boolean,
   fonts: CarouselFonts,
 ): Promise<void> {
   const { brand, title, body, label } = input;
   const accent = brand.accentColor || DEFAULT_ACCENT;
   const titleColor = input.titleColor || '#000000';
   const bodyColor = input.bodyColor || '#000000';
-  if (refined) {
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
-    ctx.strokeStyle = '#e8e3dc';
-    ctx.lineWidth = 0.5;
-    ctx.strokeRect(0.25, 0.25, CANVAS_SIZE - 0.5, CANVAS_HEIGHT - 0.5);
-    const [l1, l2] = splitEditorialTitle(stripAccentMarkers(title));
-    let y = WATERMARK_Y + 48;
-    ctx.font = `${ts(22)}px ${fonts.sansBold}`;
-    ctx.fillStyle = '#bbbbbb';
-    const eyebrow = (label || '').trim().toUpperCase() || 'ФРАГМЕНТ';
-    ctx.fillText(eyebrow, PADDING, y);
-    y += 40;
-    ctx.font = `${ts(72)}px ${fonts.serifItalic}`;
-    y = drawPlainParagraph(ctx, l1, PADDING, y, CANVAS_SIZE - PADDING * 2, ts(72), ts(78), '#1a1a1a', 'left', fonts);
-    y += 8;
-    if (l2) {
-      y = drawPlainParagraph(ctx, l2.toUpperCase(), PADDING, y, CANVAS_SIZE - PADDING * 2, ts(38), ts(44), '#1a1a1a', 'left', fonts);
-      y += 8;
-    }
-    ctx.strokeStyle = '#1a1a1a';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(PADDING, y);
-    ctx.lineTo(PADDING + 44, y);
-    ctx.stroke();
-    y += 28;
-    drawPlainParagraph(ctx, stripAccentMarkers(body), PADDING, y, CANVAS_SIZE - PADDING * 2, ts(32), ts(40), '#777777', 'left', fonts);
-  } else {
-    // Bold content slide — mirror CarouselSlidePreview's default slide: the block
+  {
+    // Content slide — unified for BOTH vibes (task 86d3ezr9d). The editor
+    // (CarouselSlidePreview default slide) draws no refined-specific treatment,
+    // so the export must not either: the old refined branch (eyebrow + italic
+    // serif title + divider + hardcoded #1a1a1a, top-aligned) diverged from the
+    // editor and rendered illegibly on dark backgrounds. Both vibes now mirror
+    // the editor's default slide — mirror CarouselSlidePreview's default slide: the block
     // is vertically placed (placement), the label pill is a rounded-full chip with
     // WHITE text and NO icon, the title is BOLD at 64px (52px for M), and the body
     // is plain at 34px (27px for S). No divider, no chips (the editor draws none).
@@ -620,47 +671,18 @@ async function renderContent(
 async function renderStatement(
   ctx: SKRSContext2D,
   input: CarouselTemplateInput,
-  refined: boolean,
+  _refined: boolean,
   fonts: CarouselFonts,
 ): Promise<void> {
   const { brand, title } = input;
   const accent = brand.accentColor || DEFAULT_ACCENT;
   const titleColor = input.titleColor || '#000000';
-  if (refined) {
-    ctx.fillStyle = '#1a1a1a';
-    ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
-    let y = CANVAS_HEIGHT / 2 - 80;
-    ctx.font = `${ts(100)}px ${fonts.serifItalic}`;
-    y = drawPlainParagraph(
-      ctx,
-      stripAccentMarkers(title),
-      PADDING,
-      y,
-      CANVAS_SIZE - PADDING * 2,
-      ts(100),
-      ts(105),
-      '#ffffff',
-      'center',
-      fonts,
-      'serif',
-    );
-    y += 36;
-    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo((CANVAS_SIZE - 44) / 2, y);
-    ctx.lineTo((CANVAS_SIZE + 44) / 2, y);
-    ctx.stroke();
-    y += 40;
-    ctx.font = `${ts(22)}px ${fonts.sansBold}`;
-    ctx.fillStyle = 'rgba(255,255,255,0.35)';
-    const sub = (input.label || '').trim().toUpperCase();
-    if (sub) {
-      const tw = ctx.measureText(sub).width;
-      ctx.fillText(sub, (CANVAS_SIZE - tw) / 2, y);
-    }
-  } else {
-    // Bold quote/testimonial — mirror CarouselSlidePreview: real background color
+  {
+    // Quote / statement — unified for BOTH vibes (task 86d3ezr9d). The editor
+    // (CarouselSlidePreview quote/testimonial) draws no refined-specific
+    // treatment, so the export must not either: the old refined branch (forced
+    // #1a1a1a slide + italic serif headline + divider) diverged from the editor.
+    // Both vibes now mirror CarouselSlidePreview: real background color
     // (chosen color for `color` backgrounds, else brand accent), BOLD text sized
     // 82px quote / 52px testimonial (70/46 for M), vertically CENTERED. The editor
     // draws NO icon on a statement, so the export must not either.
@@ -730,50 +752,20 @@ async function renderBullets(
   const titleColor = input.titleColor || '#000000';
   const bodyColor = input.bodyColor || '#000000';
   const list = items?.length ? items : body.split('\n').map((s) => s.replace(/^[-•]\s*/, '').trim()).filter(Boolean);
-  if (refined) {
-    ctx.fillStyle = DEFAULT_CREAM;
-    ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_HEIGHT);
-    let y = PADDING + 40;
-    y = drawPlainParagraph(
-      ctx,
-      stripAccentMarkers(title),
-      PADDING,
-      y,
-      CANVAS_SIZE - PADDING * 2,
-      ts(72),
-      ts(78),
-      '#1a1a1a',
-      'left',
-      fonts,
-    );
-    y += 28;
-    let n = 1;
-    for (const row of list.slice(0, 8)) {
-      ctx.font = `${ts(52)}px ${fonts.serifItalic}`;
-      ctx.fillStyle = '#c8c0b4';
-      ctx.textBaseline = 'alphabetic';
-      ctx.fillText(String(n), PADDING, y + 32);
-      ctx.font = `${ts(32)}px ${fonts.sans}`;
-      ctx.fillStyle = '#555555';
-      const colX = PADDING + 56;
-      const yy = drawPlainParagraph(ctx, row, colX, y + 32, CANVAS_SIZE - colX - PADDING, ts(32), ts(38), '#555555', 'left', fonts);
-      y = yy + 16;
-      ctx.strokeStyle = '#ddd8d0';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(PADDING, y - 8);
-      ctx.lineTo(CANVAS_SIZE - PADDING, y - 8);
-      ctx.stroke();
-      n++;
-    }
-  } else {
-    // Bold list — mirror CarouselSlidePreview's `list` layout EXACTLY:
+  {
+    // List — unified for BOTH vibes (task 86d3ezr9d). The old refined branch
+    // (cream slide + plain #1a1a1a title + italic serif numbers + #ddd8d0
+    // dividers, top-aligned) diverged from the editor. Both vibes now mirror
+    // CarouselSlidePreview's `list` layout EXACTLY:
     //   • title (bold, sized 56px / 45px M), then a `mt-10` (40px) gap;
     //   • numbered/marker rows with a 48px marker COLUMN (min-w-[48px]) in the
     //     accent colour, a 16px gap (gap-4), then hanging-indented wrapped text;
     //   • markers follow `bulletStyle` (01./02. by default — NOT checkboxes);
     //   • the WHOLE block is vertically placed (placement) like the editor's flex
     //     justify, instead of being top-aligned.
+    // The editor's ONLY refined-specific list styling is wider row spacing
+    // (space-y-5 vs space-y-3) plus a faint `border-black/10` rule + `pt-4`
+    // above each row after the first — replicated below so refined still matches.
     const align = input.textAlign ?? 'left';
     const placement = input.placement ?? 'center';
     ctx.fillStyle = input.backgroundColor || DEFAULT_BG;
@@ -806,15 +798,20 @@ async function renderBullets(
     const markerSizePx = ts(28); // text-[28px]
     const bodySizePx = ts((input.bodySize ?? 'M') === 'S' ? 29 : 36);
     const bodyLineH = Math.round(bodySizePx * 1.375); // leading-snug
-    const itemGap = 12; // space-y-3 (bold)
+    // Row rhythm matches the editor's <ul>: refined = space-y-5 (20px) + a
+    // `border-t border-black/10` rule and `pt-4` (16px) above every row after
+    // the first; bold = space-y-3 (12px), no rule.
+    const itemGap = refined ? 20 : 12;
+    const itemTopPad = refined ? 16 : 0; // pt-4 (refined rows i>0)
 
     const itemLines = rows.map((row) => {
       const lines = wrapPlain(ctx, row, textW, bodySizePx, fonts.sans);
       return lines.length ? lines : [''];
     });
     const itemHeights = itemLines.map((lines) => lines.length * bodyLineH);
+    const gapsCount = Math.max(0, rows.length - 1);
     const listH =
-      itemHeights.reduce((a, b) => a + b, 0) + itemGap * Math.max(0, rows.length - 1);
+      itemHeights.reduce((a, b) => a + b, 0) + (itemGap + itemTopPad) * gapsCount;
 
     const gapTitleList = titleBlockH ? 40 : 0; // mt-10
     const blockH = titleBlockH + gapTitleList + listH;
@@ -845,6 +842,19 @@ async function renderBullets(
 
     // Rows: marker in its column + hanging-indented text.
     for (let idx = 0; idx < itemLines.length; idx++) {
+      if (idx > 0) {
+        y += itemGap;
+        if (refined) {
+          // border-t border-black/10 rule at the row's top edge, then pt-4.
+          ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(PADDING, y);
+          ctx.lineTo(CANVAS_SIZE - PADDING, y);
+          ctx.stroke();
+          y += itemTopPad;
+        }
+      }
       const lines = itemLines[idx];
       const baseFirst = firstBaseline(ctx, bodySizePx, bodyLineH, y, fonts.sans);
 
@@ -864,7 +874,7 @@ async function renderBullets(
         ctx.fillText(ln, textX, by);
         by += bodyLineH;
       }
-      y += itemHeights[idx] + (idx < itemLines.length - 1 ? itemGap : 0);
+      y += itemHeights[idx];
     }
   }
 }
