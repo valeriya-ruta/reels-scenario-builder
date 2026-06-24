@@ -21,6 +21,7 @@ import {
   resolveSlideVisualColors,
   resolveTitleAndBodyColors,
 } from '@/lib/carousel/colorSystem';
+import { scaleBodyPx } from '@/lib/carousel/carouselTextSizes';
 import {
   getBgPhotoTransform,
   toCssTranslatePx,
@@ -367,7 +368,7 @@ export default function CarouselSlidePreview({
                 <AccentRuns text={slide.title} accentStyle={brand.accentStyle} accentColor={accent} />
               </div>
               {showCoverSubline ? (
-                <p className="mt-6 leading-snug" style={{ fontFamily: bodyFont, color: resolvedBodyColor, fontSize: 32 }}>
+                <p className="mt-6 leading-snug" style={{ fontFamily: bodyFont, color: resolvedBodyColor, fontSize: scaleBodyPx(32) }}>
                   {bodyLine ? (
                     <AccentRuns text={slide.body} accentStyle={brand.accentStyle} accentColor={accent} />
                   ) : (
@@ -398,7 +399,7 @@ export default function CarouselSlidePreview({
                 <AccentRuns text={slide.title} accentStyle={brand.accentStyle} accentColor={accent} />
               </div>
               {showCoverSubline ? (
-                <p className="mt-3" style={{ color: resolvedBodyColor, fontFamily: bodyFont, fontSize: 30 }}>
+                <p className="mt-3" style={{ color: resolvedBodyColor, fontFamily: bodyFont, fontSize: scaleBodyPx(30) }}>
                   {bodyLine ? (
                     <AccentRuns text={slide.body} accentStyle={brand.accentStyle} accentColor={accent} />
                   ) : (
@@ -465,7 +466,7 @@ export default function CarouselSlidePreview({
                     >
                       {markerFor(slide.bulletStyle ?? 'numbered-padded', i)}
                     </span>
-                    <span className="text-[36px] leading-snug whitespace-pre-wrap" style={{ fontFamily: bodyFont, color: resolvedBodyColor, fontSize: (slide.bodySize ?? 'M') === 'S' ? 29 : 36 }}>
+                    <span className="text-[36px] leading-snug whitespace-pre-wrap" style={{ fontFamily: bodyFont, color: resolvedBodyColor, fontSize: scaleBodyPx((slide.bodySize ?? 'M') === 'S' ? 29 : 36) }}>
                       {line}
                     </span>
                   </li>
@@ -537,7 +538,7 @@ export default function CarouselSlidePreview({
             <p className="mt-8 font-bold leading-[1.05] whitespace-pre-wrap" style={{ fontFamily: titleFont, color: resolvedTitleColor, fontSize: (slide.titleSize ?? 'L') === 'M' ? 58 : 72 }}>
               <AccentRuns text={slide.title} accentStyle={brand.accentStyle} accentColor={accent} />
             </p>
-            <p className="mt-6 leading-relaxed whitespace-pre-wrap" style={{ fontFamily: bodyFont, color: resolvedBodyColor, fontSize: (slide.bodySize ?? 'M') === 'S' ? 30 : 38 }}>
+            <p className="mt-6 leading-relaxed whitespace-pre-wrap" style={{ fontFamily: bodyFont, color: resolvedBodyColor, fontSize: scaleBodyPx((slide.bodySize ?? 'M') === 'S' ? 30 : 38) }}>
               {stripAccentMarkers(slide.body)}
             </p>
           </>,

@@ -5,7 +5,9 @@ import sharp from 'sharp';
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-const DIR = join(process.cwd(), '_proofout');
+const DIR = process.env.PROOF_DIR
+  ? (process.env.PROOF_DIR.match(/^[A-Za-z]:|^[\\/]/) ? process.env.PROOF_DIR : join(process.cwd(), process.env.PROOF_DIR))
+  : join(process.cwd(), '_proofout');
 const CHROME =
   process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ||
   'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
