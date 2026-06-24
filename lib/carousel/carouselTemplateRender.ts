@@ -70,6 +70,11 @@ function firstBaseline(
   font: string,
 ): number {
   ctx.font = `${fontSize}px ${font}`;
+  // actualBoundingBoxAscent is measured relative to the CURRENT textBaseline, so
+  // a stale 'middle'/'bottom' left over from a prior draw (e.g. the label pill in
+  // renderContent) would halve it and pull the line up. Pin it to 'alphabetic'
+  // before measuring so the ascent is the true baseline-to-cap distance.
+  ctx.textBaseline = 'alphabetic';
   const m = ctx.measureText('Mg');
   const ascent =
     typeof m.actualBoundingBoxAscent === 'number' && m.actualBoundingBoxAscent > 0
@@ -590,10 +595,12 @@ async function renderContent(
     const bodyLines = wrapPlain(ctx, bodyText, contentW, bodySizePx, fonts.sans);
     const bodyBlockH = bodyLines.length * bodyLineH;
 
-    // Pill geometry (rounded-full, white text). px-5 / py-2 / text-22.
-    const pillTextSize = (22);
+    // Pill geometry (rounded-full, white text). px-5 / py-2 / text-22. Height
+    // mirrors the editor chip: text line-box (inherited line-height 1.5 × 22)
+    // + py-2 (8px top+bottom) = 49px, not a guessed 40.
+    const pillTextSize = 22;
     const pillPadX = 20;
-    const pillH = lab ? 40 : 0;
+    const pillH = lab ? Math.round(pillTextSize * 1.5) + 16 : 0;
     const pillToTitle = lab ? 32 : 0; // mt-8
     const titleToBody = bodyBlockH ? 24 : 0; // mt-6
 
