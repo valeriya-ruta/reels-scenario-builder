@@ -16,8 +16,11 @@ import { renderCarouselTemplatePng } from '@/lib/carousel/carouselTemplateRender
 import CarouselSlidePreview from '@/components/carousel/CarouselSlidePreview';
 import { resolveBrandFont } from '@/lib/brandFonts';
 
-const OUT = join(process.cwd(), '_proofout');
+const OUT = process.env.PROOF_DIR
+  ? (process.env.PROOF_DIR.match(/^[A-Za-z]:|^[\\/]/) ? process.env.PROOF_DIR : join(process.cwd(), process.env.PROOF_DIR))
+  : join(process.cwd(), '_proofout');
 mkdirSync(OUT, { recursive: true });
+const VIBE = process.env.VIBE === 'bold' ? 'bold' : 'refined';
 
 // Local Inter (latin + cyrillic, 400 + 700) so the editor HTML screenshot
 // renders the REAL brand font offline — the export uses these same @fontsource
@@ -31,7 +34,7 @@ const INTER_FACE = [face('latin', 400), face('cyrillic', 400), face('latin', 700
 // brand light. Accent gold so pills/markers/accent box stay visible on dark.
 const brand = {
   theme: 'light',
-  vibe: 'refined',
+  vibe: VIBE,
   favColorHex: '#C9A24B',
   colors: { lightBg: '#F0EEE9', darkBg: '#232C3F', accent1: '#C9A24B', accent2: '#5D6B9F' },
   fontId: 'inter',

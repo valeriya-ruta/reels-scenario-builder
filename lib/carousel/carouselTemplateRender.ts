@@ -22,21 +22,17 @@ import {
 import { ensureCarouselFonts } from '@/lib/carousel/carouselFonts';
 import type { BrandAccentStyle } from '@/lib/brand';
 import { resolveTitleAndBodyColors, type CarouselBrandPalette } from '@/lib/carousel/colorSystem';
+import { scaleBodyPx } from '@/lib/carousel/carouselTextSizes';
 
 /**
- * Uniform export text scale (task 86d36ej91): every text role (title, body,
- * numbered-list items, CTA, eyebrows, markers) is scaled by this single factor
- * so relative proportions are preserved. Applied ONLY to font sizes — margins,
- * gaps, pill/box geometry and the canvas stay fixed; vertical centring and
- * wrapping recompute from the scaled sizes, so nothing clips. Derived
- * line-heights (round(sizePx * ratio)) scale automatically because the base
- * `sizePx` is scaled before they are computed.
+ * Text sizing (task 86d3f1qqm): the export renders at the SAME sizes as the
+ * editor (`CarouselSlidePreview`). Title, CTA, pills, markers and eyebrows use
+ * their unscaled px 1:1. Only the BODY role (body paragraphs, cover sublines,
+ * numbered-list items) is bumped, via the shared `scaleBodyPx` so editor and
+ * export stay locked together. The old export-only `TEXT_SCALE = 1.11` (task
+ * 86d36ej91) that scaled every role — breaking WYSIWYG and line wrapping — is
+ * gone.
  */
-const TEXT_SCALE = 1.11;
-/** Scale + round a font-size in px by TEXT_SCALE. */
-function ts(px: number): number {
-  return Math.round(px * TEXT_SCALE);
-}
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
   const h = hex.replace(/^#/, '');
@@ -350,7 +346,7 @@ async function renderCover(
     );
     const contentW = CANVAS_SIZE - PADDING * 2;
     const align: 'left' | 'center' | 'right' = 'center';
-    const titleSizePx = ts((input.titleSize ?? 'L') === 'M' ? 78 : 96);
+    const titleSizePx = ((input.titleSize ?? 'L') === 'M' ? 78 : 96);
     const titleLineH = Math.round(titleSizePx * 1.0); // leading-[1.0]
     const titleLines = layoutWords(
       (t) => {
@@ -365,7 +361,7 @@ async function renderCover(
     const bodyLine = stripAccentMarkers(body).trim();
     const fallbackSub = (label || designNote || '').trim();
     const hasSub = Boolean(bodyLine || fallbackSub);
-    const subSizePx = ts(32);
+    const subSizePx = scaleBodyPx(32);
     const subLineH = Math.round(subSizePx * 1.375); // leading-snug
     const subMt = 24; // mt-6
     const subLines = hasSub
@@ -453,7 +449,7 @@ async function renderCover(
     );
     const contentW = CANVAS_SIZE - PADDING * 2;
     const align: 'left' | 'center' | 'right' = 'center';
-    const titleSizePx = ts((input.titleSize ?? 'L') === 'M' ? 78 : 96);
+    const titleSizePx = ((input.titleSize ?? 'L') === 'M' ? 78 : 96);
     const titleLineH = Math.round(titleSizePx * 0.98);
     const titleWords = segmentsToWords(parseAccentSpans(title));
     const titleLines = layoutWords(
@@ -469,7 +465,7 @@ async function renderCover(
     const bodyLine = stripAccentMarkers(body).trim();
     const fallbackSub = (label || designNote || '').trim();
     const hasSub = Boolean(bodyLine || fallbackSub);
-    const subSizePx = ts(30);
+    const subSizePx = scaleBodyPx(30);
     const subLineH = Math.round(subSizePx * 1.3);
     const subLines = hasSub
       ? Math.max(1, wrapPlain(ctx, bodyLine || fallbackSub, contentW, subSizePx, fonts.sans).length)
@@ -576,7 +572,7 @@ async function renderContent(
     const contentW = CANVAS_SIZE - PADDING * 2;
     const lab = (label || '').trim();
 
-    const titleSizePx = ts((input.titleSize ?? 'L') === 'M' ? 58 : 72);
+    const titleSizePx = ((input.titleSize ?? 'L') === 'M' ? 58 : 72);
     const titleLineH = Math.round(titleSizePx * 1.05);
     const titleLines = layoutWords(
       (t) => {
@@ -589,13 +585,13 @@ async function renderContent(
     const titleBlockH = title.trim() ? Math.max(1, titleLines.length) * titleLineH : 0;
 
     const bodyText = stripAccentMarkers(body);
-    const bodySizePx = ts((input.bodySize ?? 'M') === 'S' ? 30 : 38);
+    const bodySizePx = scaleBodyPx((input.bodySize ?? 'M') === 'S' ? 30 : 38);
     const bodyLineH = Math.round(bodySizePx * 1.625); // leading-relaxed
     const bodyLines = wrapPlain(ctx, bodyText, contentW, bodySizePx, fonts.sans);
     const bodyBlockH = bodyLines.length * bodyLineH;
 
     // Pill geometry (rounded-full, white text). px-5 / py-2 / text-22.
-    const pillTextSize = ts(22);
+    const pillTextSize = (22);
     const pillPadX = 20;
     const pillH = lab ? 40 : 0;
     const pillToTitle = lab ? 32 : 0; // mt-8
@@ -694,15 +690,13 @@ async function renderStatement(
     const statementTextColor = titleColor;
     const align = input.textAlign ?? 'left';
     const isTestimonial = input.layoutPreset === 'testimonial';
-    const sizePx = ts(
-      isTestimonial
-        ? (input.titleSize ?? 'L') === 'M'
-          ? 46
-          : 52
-        : (input.titleSize ?? 'L') === 'M'
-          ? 70
-          : 82,
-    );
+    const sizePx = isTestimonial
+      ? (input.titleSize ?? 'L') === 'M'
+        ? 46
+        : 52
+      : (input.titleSize ?? 'L') === 'M'
+        ? 70
+        : 82;
     const lineH = Math.round(sizePx * 1.25); // leading-tight
     const contentW = CANVAS_SIZE - PADDING * 2;
     const lines = layoutWords(
@@ -776,7 +770,7 @@ async function renderBullets(
     const rows = (list.length ? list : ['Пункт 1', 'Пункт 2', 'Пункт 3']).slice(0, 8);
     const bulletStyle = input.bulletStyle ?? 'numbered-padded';
 
-    const titleSizePx = ts((input.titleSize ?? 'L') === 'M' ? 45 : 56);
+    const titleSizePx = ((input.titleSize ?? 'L') === 'M' ? 45 : 56);
     const titleLineH = Math.round(titleSizePx * 1.25); // leading-tight
     const titleLines = layoutWords(
       (t) => {
@@ -795,8 +789,8 @@ async function renderBullets(
     const markerGap = 16;
     const textX = PADDING + markerColW + markerGap;
     const textW = contentW - markerColW - markerGap;
-    const markerSizePx = ts(28); // text-[28px]
-    const bodySizePx = ts((input.bodySize ?? 'M') === 'S' ? 29 : 36);
+    const markerSizePx = (28); // text-[28px]
+    const bodySizePx = scaleBodyPx((input.bodySize ?? 'M') === 'S' ? 29 : 36);
     const bodyLineH = Math.round(bodySizePx * 1.375); // leading-snug
     // Row rhythm matches the editor's <ul>: refined = space-y-5 (20px) + a
     // `border-t border-black/10` rule and `pt-4` (16px) above every row after
@@ -907,12 +901,12 @@ async function renderCta(
     ctx.lineWidth = 0.5;
     ctx.strokeRect(0.25, 0.25, CANVAS_SIZE - 0.5, CANVAS_HEIGHT - 0.5);
     let y = WATERMARK_Y + 56;
-    ctx.font = `${ts(22)}px ${fonts.sansBold}`;
+    ctx.font = `${(22)}px ${fonts.sansBold}`;
     ctx.fillStyle = '#bbbbbb';
     ctx.fillText((label || 'ЗАКЛИК').toUpperCase(), PADDING, y);
     y += 48;
     const [l1, l2] = splitEditorialTitle(stripAccentMarkers(title));
-    y = drawPlainParagraph(ctx, l1, PADDING, y, CANVAS_SIZE - PADDING * 2, ts(96), ts(102), '#1a1a1a', 'left', fonts, 'serif');
+    y = drawPlainParagraph(ctx, l1, PADDING, y, CANVAS_SIZE - PADDING * 2, (96), (102), '#1a1a1a', 'left', fonts, 'serif');
     y += 8;
     if (l2) {
       y = drawPlainParagraph(
@@ -921,8 +915,8 @@ async function renderCta(
         PADDING,
         y,
         CANVAS_SIZE - PADDING * 2,
-        ts(44),
-        ts(52),
+        (44),
+        (52),
         '#1a1a1a',
         'left',
         fonts,
@@ -937,7 +931,7 @@ async function renderCta(
     ctx.lineTo(CANVAS_SIZE - PADDING, y);
     ctx.stroke();
     y += 36;
-    ctx.font = `${ts(28)}px ${fonts.sans}`;
+    ctx.font = `${(28)}px ${fonts.sans}`;
     ctx.fillStyle = '#888888';
     const action = stripAccentMarkers(body);
     const yAfterAction = drawPlainParagraph(
@@ -946,8 +940,8 @@ async function renderCta(
       PADDING,
       y,
       CANVAS_SIZE - PADDING * 2 - 60,
-      ts(28),
-      ts(34),
+      (28),
+      (34),
       '#888888',
       'left',
       fonts,
@@ -959,7 +953,7 @@ async function renderCta(
     ctx.lineWidth = 1;
     ctx.stroke();
     ctx.fillStyle = '#1a1a1a';
-    ctx.font = `${ts(18)}px ${fonts.sans}`;
+    ctx.font = `${(18)}px ${fonts.sans}`;
     ctx.fillText('→', CANVAS_SIZE - PADDING - 30, circleY + 6);
   } else {
     // Bold CTA/final (goal) — mirror CarouselSlidePreview's final slide: NO
@@ -971,7 +965,7 @@ async function renderCta(
     const { r, g, b } = hexToRgb(accent);
     const contentW = CANVAS_SIZE - PADDING * 2;
 
-    const titleSizePx = ts((input.titleSize ?? 'L') === 'M' ? 58 : 72);
+    const titleSizePx = ((input.titleSize ?? 'L') === 'M' ? 58 : 72);
     const titleLineH = Math.round(titleSizePx * 1.05);
     const titleLines = layoutWords(
       (t) => {
@@ -990,7 +984,7 @@ async function renderCta(
     // as a "dent" on the export (task 86d3czfb3); the earlier "no indent" change
     // (86d36ejc6) had dropped the box's horizontal padding entirely.
     const boxBodyText = stripAccentMarkers(body).trim() || 'Підпишись';
-    const boxBodySize = ts(36);
+    const boxBodySize = (36);
     const boxPadY = 24; // py-6
     const boxPadX = 32; // px-8
     const boxBodyLineH = Math.round(boxBodySize * 1.2);
@@ -1089,9 +1083,9 @@ export async function renderCarouselTemplatePng(input: CarouselTemplateInput): P
       const name = author?.name?.trim() || 'Автор';
       const handle = author?.handle?.trim() || '@handle';
       ctx.fillStyle = refined ? '#ffffff' : '#ffffff';
-      ctx.font = `bold ${ts(28)}px ${fonts.sansBold}`;
+      ctx.font = `bold ${(28)}px ${fonts.sansBold}`;
       ctx.fillText(name, PADDING + 66, y);
-      ctx.font = `${ts(24)}px ${fonts.sans}`;
+      ctx.font = `${(24)}px ${fonts.sans}`;
       ctx.fillStyle = 'rgba(255,255,255,0.75)';
       ctx.fillText(handle, PADDING + 66, y + 30);
       ctx.beginPath();
@@ -1109,7 +1103,7 @@ export async function renderCarouselTemplatePng(input: CarouselTemplateInput): P
       await renderCta(ctx, { ...input, title: input.ctaTitle || input.title, body: '' }, refined, fonts);
       const kw = (input.ctaKeyword || '').trim() || 'РУТА';
       ctx.textBaseline = 'alphabetic';
-      ctx.font = refined ? `italic ${ts(128)}px ${fonts.serifItalic}` : `900 ${ts(128)}px ${fonts.sansBold}`;
+      ctx.font = refined ? `italic ${(128)}px ${fonts.serifItalic}` : `900 ${(128)}px ${fonts.sansBold}`;
       ctx.fillStyle = refined ? '#1a1a1a' : '#ffffff';
       const tw = ctx.measureText(kw).width;
       ctx.fillText(kw, (CANVAS_SIZE - tw) / 2, CANVAS_HEIGHT * 0.62);
