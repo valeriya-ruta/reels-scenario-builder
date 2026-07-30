@@ -30,6 +30,13 @@ export default async function RootLayout({
 
   return (
     <html lang="uk">
+      <head>
+        {/* Material Symbols, subset to the icons the app actually renders. */}
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:FILL@0..1&icon_names=view_carousel,movie,auto_stories,lightbulb_2&display=block"
+        />
+      </head>
       <body className="antialiased" style={{ background: 'var(--canvas)', color: 'var(--foreground)' }}>
         <PostHogProvider>
           <Suspense>

@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from 'react';
 import Link from 'next/link';
+import BackLink from '@/components/ui/BackLink';
 import {
   closestCenter,
   DndContext,
@@ -66,7 +67,7 @@ import BrandDNASetup from '@/components/BrandDNASetup';
 type EditorTab = 'type' | 'text' | 'position' | 'bg' | 'brand';
 const MOBILE_EDITOR_BAR_HEIGHT_PX = 72;
 /** Max slide width as a fraction of the mobile canvas content width (matches ~85vw intent). */
-const MOBILE_SLIDE_MAX_WIDTH_FRAC = 0.85;
+const MOBILE_SLIDE_MAX_WIDTH_FRAC = 0.92;
 
 function SortableThumb({
   slide,
@@ -150,13 +151,13 @@ function SortableThumb({
         }
       }}
       className={[
-        'relative shrink-0 cursor-pointer select-none overflow-hidden rounded-md transition-[border-color,transform] duration-150 ease-out',
+        'relative shrink-0 cursor-pointer select-none overflow-hidden rounded-[5px] transition-[border-color,transform] duration-150 ease-out',
         active ? 'ring-2' : 'ring-1 ring-black/10',
       ].join(' ')}
       aria-label={`Слайд ${index + 1}`}
       aria-current={active ? 'true' : undefined}
     >
-      <span className="absolute inset-0 overflow-hidden rounded-md">
+      <span className="absolute inset-0 overflow-hidden rounded-[5px]">
         <CarouselSlidePreview
           slide={slide}
           brand={brandSettings}
@@ -168,7 +169,7 @@ function SortableThumb({
       </span>
       <span
         className="pointer-events-none absolute inset-0"
-        style={{ borderRadius: 6, border: active ? `2px solid ${accentColor}` : '1px solid rgba(0,0,0,0.08)' }}
+        style={{ borderRadius: 5, border: active ? `2px solid ${accentColor}` : '1px solid rgba(0,0,0,0.08)' }}
       />
       {showTrash && canDelete ? (
         <button
@@ -355,7 +356,7 @@ export default function CarouselEditorLayout({
         return;
       }
       const maxW = w * MOBILE_SLIDE_MAX_WIDTH_FRAC;
-      const maxH = Math.max(1, h - 32);
+      const maxH = Math.max(1, h - 12);
       const s = Math.min(maxW / CANVAS_WIDTH, maxH / CANVAS_HEIGHT);
       setPreviewScale(Math.max(0.06, Math.min(s, 1)));
     };
@@ -854,13 +855,9 @@ export default function CarouselEditorLayout({
           status + date pills live here (task 86d3d23nj UI pass) so the header
           reads as an app row, not a crowded webpage bar. */}
       <header className="flex h-[54px] shrink-0 items-center gap-2 border-b border-[color:var(--border)] bg-[color:var(--background)] pl-1 pr-2 md:hidden">
-        <Link
-          href="/carousel"
-          className="app-icon-btn shrink-0"
-          aria-label="Всі каруселі"
-        >
+        <BackLink fallbackHref="/carousel" ariaLabel="Назад" className="app-icon-btn shrink-0">
           <ChevronLeft className="h-5 w-5" />
-        </Link>
+        </BackLink>
         <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {headerMeta}
         </div>
@@ -1046,7 +1043,7 @@ export default function CarouselEditorLayout({
                   <button
                     type="button"
                     onClick={addSlide}
-                    className="flex h-[78px] w-[62px] shrink-0 items-center justify-center rounded-md border border-dashed border-[color:var(--border)] text-zinc-500 hover:bg-[color:var(--surface)]"
+                    className="flex h-[78px] w-[62px] shrink-0 items-center justify-center rounded-[5px] border border-dashed border-[color:var(--border)] text-zinc-500 hover:bg-[color:var(--surface)]"
                     aria-label="Додати слайд"
                   >
                     <Plus className="h-5 w-5" />
@@ -1062,7 +1059,7 @@ export default function CarouselEditorLayout({
                 {/* Mobile: direct flex canvas child (no absolute wrapper), centered in both axes */}
                 <div
                   ref={previewAreaRef}
-                  className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-4 md:hidden"
+                  className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden px-2 py-1.5 md:hidden"
               onClick={(e) => {
                 if (trashForId) setTrashForId(null);
                 if (!mobilePositioningMode) return;
@@ -1232,7 +1229,7 @@ export default function CarouselEditorLayout({
                 modifiers={dragModifiers}
               >
                 <SortableContext items={slides.map((s) => s.id)} strategy={rectSortingStrategy}>
-                  <div className="flex shrink-0 flex-row items-center gap-2 overflow-x-auto px-3 py-2">
+                  <div className="flex shrink-0 flex-row items-center gap-2 overflow-x-auto px-3 py-1.5">
                     {slides.map((slide, index) => (
                       <SortableThumb
                         key={slide.id}
@@ -1275,7 +1272,7 @@ export default function CarouselEditorLayout({
                         setTrashForId(null);
                         addSlide();
                       }}
-                      className="flex h-[58px] w-[46px] shrink-0 items-center justify-center rounded-md border border-dashed border-[color:var(--border)] text-zinc-500 hover:bg-[color:var(--surface)]"
+                      className="flex h-[58px] w-[46px] shrink-0 items-center justify-center rounded-[5px] border border-dashed border-[color:var(--border)] text-zinc-500 hover:bg-[color:var(--surface)]"
                       aria-label="Додати слайд"
                     >
                       <Plus className="h-5 w-5" />

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Project } from '@/lib/domain';
 import { updateProjectName, createSnapshot } from '@/app/actions';
 import ShareModal from './ShareModal';
+import BackLink from '@/components/ui/BackLink';
 import ScheduleChip from './content/ScheduleChip';
 import StatusPill from './content/StatusPill';
 
@@ -82,11 +83,11 @@ export default function ProjectHeader({
     <>
       <div className="mb-6">
         <div className="-ml-2 mb-1 flex items-center justify-between">
-          <Link href={backHref} aria-label={backLabel} className="app-icon-btn">
+          <BackLink fallbackHref={backHref} ariaLabel={backLabel} className="app-icon-btn">
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-          </Link>
+          </BackLink>
         </div>
         <div className="mb-3 flex items-center justify-between gap-4">
           <div className="flex min-w-0 flex-1 items-center">

@@ -87,7 +87,11 @@ export default function ProjectBuilder({
               onFocusHandled={() => setFocusSceneId(null)}
             />
           </div>
-          <div className="lg:col-span-3">
+          {/* Reference sits FIRST on mobile: when you're writing from a reference
+              you keep going back to it, and having it under the whole scenario
+              meant scrolling past every scene to reach it. On desktop it stays
+              in the sticky right column. */}
+          <div className="order-first lg:order-none lg:col-span-3">
             <div className="lg:sticky lg:top-6">
               <CopyReferencePanel
                 project={project}

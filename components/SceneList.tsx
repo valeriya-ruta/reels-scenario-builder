@@ -549,11 +549,11 @@ function FormulaPickerModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end bg-black/40 px-3 pb-0 pt-8 sm:items-center sm:justify-center sm:p-4"
+      className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4"
       onClick={onClose}
     >
       <div
-        className="card-shadow w-full max-w-2xl rounded-t-2xl border border-[color:var(--border)] bg-white p-4 shadow-xl sm:rounded-2xl sm:p-6"
+        className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-[20px] border border-[color:var(--border)] bg-white p-5 shadow-[var(--elev-3)] sm:p-6"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3">

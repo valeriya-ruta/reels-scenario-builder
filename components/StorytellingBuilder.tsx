@@ -18,6 +18,8 @@ import {
   reorderStorytellingStories,
 } from '@/app/storytelling-actions';
 import StoryCard from './StoryCard';
+import BackLink from '@/components/ui/BackLink';
+import { Pencil } from 'lucide-react';
 import {
   genClientId,
   nextOrderIndex,
@@ -251,16 +253,16 @@ export default function StorytellingBuilder({ project: initialProject, initialCo
       {/* Header */}
       <div className="mx-auto max-w-[calc(100vw-2rem)] px-4 pb-4 pt-5">
         <div className="mb-3">
-          <Link
-            href="/storytellings"
-            aria-label="До всіх сторітелінгів"
+          <BackLink
+            fallbackHref="/storytellings"
+            ariaLabel="Назад"
             className="-ml-1 inline-flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
           >
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-            <span>До всіх сторітелінгів</span>
-          </Link>
+            <span>Назад</span>
+          </BackLink>
         </div>
 
         <div className="mb-3 flex items-center gap-4">
@@ -277,13 +279,15 @@ export default function StorytellingBuilder({ project: initialProject, initialCo
               className="w-full max-w-md rounded border border-zinc-300 bg-white px-3 py-2 text-lg font-semibold text-zinc-900 focus:border-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-400"
             />
           ) : (
-            <h1
+            <button
+              type="button"
               onClick={() => setEditingName(true)}
-              className="app-title cursor-pointer truncate"
-              title={project.name}
+              className="flex min-w-0 items-center gap-2 text-left"
+              title="Перейменувати"
             >
-              {project.name}
-            </h1>
+              <span className="app-title truncate">{project.name}</span>
+              <Pencil className="h-4 w-4 shrink-0 text-[color:var(--text-muted)]" />
+            </button>
           )}
         </div>
         {/* Meta pill row: status + date (app UI system — Linear/Superlist). */}

@@ -66,7 +66,7 @@ export default async function StorytellingsPage() {
 function CreateButton() {
   return (
     <form action={createProject}>
-      <NewReelSubmitButton idleLabel="Новий сторітелінг" pendingLabel="Створюю сторітелінг..." />
+      <NewReelSubmitButton idleLabel="Новий сторітелінг" pendingLabel="Створюю…" accent="#C08C28" />
     </form>
   );
 }

@@ -19,6 +19,7 @@ import {
   resolveTitleAndBodyColors,
 } from '@/lib/carousel/colorSystem';
 import Link from 'next/link';
+import BackLink from '@/components/ui/BackLink';
 import ScheduleChip from '@/components/content/ScheduleChip';
 import StatusPill from '@/components/content/StatusPill';
 import type { ContentStatus } from '@/lib/content/statusSystem';
@@ -964,12 +965,12 @@ export default function CarouselBuilder({
   return (
     <div ref={slideListTopRef} className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="hidden px-4 pt-4 md:block">
-        <Link
-          href="/carousel"
+        <BackLink
+          fallbackHref="/carousel"
           className="mb-2 inline-flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-700"
         >
-          ← До всіх каруселей
-        </Link>
+          ← Назад
+        </BackLink>
         <div className="mb-3 flex flex-wrap items-center gap-3">
           {editingProjectName ? (
             <input

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus } from 'lucide-react';
 import CenterModal from '@/components/ui/CenterModal';
+import MaterialIcon from '@/components/ui/MaterialIcon';
 import { RADIAL_OPTIONS, type RadialOptionId } from '@/components/CreateRadialMenu';
 import { CONTENT_TYPES } from '@/lib/contentTypes';
 import { OPEN_BRAINDUMP_FRESH_EVENT } from '@/lib/content/braindumpIdeaEvent';
@@ -42,7 +43,6 @@ export default function PlanCreateMenu() {
       <CenterModal open={open} onClose={() => setOpen(false)} title="Створити">
         <div className="flex flex-col">
           {RADIAL_OPTIONS.map((opt) => {
-            const { Icon } = opt;
             return (
               <button
                 key={opt.id}
@@ -55,7 +55,7 @@ export default function PlanCreateMenu() {
                   className="flex h-9 w-9 items-center justify-center rounded-full text-white"
                   style={{ backgroundColor: opt.color }}
                 >
-                  <Icon className="h-[18px] w-[18px]" strokeWidth={2} />
+                  <MaterialIcon name={opt.icon} size={18} />
                 </span>
                 <span className="text-[15px] font-medium text-[color:var(--foreground)]">{opt.label}</span>
               </button>

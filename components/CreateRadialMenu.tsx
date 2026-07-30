@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Play, LayoutGrid, Circle, Lightbulb, type LucideIcon } from 'lucide-react';
+import MaterialIcon from '@/components/ui/MaterialIcon';
 import BlurScrim from '@/components/BlurScrim';
 
 /**
@@ -26,17 +26,18 @@ export type RadialOptionId = 'reels' | 'carousel' | 'stories' | 'ideas';
 export interface RadialOption {
   id: RadialOptionId;
   label: string;
-  Icon: LucideIcon;
+  /** Material Symbols ligature name (see components/ui/MaterialIcon). */
+  icon: string;
   color: string;
 }
 
 /** Menu order, FAB-nearest → far: Ідея → Рілс → Карусель → Сторіс. Bubble
  *  colours / icons / labels are each type's existing values — unchanged. */
 export const RADIAL_OPTIONS: RadialOption[] = [
-  { id: 'ideas', label: 'Ідея', Icon: Lightbulb, color: '#5F5E5A' },
-  { id: 'reels', label: 'Рілс', Icon: Play, color: '#534AB7' },
-  { id: 'carousel', label: 'Карусель', Icon: LayoutGrid, color: '#185FA5' },
-  { id: 'stories', label: 'Сторіс', Icon: Circle, color: '#D85A30' },
+  { id: 'ideas', label: 'Ідея', icon: 'lightbulb_2', color: '#5F5E5A' },
+  { id: 'reels', label: 'Рілс', icon: 'movie', color: '#534AB7' },
+  { id: 'carousel', label: 'Карусель', icon: 'view_carousel', color: '#185FA5' },
+  { id: 'stories', label: 'Сторіс', icon: 'auto_stories', color: '#D85A30' },
 ];
 
 /** Bubble = 46px circle; the column is wider so the label can sit centred above. */
@@ -167,7 +168,6 @@ export default function CreateRadialMenu({
         {positions.map((pos, i) => {
           const opt = RADIAL_OPTIONS[i];
           const highlighted = highlightedId === opt.id;
-          const { Icon } = opt;
           return (
             <button
               key={opt.id}
@@ -221,7 +221,7 @@ export default function CreateRadialMenu({
                     : '0 4px 13px rgba(0,0,0,0.22)',
                 }}
               >
-                <Icon style={{ width: 21, height: 21 }} strokeWidth={2} />
+                <MaterialIcon name={opt.icon} size={21} />
               </span>
             </button>
           );

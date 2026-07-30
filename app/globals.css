@@ -167,6 +167,24 @@ button:disabled,
    Monday language): an off-white canvas, white elevated cards, hairline rows,
    quiet outlined pills, and one page-title treatment. */
 
+/* Material Symbols ligature glyphs (content-type icons). */
+.material-symbols {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
 /* Page canvas: warm off-white so cards read as surfaces above it. */
 .app-canvas {
   background: var(--canvas);
