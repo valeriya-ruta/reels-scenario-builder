@@ -294,3 +294,75 @@ confirm before closing (I did not touch their status):
 
 Want me to close the ones you confirm? Say which and I'll do it — but I won't delete your backlog on a
 guess.
+
+---
+
+## RUTA App tasks (901612814533) — FULL pass over all 74 (redo)
+
+Ruta pushed back that I only skimmed. Here is a disposition for every task. **Note: ClickUp
+status-writes are currently rate-limited (API returned ~22h), so the closes below are IDENTIFIED and
+verified but may need to be flipped when the limit resets (or by Ruta). Comments still post.**
+
+### Close — verified already done (5)
+- `86d35x69j` Add profile icon to bottom nav — done (`BottomNav.tsx:51`). *(comment posted; status flip rate-limited)*
+- `86d35x69r` Rework bottom bar layout — done (floating nav + FAB). *(comment posted; status flip rate-limited)*
+- `86d35x6af` Connect creation flow (Ideate → carousel/story/reel) — done: braindump `runType` fires all three.
+- `86d2n4c3r` Change page name in SEO — done: `app/layout.tsx` title = "Планувальник Рілів" (not the Next default).
+- `86d38zppy` "Tomorrow's spec session — plan" — ephemeral dated planning note; stale, safe to close.
+
+### Close — duplicate / superseded by structured tasks (4)
+- `86d35x6bw` BD sat — Investigate Threads → dup of `86d39030z` (Add Threads).
+- `86d35x6bk` BD sat — Analytics (IG) → dup of `86d3ca6r9` (IG insights in-app).
+- `86d35x6ba` BD sat — Content planning + posting → dup of the IG/distribution epics.
+- `86d38kdpu` [DESIGN REF] Simple content calendar → superseded by `86d3d23nj` (План calendar epic).
+
+### Small + actually doable (2) — need your go-ahead (would touch real features)
+- `86d3devrq` Activate the inactive Unsplash button in the carousel editor — integration exists
+  (`app/api/unsplash/search/route.ts`, `CarouselEditorBackgroundTab.tsx`); this is a wire-up.
+- `86d35x69a` Replace app icon/logo — still the Next/Vercel default favicon; **needs a brand logo asset from you**.
+
+### Keep — real forward backlog (~63): the September-launch epics, all `[PREP: Carousel]` style/system
+tasks, `[DESIGN REF]` holding docs (`86d38kdp4`, `86d38kd7f`, `86d38kdq4`), `[Kunj]`/`[ACTION-KUNJ]`
+infra, IG-integration chain (`86d3ca6*`), Multiplier/Mind-tree/Q4 vision, WayForPay (`86d2n44gg`,
+verify live), signup/website (`86d2kg37r`, `86d2kg373`, `86d2n4c4g`), Sentry (`86d2qvpyz`), etc.
+`86d38kdrp` (carousel export "BROKEN") + `86d36422z` (editor-vs-download) may be partly addressed by
+the carousel-export commits already on `main` — worth a verify, but I left them open (urgent, and I
+didn't build against them this session).
+
+**Bottom line:** ~9 closeable (done/dup/stale) + 2 small-doable + ~63 legit backlog. It's a real
+backlog with a handful of stale BD-sat duplicates — not a mistaken dump. Nothing deleted.
+
+---
+
+## Task 86d3d23nj — План content calendar (built after Ruta's push-back)
+
+Ruta pasted the full spec mid-build. **Shipped the calendar + data model + one working entry point;
+two sub-items deferred exactly where the spec marks them OPEN / where they'd need risky shared-gesture
+surgery.**
+
+**Shipped:**
+- **Data model** — `023_scheduled_date.sql`: nullable `scheduled_date` (DATE, day-only) on all 4
+  content tables + surfaced on the `content_pieces` view. Threaded `scheduledDate` through
+  `ContentPiece`, `getAllContent`, and the 3 per-type list pages. `setContentScheduledDate` action
+  (ownership-enforced, doesn't bump updated_at). **⚠️ Kunj applies the migration.**
+- **Calendar view** (`app/plan/page.tsx` → `components/plan/PlanCalendar.tsx`) — replaces the "Скоро"
+  stub. Minimalist **Sun–Sat** grid, `Month YYYY` + ‹ › arrows, **top-right count badge** per day
+  (inverts on selection), **subtle accent "today"** (no fill, not red), **filled-accent-circle
+  selection** (wins over today), detail panel that appears only on selection and renders the day's
+  pieces via the **real `ContentRows`** card, with both empty states ("обери дату" / "нічого не
+  заплановано"). Pure grid/grouping logic in `lib/content/calendar.ts`.
+- **Entry point 1 (schedule chip)** — `components/content/ScheduleChip.tsx`: «Запланувати» → date, a
+  plain native date picker (your lean on the OPEN picker-style question). Wired into the **reel
+  editor header** near «Поділитися».
+
+**Test:** `e2e/plan-calendar.logic.spec.ts` (7, green) — grid rectangularity, Sun-first, spillover,
+today flag, month wrap, group-by-date (badge counts), header formatting. Build + tsc clean.
+
+**Deferred (honestly, and why):**
+- **Chip in the carousel + story editors** — your spec marks the exact chip placement across the 3
+  editors as an **OPEN question**; I wired the reel one as the working pattern and left the other two
+  for once you confirm placement (the chip component is ready to drop in).
+- **Entry point 2 (swipe-left DATE + DELETE)** — the shared `SwipeRow` currently swipes *right* for
+  delete-only; the spec wants swipe-*left* with two actions. That's real surgery on a gesture used by
+  every list, so I didn't rework it blind — it plugs into the same `setContentScheduledDate` action.
+- **Picker style + chip placement** were your two explicit OPEN/"pending Kunj confirm" items.

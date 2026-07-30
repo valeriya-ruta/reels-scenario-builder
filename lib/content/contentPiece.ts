@@ -16,6 +16,8 @@ export type ContentPiece = {
   text?: string;
   /** Underlying table the piece lives in (for opening the right editor). */
   refTable: 'carousel_projects' | 'projects' | 'storytelling_projects' | 'ideas';
+  /** Calendar placement (YYYY-MM-DD) or null if unscheduled (task 86d3d23nj). */
+  scheduledDate: string | null;
   createdAt: string;
   updatedAt: string;
 };

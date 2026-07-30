@@ -59,6 +59,8 @@ export interface Project {
   reference_url?: string | null;
   /** User creative brief / note from competitor flow. */
   reference_note?: string | null;
+  /** План calendar placement (YYYY-MM-DD) or null if unscheduled (task 86d3d23nj). */
+  scheduled_date?: string | null;
 }
 
 export interface Location {

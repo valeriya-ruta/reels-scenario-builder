@@ -13,6 +13,7 @@ type Row = {
   user_id: string;
   name: string | null;
   status: string | null;
+  scheduled_date: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -24,7 +25,7 @@ export default async function CarouselListPage() {
   const supabase = await createServerSupabaseClient();
   const { data: projects, error } = await supabase
     .from('carousel_projects')
-    .select('id, user_id, name, status, created_at, updated_at')
+    .select('id, user_id, name, status, scheduled_date, created_at, updated_at')
     .eq('user_id', user.id)
     .order('updated_at', { ascending: false });
 
@@ -39,6 +40,7 @@ export default async function CarouselListPage() {
     status: (p.status ?? 'idea') as ContentStatus,
     title: p.name?.trim() || 'Без назви',
     refTable: 'carousel_projects',
+    scheduledDate: p.scheduled_date ?? null,
     createdAt: p.created_at,
     updatedAt: p.updated_at,
   }));
