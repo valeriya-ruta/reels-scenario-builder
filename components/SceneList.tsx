@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { LayoutTemplate, X } from 'lucide-react';
+import { LayoutTemplate, X, Clock, Layers } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -20,6 +20,7 @@ import {
 import { Location, Project, Scene } from '@/lib/domain';
 import SceneCard from './SceneCard';
 import { reorderScenes, createScene, updateScene } from '@/app/actions';
+import { estimateDialogueSeconds } from '@/lib/dialogueDuration';
 import {
   buildOptimisticScene,
   isOptimisticSceneId,
@@ -317,16 +318,34 @@ export default function SceneList({
     );
   }
 
+  // Runtime spine: the scenario's shape at a glance (scene count + estimated
+  // runtime) — the summary a scenario editor should lead with, instead of a
+  // bare wall of cards.
+  const totalSeconds = scenes.reduce((sum, s) => sum + estimateDialogueSeconds(s.lines), 0);
+  const runtimeLabel =
+    totalSeconds >= 60
+      ? `${Math.floor(totalSeconds / 60)}:${String(Math.round(totalSeconds % 60)).padStart(2, '0')}`
+      : `${Math.round(totalSeconds)} с`;
+
   return (
-    <div className="space-y-6">
-      <div className="flex justify-end">
+    <div className="space-y-4">
+      <div className="app-card flex items-center gap-3 px-3.5 py-2.5">
+        <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[color:var(--foreground)]">
+          <Layers className="h-4 w-4 text-[color:var(--text-muted)]" strokeWidth={2} />
+          {scenes.length} сцен
+        </span>
+        <span className="h-4 w-px bg-[color:var(--border)]" aria-hidden />
+        <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[color:var(--foreground)]">
+          <Clock className="h-4 w-4 text-[color:var(--text-muted)]" strokeWidth={2} />
+          {runtimeLabel}
+        </span>
         <button
           type="button"
           onClick={() => setIsFormulaPickerOpen(true)}
           disabled={hasOptimisticScene}
-          className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-[color:var(--border)] bg-white px-4 py-2.5 text-sm font-medium text-zinc-800 transition-colors hover:border-[color:var(--accent)]/40 hover:bg-[color:var(--surface)] disabled:cursor-not-allowed disabled:opacity-60"
+          className="app-pill ml-auto disabled:opacity-60"
         >
-          <LayoutTemplate className="h-4 w-4" />
+          <LayoutTemplate className="h-3.5 w-3.5" />
           Структура
         </button>
       </div>

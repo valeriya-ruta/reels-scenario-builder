@@ -346,7 +346,10 @@ export default function StorytellingBuilder({ project: initialProject, initialCo
                       </div>
                     )}
                     <div className="flex items-center gap-2">
-                      <h2 className="text-sm font-semibold text-zinc-900">{col.name}</h2>
+                      <span className="inline-flex h-[22px] shrink-0 items-center justify-center rounded-[7px] bg-[color:var(--accent-soft)] px-2 text-[11px] font-bold tabular-nums text-[color:var(--accent)]">
+                        {colIndex + 1}
+                      </span>
+                      <h2 className="truncate text-[15px] font-bold tracking-tight text-[color:var(--foreground)]">{col.name}</h2>
                       <button
                         type="button"
                         onClick={() => { setEditingColId(col.id); setColNameValue(col.name); }}
@@ -399,7 +402,7 @@ export default function StorytellingBuilder({ project: initialProject, initialCo
                   )}
                 </div>
               </div>
-              <p className="mt-1 text-xs text-zinc-400">{col.stories.length} сторіс</p>
+              <p className="mt-1 text-[12px] font-medium text-[color:var(--text-muted)]">{col.stories.length} сторіс</p>
             </div>
 
             {/* Stories */}
@@ -439,7 +442,7 @@ export default function StorytellingBuilder({ project: initialProject, initialCo
                 type="button"
                 onClick={() => handleAddStory(col.id)}
                 data-testid="add-story"
-                className="flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-zinc-200 bg-zinc-50/50 p-6 transition-colors hover:border-zinc-300 hover:bg-zinc-100/50"
+                className="flex cursor-pointer flex-col items-center justify-center gap-3 rounded-[16px] border-2 border-dashed border-[color:var(--border)] bg-[color:var(--surface1)]/60 p-6 transition-colors hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface1)]"
               >
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-zinc-400 shadow-sm">
                   <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19" strokeWidth={2} strokeLinecap="round" /><line x1="5" y1="12" x2="19" y2="12" strokeWidth={2} strokeLinecap="round" /></svg>
@@ -457,7 +460,7 @@ export default function StorytellingBuilder({ project: initialProject, initialCo
               type="button"
               onClick={handleAddColumn}
               data-testid="add-column"
-              className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 transition-colors hover:border-zinc-300 hover:bg-zinc-100"
+              className="app-pill w-full justify-center py-3"
             >
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19" strokeWidth={2} strokeLinecap="round" /><line x1="5" y1="12" x2="19" y2="12" strokeWidth={2} strokeLinecap="round" /></svg>
               <span>Додати сторітел</span>
