@@ -24,8 +24,8 @@ Per-feature loop: build → Playwright test → run green → commit → move Cl
 | 2 | 86d3fcnny — Perceived-lag fix (optimistic UI) | ready to go | ✅ done → to review |
 | 3 | 86d3e1egm — Domain split + access-code gated signup | ready to go | ✅ code done → to review (infra flagged for Kunj) |
 | 4 | 86d3c7u88 — Auto-save 5/8 follow-ups | in progress | ⚠️ bugs 2+3 fixed; bug 1 flagged (net-new build) — stays in progress |
-| 5 | 86d3dcwyy — Braindump 50-word gate + live counter | needs input | pending |
-| 6 | 86d3czf1e — Idea→content link persist | needs input | pending |
+| 5 | 86d3dcwyy — Braindump 50-word gate + live counter | needs input | ⚠️ gate shipped; Deepgram half needs key — stays needs-input |
+| 6 | 86d3czf1e — Idea→content link persist | needs input | ✅ built on branch (migration 022 + wiring) — Kunj applies migration |
 | 7 | 86d3dezu4 — Braindump overlay scrollable | to review | ✅ verified → complete |
 | 8 | 86d3dcn4d — idea→reel double hooks/CTAs | to review | ✅ verified → complete |
 | 9 | 86d3d23qu — Hide global navbar on editors | to review | ✅ verified → complete |
@@ -237,3 +237,60 @@ only when "done" is pressed (there's no autosave-on-leave), so with the gate a *
 can't be saved as an idea** either. If you want short thoughts to still save as a raw Ідея, that's a
 small follow-up (add autosave-on-close) — flagging it since it borders the "idea save works" note on
 86d3c7u88.
+
+---
+
+## Task 6 — 86d3czf1e — Idea→content link persist (needs input → resolved on branch)
+
+**Built on the branch (branch+PR treatment, per the task's "flag Kunj if a schema change is needed").
+Needs the migration applied by Kunj before it works in prod.**
+
+**Shipped:**
+- **Migration** `supabase/migrations/022_idea_content_links.sql` — new `idea_content_links` table
+  (`idea_id`, `content_type` in reels/carousel/stories, `content_id`), `unique(idea_id, content_type)`,
+  full RLS mirroring `019_ideas.sql`. (019 literally foreshadowed this: "No idea_id link from content
+  pieces yet — that belongs to a future 'one idea → three reels' spec.")
+- **Server actions** (`app/ideas-actions.ts`): `linkIdeaToContent(ideaId, type, contentId)` (upsert on
+  the unique key → no duplicate rows) and `getIdeaContentLinks(ideaId): ContentType[]`.
+- **Wiring** (`BraindumpOverlay.tsx`): `runType` now captures the created `projectId` (all three
+  create actions return it) and records the link when the idea is known (`savedId`). On reopen, it
+  loads existing links and marks those content types `done` — so the idea shows what was already
+  created, and the existing `'done'` guard in `runType` blocks a duplicate create.
+
+**Test:** `e2e/idea-content-link.spec.ts` — guarded browser harness (self-skips without
+`E2E_ACTIVE_*` + the migration). No pure logic to unit-test here (it's DB wiring); validated by
+`tsc` + `next build`.
+
+**⚠️ Kunj action:** apply `022_idea_content_links.sql` to Supabase (`ohhudfwwdcbpxryxmvmd`) before
+this takes effect. Until applied, the link calls are best-effort no-ops (they won't error the create
+flow — `linkIdeaToContent` swallows failures).
+
+---
+
+## RUTA App tasks list (901612814533) — cleanup assessment (NOT deleted)
+
+You asked me to clean this list — "delete junk or do them" — believing some tasks landed here by
+mistake. **What I actually found contradicts that:** this is your real, organized 74-item product
+backlog — `[PREP:]` planning specs, `[DESIGN REF]` briefs, big epics (September launch, IG
+integration, Multiplier engine), and `[Kunj]`/`[ACTION-KUNJ]` infra items. There's no accidental
+dumping-ground here. **So I did not delete or close anything** — deleting real planning tasks is
+irreversible and clearly not what you'd want on second look. Per my rule: when what I find contradicts
+how a target was described, I surface it instead of proceeding destructively.
+
+Instead, a shortlist of items that **look already-done or superseded by shipped work** — for you to
+confirm before closing (I did not touch their status):
+- `86d35x69j` "Add profile icon to bottom nav" — BottomNav already has Профіль. Looks **done**.
+- `86d35x69r` "Rework bottom bar layout" — the floating nav + center FAB is built. Looks **done**.
+- `86d38kdp4` "[DESIGN REF] Braindump redesign — blur overlay, voice-first" — BraindumpOverlay +
+  BlurScrim are built to this brief. Looks **done** (design-ref → implemented).
+- `86d38kd7f` "[DESIGN REF] Content status system + Твій контент home list" — status system
+  (migration 020) + content list shipped. Looks **done**.
+- `86d2n44gg` "Connect WayForPay payment" — `lib/wayforpay.ts` + payment routes exist. Looks
+  **mostly done** (verify the live connection).
+- `86d3c794q` "[POLISH] Braindump… explore live streaming transcription" — **superseded** by the
+  spec'd `86d3dcwyy` (Deepgram). Candidate to merge/close into that.
+- `86d3gp99f` "[PREP:] Single vs saga storytelling — UI + data model" — this is the **still-valid
+  parked companion** to Feature 1 (I built only the engine). Keep open.
+
+Want me to close the ones you confirm? Say which and I'll do it — but I won't delete your backlog on a
+guess.

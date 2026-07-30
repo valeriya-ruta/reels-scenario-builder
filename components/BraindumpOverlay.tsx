@@ -10,6 +10,7 @@ import BlurScrim from '@/components/BlurScrim';
 import { generateReelFromRant } from '@/app/actions';
 import { createStorytellingProjectFromRant } from '@/app/storytelling-actions';
 import { createCarouselProjectFromRant } from '@/app/carousel-actions';
+import { linkIdeaToContent, getIdeaContentLinks } from '@/app/ideas-actions';
 import type { CarouselRantOutput } from '@/lib/carouselTypes';
 
 /**
@@ -98,6 +99,16 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
       setText(initialIdea.text);
       setSavedId(initialIdea.id);
       setSaveStatus('saved');
+      // Reflect content already created from this idea: mark those types 'done'
+      // so we show the created state instead of offering a duplicate (86d3czf1e).
+      void getIdeaContentLinks(initialIdea.id).then((types) => {
+        if (types.length === 0) return;
+        setTypeStatus((s) => {
+          const next = { ...s };
+          for (const t of types) next[t] = 'done';
+          return next;
+        });
+      });
     } else {
       setPhase('A');
       setText('');
@@ -264,12 +275,15 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
       setTypeStatus((s) => ({ ...s, [type]: 'loading' }));
       try {
         let ok = false;
+        let createdId: string | null = null;
         if (type === 'reels') {
           const r = await generateReelFromRant(snapshot);
           ok = r.ok;
+          if (r.ok) createdId = r.projectId;
         } else if (type === 'stories') {
           const r = await createStorytellingProjectFromRant(snapshot);
           ok = r.ok;
+          if (r.ok) createdId = r.projectId;
         } else {
           const res = await fetch('/api/carousel/rant-to-slides', {
             method: 'POST',
@@ -280,14 +294,20 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
           if (res.ok && data.slides?.length) {
             const created = await createCarouselProjectFromRant(data, snapshot);
             ok = created.ok;
+            if (created.ok) createdId = created.projectId;
           }
         }
         setTypeStatus((s) => ({ ...s, [type]: ok ? 'done' : 'error' }));
+        // Persist the idea → content link so reopening this idea shows the
+        // already-created type and never offers a duplicate (task 86d3czf1e).
+        if (ok && createdId && savedId) {
+          void linkIdeaToContent(savedId, type, createdId);
+        }
       } catch {
         setTypeStatus((s) => ({ ...s, [type]: 'error' }));
       }
     },
-    [typeStatus]
+    [typeStatus, savedId]
   );
 
   // Keep the transcript scrolled to its newest content (State A) so appended
