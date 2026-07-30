@@ -1,22 +1,16 @@
 import { requireServerEnv } from '@/lib/env';
+import { normalizeOutput } from '@/lib/ai/storiesNormalize';
+import type { StoriesOutput } from '@/lib/ai/storiesNormalize';
 
-export type StoryVisual = 'Кольоровий фон' | 'Говоряча голова' | 'Відео в тему' | 'Гарне фото';
-export type StoryInteractive = 'Стікер' | 'Тягнулка' | 'Опитування' | 'Заклик в директ' | null;
-
-export interface Slide {
-  slide_number: number;
-  one_thought: string;
-  screen_text: string;
-  visual: StoryVisual;
-  interactive: StoryInteractive;
-  notes?: string;
-}
-
-export interface StoriesOutput {
-  template_used: 'A' | 'B' | 'C' | 'D';
-  template_name: string;
-  slides: Slide[];
-}
+// Re-export the engine types from their pure home so existing consumers that
+// import them from '@/lib/ai/rantToStories' keep working unchanged.
+export type {
+  StoryVisual,
+  StoryInteractive,
+  Slide,
+  StoryDay,
+  StoriesOutput,
+} from '@/lib/ai/storiesNormalize';
 
 interface GroqResponse {
   choices?: Array<{
@@ -26,9 +20,6 @@ interface GroqResponse {
 
 type OutputLanguage = 'uk' | 'en';
 
-const VALID_VISUALS: StoryVisual[] = ['Кольоровий фон', 'Говоряча голова', 'Відео в тему', 'Гарне фото'];
-const VALID_INTERACTIVE: Exclude<StoryInteractive, null>[] = ['Стікер', 'Тягнулка', 'Опитування', 'Заклик в директ'];
-
 function detectOutputLanguage(rant: string): OutputLanguage {
   const cyr = (rant.match(/[А-Яа-яІіЇїЄєҐґ]/g) ?? []).length;
   const latin = (rant.match(/[A-Za-z]/g) ?? []).length;
@@ -36,218 +27,121 @@ function detectOutputLanguage(rant: string): OutputLanguage {
   return 'uk';
 }
 
+/**
+ * The master storytelling prompt (task 86d3gp8tb). This is Ruta's spec prompt —
+ * single-vs-saga detection, the 4-barrier прогрів spine, her voice rules and the
+ * honest-placeholder rules — adapted to emit STRUCTURED JSON so the app can
+ * persist each day as a column and each сторіс as a card. The только change from
+ * the spec's paste-in text is the output contract (JSON instead of free text);
+ * every content rule is preserved verbatim.
+ */
 function buildSystemPrompt(outputLanguage: OutputLanguage): string {
   const languageRule =
     outputLanguage === 'en'
-      ? 'screen_text пиши природною розмовною англійською.'
-      : 'screen_text пиши природньою українською.';
+      ? 'Усі текстові поля (title, one_thought, screen_text, notes, reason) пиши природною розмовною англійською.'
+      : 'Усі текстові поля пиши природною українською.';
 
-  return `Ти — досвідчений сценарист Instagram Stories для українських блогерів. Ти перетворюєш сирий рент на покроковий сценарій сторіс.
+  return `Ти — рушій створення сторітелінгів для українського застосунку Ruta. Ти пишеш сторітелінги для особистого бренду в Instagram у впізнаваному, живому, неформальному стилі — НЕ корпоративно, НЕ як ШІ. Твоя задача: взяти брандамп (мінімум 50 слів) і назву сторітелінгу, та видати готовий до заповнення сторітелінг — або ОДНУ історію, або САГУ на кілька днів.
 
-ГОЛОВНИЙ ПРИНЦИП: одна думка — одна сторіс. Не перевантажуй. Кожен слайд = один момент уваги, одна емоція, одна ідея.
-Пиши тільки текст кадру для екрану, без озвучки, без сценарію "що говорити".
+Назва містить ЕМОЦІЙНУ ЦІЛЬ (напр. мотивація, експертність, перспективність, заздрість, FOMO). Прочитай ціль з назви і будуй усе під неї. Якщо назва порожня — виведи емоційну ціль із самого брандампу.
 
-══════════════════════════════
-КРОК 1 — ВИЗНАЧ ШАБЛОН
-══════════════════════════════
+КРОК 1 — ВИЗНАЧ: одна історія чи сага?
+- Якщо брандамп про ОДИН момент / одну думку / одне переконання → одна історія (mode="single", один день).
+- Якщо брандамп містить ЗАПУСК продукту, оффер на продаж, кілька переконань, або "ось все про мою штуку" → сага (mode="saga", кілька днів).
+Виведи поле reason — ОДНЕ речення від першої особи, чому саме так (його покаже застосунок). Напр.: "Тут забагато для однієї сторітел — зробила сагу на 4 дні."
 
-Прочитай рент і обери ОДИН шаблон зі структурою сторітелінг-дуги:
+КРОК 2 — ЯКЩО САГА: є кейси чи ні? (cases_variant)
+- Без кейсів (cases_variant="A"): День1 — особистий лайфстайл/результат; День2 — історія становлення; День3 — страхи/заперечення; День4 — унікальність продукту + заклик.
+- З кейсами (cases_variant="B"): День1 — кейс клієнта (точка А → процес → точка Б); День2 — стосунки з клієнтами/соц.доказ/емоції; День3 — цінність>ціна + чому зараз; День4 — методика через кейси + раціоналізація + заклик.
+Для однієї історії cases_variant=null.
 
-ШАБЛОН A — "Освітній / Розповідь"
-Якщо: автор ділиться досвідом, інсайтом, поясненням.
-Структура: Hook/Intrigue → Context (2–3) → Details/Build-up (3–5) → Climax → Resolution → CTA
+КРОК 3 — САГА: спочатку побудуй СКЕЛЕТ (для себе, не виводь окремо):
+- ТЕЗА: одне переконання, яке аргументує вся сага.
+- ВОРОГ: від чого ми відходимо.
+- КАРТА ДНІВ: який день закриває який бар'єр недовіри, ПО ПОРЯДКУ:
+  1. Чи можливий цей результат? (перспектива)
+  2. Чи можу я тобі довіряти як експерту? (авторитет)
+  3. Чи вийде в мене? (страхи/заперечення)
+  4. Чому саме твій продукт? (оффер, чому зараз)
+Запиши роль кожного дня в поле goal. Потім пиши кожен день під цю карту.
 
-ШАБЛОН B — "Продаж / Позиціювання"
-Сигнали: продукт, послуга, результат клієнта, ціна, консультація.
-Структура: Hook/Intrigue → Context (2–3) → Details/Build-up (3–5) → Climax → Resolution → CTA
+КРОК 4 — ПИШИ В СТИЛІ RUTA (для однієї історії І для саги):
+1. Хук — не тему. Починай з низькоставкової особистої/релейтбл фрази, ніколи з теми.
+2. Завжди є ПОВОРОТ — момент, де буденне спостереження стає рефреймом переконання. Без повороту = пласко.
+3. Назви ВОРОГА — тренд, продукт, фальшива дилема, мислення, від якого відходимо.
+4. Вразливість = авторитет. Хоча б одне чесне зізнання/недолік, де доречно.
+5. Повільне розкриття (сага): не пояснюй усе одразу, тримай інтригу, кліфхенгери "завтра розкажу", калбеки до попередніх днів.
+6. Інтерактив — це ритм, не прикраса. Стікер/Тягнулка/Опитування одразу після релейтбл-твердження, щоб отримати мікро-згоду перед запитом. Ніколи не рандомно.
+7. М'який, заслужений заклик — лише коли переконання вже побудоване, із соц.доказом. У сазі заклик (interactive="Заклик в директ") ТІЛЬКИ на останньому слайді останнього дня.
+8. Маркери голосу: пряме звертання (ти/ви), риторичні питання, самоіронія (😁, "))", "уявляєте?"), іронічні ✨блискітки✨ де доречно. Швидко, неформально, трохи зухвало.
 
-ШАБЛОН C — "Провокація / Думка"
-Сигнали: незгода з трендом, особиста позиція проти загальноприйнятого.
-Структура: Hook/Intrigue → Context (2–3) → Details/Build-up (3–5) → Climax → Resolution → CTA
+КРОК 5 — ПЛЕЙСХОЛДЕРИ (чесні режисерські нотатки):
+Пиши історію ПОВНІСТЮ (хук, поворот, ворог, переконання, копірайт заклику). Плейсхолдери лише для того, що ти НЕ можеш знати з брандампу: реальні цифри, скріншоти, особисті фото/історії, деталі кейсів, специфіка продукту, якої немає в брандампі. Формат — коротка нотатка в *...* у стилі нотатки-собі прямо в screen_text (напр. "*тут реальна цифра скільки заробляєш*", "*я дам скріншот реєстрацій*"). НІКОЛИ не вигадуй фейкову цифру/імʼя/кейс — плейсхолдер завжди кращий за вигадану пустоту.
 
-ШАБЛОН D — "Закулісся / Особисте"
-Сигнали: особиста ситуація, вразливість, "я нещодавно зрозумів", процес.
-Структура: Hook/Intrigue → Context (2–3) → Details/Build-up (3–5) → Climax → Resolution → CTA
+ПРАВИЛА КОЖНОГО ДНЯ:
+- Слайд 1 дня: visual = "Говоряча голова" або "Відео в тему" (ніколи фото/колір), interactive != "Заклик в директ".
+- Один зі слайдів 2–3 дня: interactive = "Стікер".
+- Кожен слайд: одна думка, screen_text = 1–2 короткі речення від першої особи, тільки текст на екрані (без озвучки).
+- Типово 5–10 слайдів на день. Кількість — природна для історії.
 
-══════════════════════════════
-КРОК 2 — НАПИШИ СЦЕНАРІЙ
-══════════════════════════════
+ДОЗВОЛЕНІ ЗНАЧЕННЯ:
+- visual: "Говоряча голова" | "Кольоровий фон" | "Відео в тему" | "Гарне фото"
+- interactive: "Стікер" | "Тягнулка" | "Опитування" | "Заклик в директ" | null
 
-ЖОРСТКІ ПРАВИЛА:
+${languageRule}
 
-1. ВІДКРИТТЯ (слайд 1) — гачок/інтрига:
-   - Слайд 1 має зупиняти перегляд і викликати бажання дізнатися більше.
-   - Слайд 1: ЗАВЖДИ visual = "Говоряча голова" або "Відео в тему". Ніколи не фото і не кольоровий фон для першого слайду.
-   - Один зі слайдів 2–3: ОБОВ'ЯЗКОВО interactive = "Стікер". Це найлегша взаємодія.
-   - Слайд 1 може мати interactive = null або "Стікер" — але не "Заклик в директ".
-
-2. СТРУКТУРА СТОРІТЕЛІНГУ ПО КАДРАХ:
-   - Слайди 2–3 = контекст (чому я це розповідаю, що сталося, сетап).
-   - Слайди 3–5 = деталі/build-up, які оживляють історію.
-   - Окремий слайд = кульмінація ("що буде далі / що я зробив(ла)").
-   - Після кульмінації = розв'язка (чим завершилось, що зрозумів(ла), висновок).
-   - Останній слайд = CTA за ситуацією ("що б ти зробив(ла)?", "скинь 🔥", "напиши в дірект", "клікни лінк").
-
-3. ОДНА ДУМКА — ОДИН СЛАЙД:
-   - screen_text: максимум 1–2 короткі речення. Без заголовків і підзаголовків.
-   - Пиши від першої особи, живо, розмовно, як природний внутрішній монолог.
-   - Це тільки текст на екрані. Ніякої озвучки, ніяких інструкцій "що сказати в камеру".
-   - ${languageRule}
-   - Якщо думка велика — розбий на два окремі слайди.
-   - Без "[SCENE]", "voiceover:", хештегів і маркетингового жаргону.
-
-4. ВИБІР ВІЗУАЛУ (visual):
-   - "Говоряча голова" — автор дивиться в камеру і говорить. Найкраще для особистого, емоційного.
-   - "Відео в тему" — б-ролл, контекстне відео без обличчя. Для ситуативних описів.
-   - "Гарне фото" — статичне фото автора або з теми. Для більш спокійних, текстових слайдів.
-   - "Кольоровий фон" — тільки текст на кольорі. Для коротких тез, цитат, статистики.
-
-5. ВИБІР ІНТЕРАКТИВУ (interactive):
-   - "Стікер" — emoji-реакція або question стікер. Легка взаємодія, не потребує зусиль від глядача.
-   - "Тягнулка" — слайдер з емодзі. Для емоційної оцінки ("наскільки це про тебе?").
-   - "Опитування" — два варіанти відповіді. Для чіткого вибору між двома позиціями.
-   - "Заклик в директ" — ТІЛЬКИ на останньому або передостанньому слайді. Це CTA.
-   - null — більшість слайдів не мають інтерактиву. Не перестарайся.
-
-6. CTA:
-   - Завжди останній слайд.
-   - interactive = "Заклик в директ".
-   - visual = "Говоряча голова" або "Кольоровий фон".
-   - Заклик — в директ або реакція. НІКОЛИ "підпишись" або "постав лайк".
-
-══════════════════════════════
-КІЛЬКІСТЬ СЛАЙДІВ
-══════════════════════════════
-
-Типово 5–10 слайдів.
-Кількість має бути природною для історії: не доповнюй "для кількості" і не обрізай важливий сенс.
-
-══════════════════════════════
-ФОРМАТ ВІДПОВІДІ
-══════════════════════════════
-
-Відповідай ТІЛЬКИ валідним JSON. Без пояснень, без markdown, без коментарів до або після.
-
+ФОРМАТ ВІДПОВІДІ — ТІЛЬКИ валідний JSON, без markdown, без пояснень до/після:
 {
-  "template_used": "A",
-  "template_name": "Освітній / Розповідь",
-  "slides": [
+  "mode": "single" | "saga",
+  "reason": "одне речення від першої особи",
+  "cases_variant": "A" | "B" | null,
+  "template_used": "A" | "B" | "C" | "D",
+  "template_name": "коротка назва історії/саги",
+  "days": [
     {
-      "slide_number": 1,
-      "one_thought": "Інтригуюче відкриття — постановка ситуації",
-      "screen_text": "Я витратила 3 місяці на те, що можна було зробити за тиждень",
-      "visual": "Говоряча голова",
-      "interactive": null,
-      "notes": "Дивись прямо в камеру, пауза після першого речення"
-    },
-    {
-      "slide_number": 2,
-      "one_thought": "Підсилення інтриги — глядач має захотіти знати далі",
-      "screen_text": "І найсмішніше — я знала відповідь з самого початку",
-      "visual": "Говоряча голова",
-      "interactive": "Стікер",
-      "notes": "Стікер — питання 'Знайомо?' або серце-реакція"
+      "day_number": 1,
+      "title": "заголовок дня (для однієї історії — назва історії)",
+      "goal": "роль дня / який бар'єр закриває (сага); для однієї історії — null",
+      "slides": [
+        {
+          "slide_number": 1,
+          "one_thought": "одна думка слайда",
+          "screen_text": "текст на екрані, з *плейсхолдерами* де треба",
+          "visual": "Говоряча голова",
+          "interactive": null,
+          "notes": "коротка режисерська підказка (опційно)"
+        }
+      ]
     }
   ]
 }`;
 }
 
-function buildUserPrompt(rant: string, outputLanguage: OutputLanguage): string {
+function buildUserPrompt(rant: string, name: string, outputLanguage: OutputLanguage): string {
   const languageHint =
     outputLanguage === 'en'
-      ? 'Усі текстові поля (template_name, one_thought, screen_text, notes) пиши англійською.'
-      : 'Усі текстові поля пиши українською.';
-  return `Ось рент:
+      ? 'Виведи текстові поля англійською.'
+      : 'Виведи текстові поля українською.';
+  const nameLine = name.trim()
+    ? `Назва сторітелінгу (емоційна ціль): ${name.trim()}`
+    : 'Назва сторітелінгу: (не задана — виведи ціль із брандампу)';
+  return `${nameLine}
 
+Брандамп:
 """
 ${rant}
 """
 
-Перетвори його на сценарій сторіс за правилами вище.
-${languageHint}
-Назви visual та interactive залишай лише з дозволеного списку (українськими значеннями).`;
-}
-
-function toVisual(value: unknown): StoryVisual {
-  if (typeof value === 'string' && VALID_VISUALS.includes(value as StoryVisual)) {
-    return value as StoryVisual;
-  }
-  return 'Говоряча голова';
-}
-
-function toInteractive(value: unknown): StoryInteractive {
-  if (value === null || value === undefined) return null;
-  if (typeof value === 'string' && VALID_INTERACTIVE.includes(value as Exclude<StoryInteractive, null>)) {
-    return value as Exclude<StoryInteractive, null>;
-  }
-  return null;
-}
-
-function normalizeOutput(raw: unknown): StoriesOutput {
-  const source = (raw ?? {}) as Partial<StoriesOutput>;
-  const template_used = source.template_used && ['A', 'B', 'C', 'D'].includes(source.template_used)
-    ? source.template_used
-    : 'A';
-  const template_name = typeof source.template_name === 'string' && source.template_name.trim()
-    ? source.template_name.trim()
-    : 'Освітній / Розповідь';
-
-  const incomingSlides = Array.isArray(source.slides) ? source.slides : [];
-  const clamped = incomingSlides.slice(0, 9);
-  const slidesSeed = clamped.length >= 5 ? clamped : incomingSlides.concat(
-    Array.from({ length: Math.max(0, 5 - incomingSlides.length) }, () => ({}) as Slide),
-  ).slice(0, 5);
-
-  const slides: Slide[] = slidesSeed.map((slideLike, index) => {
-    const slideObj = (slideLike ?? {}) as Partial<Slide>;
-    const oneThought = typeof slideObj.one_thought === 'string' && slideObj.one_thought.trim()
-      ? slideObj.one_thought.trim()
-      : `Слайд ${index + 1}`;
-    const screenText = typeof slideObj.screen_text === 'string' && slideObj.screen_text.trim()
-      ? slideObj.screen_text.trim()
-      : 'Текст на екрані';
-    const notes = typeof slideObj.notes === 'string' && slideObj.notes.trim() ? slideObj.notes.trim() : undefined;
-    return {
-      slide_number: index + 1,
-      one_thought: oneThought,
-      screen_text: screenText,
-      visual: toVisual(slideObj.visual),
-      interactive: toInteractive(slideObj.interactive),
-      notes,
-    };
-  });
-
-  if (slides[0] && slides[0].visual !== 'Говоряча голова' && slides[0].visual !== 'Відео в тему') {
-    slides[0].visual = 'Говоряча голова';
-  }
-  if (slides[0] && slides[0].interactive === 'Заклик в директ') {
-    slides[0].interactive = null;
-  }
-
-  if (slides[1] && slides[2]) {
-    const hasStickerIn23 = slides[1].interactive === 'Стікер' || slides[2].interactive === 'Стікер';
-    if (!hasStickerIn23) {
-      slides[1].interactive = 'Стікер';
-    }
-  } else if (slides[1] && slides[1].interactive !== 'Стікер') {
-    slides[1].interactive = 'Стікер';
-  }
-
-  const last = slides[slides.length - 1];
-  if (last) {
-    last.interactive = 'Заклик в директ';
-    if (last.visual !== 'Говоряча голова' && last.visual !== 'Кольоровий фон') {
-      last.visual = 'Говоряча голова';
-    }
-  }
-
-  return { template_used, template_name, slides };
+Створи сторітелінг за правилами вище. ${languageHint}
+Назви visual та interactive залишай лише з дозволеного списку.`;
 }
 
 /**
- * Генерує структурований сценарій сторіс через Groq (той самий клієнт/модель, що й rant-to-reel).
+ * Генерує структурований сценарій сторіс (single або saga) через Groq.
+ * @param rant  брандамп (50+ слів)
+ * @param name  назва сторітелінгу (емоційна ціль) — опційна; якщо порожня, ціль виводиться з брандампу.
  */
-export async function generateStoriesFromRant(rant: string): Promise<StoriesOutput> {
+export async function generateStoriesFromRant(rant: string, name = ''): Promise<StoriesOutput> {
   const trimmed = rant.trim();
   if (!trimmed) {
     throw new Error('Введи рент перед генерацією.');
@@ -267,7 +161,7 @@ export async function generateStoriesFromRant(rant: string): Promise<StoriesOutp
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: buildSystemPrompt(outputLanguage) },
-        { role: 'user', content: buildUserPrompt(trimmed, outputLanguage) },
+        { role: 'user', content: buildUserPrompt(trimmed, name, outputLanguage) },
       ],
     }),
   });
