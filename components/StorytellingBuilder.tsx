@@ -25,6 +25,7 @@ import {
   makeOptimisticStory,
 } from '@/lib/storytelling/optimistic';
 import ScheduleChip from '@/components/content/ScheduleChip';
+import StatusPill from '@/components/content/StatusPill';
 
 interface Props {
   project: StorytellingProject;
@@ -262,7 +263,7 @@ export default function StorytellingBuilder({ project: initialProject, initialCo
           </Link>
         </div>
 
-        <div className="mb-6 flex items-center gap-4">
+        <div className="mb-3 flex items-center gap-4">
           {editingName ? (
             <input
               autoFocus
@@ -284,14 +285,20 @@ export default function StorytellingBuilder({ project: initialProject, initialCo
               {project.name}
             </h1>
           )}
-          {/* Entry point 1: schedule chip in the story editor header (task 86d3d23nj). */}
-          <span className="ml-auto">
-            <ScheduleChip
-              refTable="storytelling_projects"
-              id={project.id}
-              initialDate={project.scheduled_date ?? null}
-            />
-          </span>
+        </div>
+        {/* Meta pill row: status + date (app UI system — Linear/Superlist). */}
+        <div className="mb-6 flex flex-wrap items-center gap-2">
+          <StatusPill
+            refTable="storytelling_projects"
+            id={project.id}
+            type="story"
+            initialStatus={project.status ?? 'idea'}
+          />
+          <ScheduleChip
+            refTable="storytelling_projects"
+            id={project.id}
+            initialDate={project.scheduled_date ?? null}
+          />
         </div>
       </div>
 

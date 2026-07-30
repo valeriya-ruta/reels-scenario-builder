@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronRight, Film, LayoutGrid, Play } from 'lucide-react';
+import { ChevronRight, Film, LayoutGrid, Play, CalendarDays } from 'lucide-react';
+import { dayHeaderLabel } from '@/lib/content/calendar';
 import StatusRing from '@/components/content/StatusRing';
 import SwipeRow from '@/components/content/SwipeRow';
 import { setContentStatus, setContentScheduledDate } from '@/app/content-actions';
@@ -237,6 +238,15 @@ export default function SwipeableContentList({
                     <span className="text-zinc-400"> · {formatShortDate(piece.updatedAt)}</span>
                   </div>
                 </div>
+                {piece.scheduledDate ? (
+                  <span
+                    className="mr-1 inline-flex shrink-0 items-center gap-1 rounded-full bg-[color:var(--surface1)] px-2 py-0.5 text-[11px] font-medium text-zinc-500"
+                    title="Заплановано"
+                  >
+                    <CalendarDays className="h-3 w-3" aria-hidden="true" />
+                    {dayHeaderLabel(piece.scheduledDate)}
+                  </span>
+                ) : null}
                 <ChevronRight size={18} className="shrink-0 text-[#c4c4ce]" />
               </SwipeRow>
             );

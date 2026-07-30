@@ -6,6 +6,7 @@ import { Project } from '@/lib/domain';
 import { updateProjectName, createSnapshot } from '@/app/actions';
 import ShareModal from './ShareModal';
 import ScheduleChip from './content/ScheduleChip';
+import StatusPill from './content/StatusPill';
 
 interface ProjectHeaderProps {
   project: Project;
@@ -133,25 +134,21 @@ export default function ProjectHeader({
             )}
           </div>
 
-          <div className="flex shrink-0 items-center gap-2">
-            {/* Entry point 1: schedule chip near Поділитися (task 86d3d23nj).
-                Exact placement across the 3 editors is an OPEN question. */}
-            <ScheduleChip
-              refTable="projects"
-              id={project.id}
-              initialDate={project.scheduled_date ?? null}
-            />
-            <button
-              type="button"
-              onClick={handleShare}
-              disabled={isSharing}
-              className="btn-primary rounded-xl bg-[color:var(--accent)] px-4 py-2 text-sm font-medium text-white transition-[background,transform] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {isSharing ? 'Створюю посилання...' : 'Поділитися'}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={handleShare}
+            disabled={isSharing}
+            className="btn-primary shrink-0 rounded-xl bg-[color:var(--accent)] px-4 py-2 text-sm font-medium text-white transition-[background,transform] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {isSharing ? 'Створюю…' : 'Поділитися'}
+          </button>
         </div>
-        {errorMessage && <p className="text-sm text-red-600">{errorMessage}</p>}
+        {/* Meta pill row: status + date (app UI system — Linear/Superlist). */}
+        <div className="mb-1 flex flex-wrap items-center gap-2">
+          <StatusPill refTable="projects" id={project.id} type="reel" initialStatus={project.status ?? 'idea'} />
+          <ScheduleChip refTable="projects" id={project.id} initialDate={project.scheduled_date ?? null} />
+        </div>
+        {errorMessage && <p className="mt-1 text-sm text-red-600">{errorMessage}</p>}
       </div>
 
       {showShareModal && shareLinks && (

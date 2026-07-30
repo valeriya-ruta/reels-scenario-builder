@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { CalendarDays } from 'lucide-react';
 import StatusRing from '@/components/content/StatusRing';
 import SwipeRow from '@/components/content/SwipeRow';
 import { setContentStatus, deleteContentPiece, setContentScheduledDate } from '@/app/content-actions';
@@ -16,6 +17,7 @@ import {
   type ContentStatus,
 } from '@/lib/content/statusSystem';
 import { formatRelativeTime } from '@/lib/content/relativeTime';
+import { dayHeaderLabel } from '@/lib/content/calendar';
 
 /**
  * Interactive list of content rows (Status system 4/8). Shared by the Home
@@ -225,6 +227,15 @@ export default function ContentRows({
                 <span className="shrink-0 whitespace-nowrap">{formatRelativeTime(piece.updatedAt)}</span>
               </div>
             </div>
+            {piece.scheduledDate ? (
+              <span
+                className="ml-1 inline-flex shrink-0 items-center gap-1 rounded-full bg-[color:var(--surface1)] px-2 py-0.5 text-[11px] font-medium text-zinc-500"
+                title="Заплановано"
+              >
+                <CalendarDays className="h-3 w-3" aria-hidden="true" />
+                {dayHeaderLabel(piece.scheduledDate)}
+              </span>
+            ) : null}
           </SwipeRow>
         ))}
       </ul>

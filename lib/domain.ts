@@ -1,3 +1,5 @@
+import type { ContentStatus } from '@/lib/content/statusSystem';
+
 export type CrewMode = 'solo' | 'with_crew';
 
 export type Framing =
@@ -61,6 +63,8 @@ export interface Project {
   reference_note?: string | null;
   /** План calendar placement (YYYY-MM-DD) or null if unscheduled (task 86d3d23nj). */
   scheduled_date?: string | null;
+  /** Content status for the status ring/picker (Status system). */
+  status?: ContentStatus;
 }
 
 export interface Location {
@@ -229,6 +233,8 @@ export interface StorytellingProject {
   updated_at: string;
   /** План calendar placement (YYYY-MM-DD) or null if unscheduled (task 86d3d23nj). */
   scheduled_date?: string | null;
+  /** Content status for the status ring/picker (Status system). */
+  status?: ContentStatus;
 }
 
 export interface StorytellingColumn {
