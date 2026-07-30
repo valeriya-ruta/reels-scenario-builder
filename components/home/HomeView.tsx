@@ -1,16 +1,16 @@
 import { Suspense } from 'react';
 import WelcomeModal from '@/components/WelcomeModal';
 import Greeting from './Greeting';
-import TodayPlan from './TodayPlan';
+import Agenda from './Agenda';
 import HomeRecents from './HomeRecents';
 import InsightsSkeleton from './InsightsSkeleton';
 import WorkshopLessons from './WorkshopLessons';
 import type { ContentPiece } from '@/lib/content/contentPiece';
 
 /**
- * Home (Головна). The app opens as an assistant, not a menu: greeting →
- * «Сьогодні» (what you're posting today, or a single low-friction way in when
- * nothing is planned) → recents → insights → lessons.
+ * Home (Головна). The app opens as an assistant, not a menu: greeting → the
+ * agenda («Сьогодні» / «Завтра» / dated days — what you're actually posting) →
+ * recents → insights → lessons.
  *
  * Deliberately NO grid of "create a reel / carousel / story" buttons: the user's
  * problem isn't choosing a format, it's knowing what to make — so the app leads
@@ -18,11 +18,14 @@ import type { ContentPiece } from '@/lib/content/contentPiece';
  */
 export default function HomeView({
   userName,
-  today,
+  upcoming,
+  todayKey,
   recents,
 }: {
   userName?: string | null;
-  today: ContentPiece[];
+  /** Everything scheduled today or later, any type. */
+  upcoming: ContentPiece[];
+  todayKey: string;
   recents: ContentPiece[];
 }) {
   return (
@@ -31,7 +34,7 @@ export default function HomeView({
         <WelcomeModal />
       </Suspense>
       <Greeting name={userName} />
-      <TodayPlan pieces={today} />
+      <Agenda pieces={upcoming} todayKey={todayKey} />
       <HomeRecents pieces={recents} />
       <InsightsSkeleton />
       <WorkshopLessons />

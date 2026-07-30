@@ -54,7 +54,7 @@ export const STATUS_COLORS: Record<ContentStatus, string> = {
 export const TYPE_TRACKS: Record<ContentType, readonly ContentStatus[]> = {
   reel: ['idea', 'script', 'film', 'edit', 'ready', 'published'],
   carousel: ['idea', 'script', 'design', 'ready', 'published'],
-  story: ['idea', 'film', 'published'],
+  story: ['idea', 'script', 'ready', 'published'],
   // An idea has no real track until it is promoted to a type.
   idea: ['idea'],
 };

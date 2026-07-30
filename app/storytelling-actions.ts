@@ -195,7 +195,8 @@ export type CreateStorytellingFromRantResult =
   | { ok: false; error: string };
 
 /**
- * Генерує сценарій сторіс з ренту і зберігає його як новий проєкт сторітелу (колонка + картки).
+ * Генерує сторітелінг(и) з ренту. Одна історія → один сторітел; сага → кілька
+ * окремих сторітелів, по одному на день, заплановані на послідовні дні.
  */
 export async function createStorytellingProjectFromRant(
   rant: string,
@@ -228,37 +229,58 @@ export async function createStorytellingProjectFromRant(
   }
 
   const supabase = await createServerSupabaseClient();
-  const projectName = (name.trim() || output.template_name.trim() || 'Сторітел з ренту').slice(0, 120);
+  const baseName = (name.trim() || output.template_name.trim() || 'Сторітел').slice(0, 120);
 
-  const { data: project, error: projectError } = await supabase
-    .from('storytelling_projects')
-    .insert({ name: projectName, user_id: user.id })
-    .select()
-    .single();
+  // A storytelling is ONE day's set of stories: its own project, with its own
+  // date and status. So a saga is NOT one project holding N day-columns (a single
+  // date can't stand for several days of posting) — it's N storytellings, dated
+  // on consecutive days starting today. Each still keeps one internal column,
+  // which is just the container its story cards live in.
+  const days =
+    output.days.length > 0 ? output.days : [{ day_number: 1, title: baseName, slides: output.slides }];
 
-  if (projectError || !project) {
-    console.error('createStorytellingProjectFromRant project', projectError);
-    return { ok: false, error: 'Не вдалося створити проєкт сторітелу.' };
-  }
-
-  // One column per day. A single story => one column; a saga => one column per
-  // day (the storytelling board already renders N columns, so no new UI needed).
-  const days = output.days.length > 0 ? output.days : [{ day_number: 1, title: projectName, slides: output.slides }];
+  const today = new Date();
+  const createdIds: string[] = [];
 
   for (let d = 0; d < days.length; d++) {
     const day = days[d];
-    const columnName = (day.title?.trim() || `День ${d + 1}`).slice(0, 120);
+    const dayName = (
+      days.length > 1 ? day.title?.trim() || `${baseName} — день ${d + 1}` : baseName
+    ).slice(0, 120);
+
+    // Consecutive days from today, so a saga lands on the calendar already paced.
+    const when = new Date(today);
+    when.setDate(today.getDate() + d);
+    const scheduledDate = `${when.getFullYear()}-${String(when.getMonth() + 1).padStart(2, '0')}-${String(
+      when.getDate(),
+    ).padStart(2, '0')}`;
+
+    const { data: project, error: projectError } = await supabase
+      .from('storytelling_projects')
+      .insert({ name: dayName, user_id: user.id, scheduled_date: scheduledDate })
+      .select()
+      .single();
+
+    if (projectError || !project) {
+      console.error('createStorytellingProjectFromRant project', projectError);
+      if (createdIds.length === 0) {
+        return { ok: false, error: 'Не вдалося створити сторітел.' };
+      }
+      break; // keep the days that already saved
+    }
+    createdIds.push(project.id as string);
 
     const { data: column, error: columnError } = await supabase
       .from('storytelling_columns')
-      .insert({ project_id: project.id, name: columnName, order_index: d })
+      .insert({ project_id: project.id, name: dayName, order_index: 0 })
       .select()
       .single();
 
     if (columnError || !column) {
       await supabase.from('storytelling_projects').delete().eq('id', project.id);
+      createdIds.pop();
       console.error('createStorytellingProjectFromRant column', columnError);
-      return { ok: false, error: 'Не вдалося створити колонку сторітелу.' };
+      continue;
     }
 
     const rows = day.slides.map((slide, index) => ({
@@ -272,17 +294,15 @@ export async function createStorytellingProjectFromRant(
     if (rows.length > 0) {
       const { error: storiesError } = await supabase.from('storytelling_stories').insert(rows);
       if (storiesError) {
-        await supabase.from('storytelling_projects').delete().eq('id', project.id);
         console.error('createStorytellingProjectFromRant stories', storiesError);
-        return { ok: false, error: 'Не вдалося зберегти сторіс. Спробуй ще раз.' };
       }
     }
   }
 
-  await supabase
-    .from('storytelling_projects')
-    .update({ updated_at: new Date().toISOString() })
-    .eq('id', project.id);
+  if (createdIds.length === 0) {
+    return { ok: false, error: 'Не вдалося зберегти сторіс. Спробуй ще раз.' };
+  }
 
-  return { ok: true, projectId: project.id as string };
+  // Open the first day; the rest are already on the calendar.
+  return { ok: true, projectId: createdIds[0] };
 }

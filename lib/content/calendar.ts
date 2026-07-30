@@ -89,3 +89,35 @@ export function groupByScheduledDate(pieces: ReadonlyArray<ContentPiece>): Map<s
   }
   return map;
 }
+
+const WEEKDAY_FULL = ['неділя', 'понеділок', 'вівторок', 'середа', 'четвер', "п'ятниця", 'субота'];
+
+/**
+ * Agenda group heading for a day key, e.g. "Сьогодні · 30 лип" / "Завтра · 31 лип"
+ * / "2 сер · субота" — the date-grouped agenda pattern (Craft / Superlist), which
+ * is how the app answers "what am I posting today, and next?".
+ */
+export function agendaHeading(key: string, todayKey: string): string {
+  const [y, m, d] = key.split('-').map(Number);
+  const date = new Date(Date.UTC(y, (m || 1) - 1, d || 1));
+  const short = `${d} ${SHORT_MONTH_LABELS[(m - 1 + 12) % 12]?.toLowerCase() ?? ''}`;
+
+  if (key === todayKey) return `Сьогодні · ${short}`;
+
+  const [ty, tm, td] = todayKey.split('-').map(Number);
+  const tomorrow = new Date(Date.UTC(ty, (tm || 1) - 1, td || 1));
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+  const tomorrowKey = `${tomorrow.getUTCFullYear()}-${String(tomorrow.getUTCMonth() + 1).padStart(2, '0')}-${String(
+    tomorrow.getUTCDate(),
+  ).padStart(2, '0')}`;
+  if (key === tomorrowKey) return `Завтра · ${short}`;
+
+  return `${short} · ${WEEKDAY_FULL[date.getUTCDay()]}`;
+}
+
+/** Sorted day keys (ascending) present in the given pieces' scheduled dates. */
+export function sortedDayKeys(dates: ReadonlyArray<string | null | undefined>): string[] {
+  const set = new Set<string>();
+  for (const d of dates) if (d) set.add(d.slice(0, 10));
+  return [...set].sort();
+}

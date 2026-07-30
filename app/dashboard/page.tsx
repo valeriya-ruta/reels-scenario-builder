@@ -17,7 +17,10 @@ export default async function DashboardPage() {
   const all = await getAllContent();
   const now = new Date();
   const todayKey = dateKey(now.getFullYear(), now.getMonth(), now.getDate());
-  const today = all.filter((p) => p.scheduledDate?.slice(0, 10) === todayKey);
+  // Everything from today onwards, soonest first — the agenda's source.
+  const upcoming = all
+    .filter((p) => (p.scheduledDate?.slice(0, 10) ?? '') >= todayKey)
+    .sort((a, b) => (a.scheduledDate ?? '').localeCompare(b.scheduledDate ?? ''));
   const recents = all.slice(0, 6);
 
   const fullName =
@@ -27,5 +30,5 @@ export default async function DashboardPage() {
   // First name only keeps the greeting compact.
   const firstName = fullName?.trim().split(/\s+/)[0] ?? null;
 
-  return <HomeView userName={firstName} today={today} recents={recents} />;
+  return <HomeView userName={firstName} upcoming={upcoming} todayKey={todayKey} recents={recents} />;
 }
