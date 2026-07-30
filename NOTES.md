@@ -381,3 +381,39 @@ Ruta asked to finish the deferred entry points. Both done:
 
 Build + tsc clean; 30 logic tests green. Both entry points call the same `setContentScheduledDate`.
 Remaining open item is purely your call: picker style (native vs open-the-calendar) — shipped native.
+
+---
+
+## App-wide UI/UX redesign (full authority pass)
+
+Goal set by Ruta: the app should look like it belongs next to Asana / Monday / Notion / Linear.
+Grounded in real Mobbin references (status pickers, schedulers, list rows, item-detail headers).
+Colors + fonts kept (blue #004BA8 accent, Google Sans); everything else rebuilt.
+
+**Design system** (`app/globals.css`)
+- Warm off-white **canvas** (`#f7f7f5`) so white cards read as elevated surfaces (the Linear/Notion
+  layering) instead of a flat-white webpage. Near-black text `#17171a` + secondary/muted scale.
+- Hairline borders (alpha-based), radius scale (10/14/18/24), elevation scale (elev-1/2/3).
+- Shared classes: `.app-canvas` `.app-page` `.app-title` `.app-subtitle` `.app-section-label`
+  `.app-card` `.app-group` `.app-pill` `.app-icon-btn` `.app-btn-primary` — every screen is
+  composed from one vocabulary.
+
+**Interaction primitives**
+- `components/ui/BottomSheet.tsx` — iOS-style sheet (backdrop, rounded top, grab handle, escape +
+  scroll lock). The native primitive those apps use.
+- **Status** → outlined pill → status **bottom sheet**: whole track as big colored rows, pick any
+  stage forward *or* back, current checked (fixes the advance-only "no way back").
+- **Date** → outlined pill → **calendar sheet** reusing the План grid + Сьогодні/Завтра/clear.
+- **Create** (calendar) → same sheet language.
+
+**Screens rebuilt**: Home (big greeting, NEW 2×2 quick-create tiles, carded recents, carded
+workshop list), content library, per-type lists (icon tile + count + round FAB, carded rows, real
+empty states), План calendar (carded grid + carded detail panel), profile, settings, competitor
+analysis, all three editors (icon back-nav + big title + status/date meta row), auth screens
+(login/signup/access-gate cards + unified inputs), scene cards, loading skeletons.
+
+**Chrome**: bottom nav is now a translucent blurred floating bar; sidebar + carousel editor chrome
+on tokens. Carousel *slide settings* deliberately untouched (only refined) per Ruta's constraint.
+
+**Verified live**: computed styles on production confirm canvas `#f7f7f5`, foreground `#17171a`,
+radius/elevation scales and `.app-card` all rendering. Build + tsc clean, 30 logic tests green.

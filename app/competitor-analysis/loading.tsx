@@ -8,7 +8,7 @@ function Bar({ className }: { className: string }) {
 
 export default function CompetitorAnalysisLoading() {
   return (
-    <div className="min-h-screen bg-white">
+    <div className="app-canvas">
       <div className="mx-auto max-w-6xl px-4 py-8">
         <Bar className="mb-6 h-10 w-64" />
         <div className="grid gap-6 lg:grid-cols-[1fr_320px]">

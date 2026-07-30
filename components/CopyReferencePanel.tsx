@@ -185,8 +185,8 @@ export default function CopyReferencePanel({
           className={[
             'mt-4 rounded-lg px-3 py-2 text-sm leading-normal',
             errorKind === 'system'
-              ? 'border border-zinc-200 bg-zinc-50 text-zinc-700'
-              : 'border border-zinc-200 bg-zinc-50 text-zinc-700',
+              ? 'border border-zinc-200 bg-[color:var(--surface1)] text-zinc-700'
+              : 'border border-zinc-200 bg-[color:var(--surface1)] text-zinc-700',
           ].join(' ')}
         >
           {error}
@@ -195,7 +195,7 @@ export default function CopyReferencePanel({
               type="button"
               onClick={() => void handleGenerate()}
               disabled={isGenerating || !reelUrl.trim()}
-              className="mt-2 inline-flex rounded-md border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-2 inline-flex rounded-md border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-[color:var(--surface1)] disabled:cursor-not-allowed disabled:opacity-60"
             >
               Спробувати ще раз
             </button>

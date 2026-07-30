@@ -57,7 +57,7 @@ function SortableProjectRow({
     <div
       ref={setNodeRef}
       style={style}
-      className="group flex items-stretch rounded-lg border border-[color:var(--border)] bg-white card-shadow transition-colors hover:border-zinc-300 hover:bg-zinc-50"
+      className="group flex items-stretch rounded-lg border border-[color:var(--border)] bg-white card-shadow transition-colors hover:border-zinc-300 hover:bg-[color:var(--surface1)]"
     >
       <button
         type="button"

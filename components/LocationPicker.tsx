@@ -166,7 +166,7 @@ export default function LocationPicker({
         className={[
           'flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition-colors',
           disabled
-            ? 'cursor-not-allowed border-zinc-200 bg-zinc-50 text-zinc-400'
+            ? 'cursor-not-allowed border-zinc-200 bg-[color:var(--surface1)] text-zinc-400'
             : 'cursor-pointer border-zinc-300 bg-white text-zinc-900 hover:border-zinc-400',
         ].join(' ')}
       >
@@ -217,7 +217,7 @@ export default function LocationPicker({
                 onClick={() => select(null)}
                 className={[
                   'flex w-full px-3 py-2 text-left text-sm',
-                  !locationId ? 'bg-zinc-100 font-medium text-zinc-900' : 'text-zinc-700 hover:bg-zinc-50',
+                  !locationId ? 'bg-zinc-100 font-medium text-zinc-900' : 'text-zinc-700 hover:bg-[color:var(--surface1)]',
                 ].join(' ')}
               >
                 Без локації
@@ -230,7 +230,7 @@ export default function LocationPicker({
               type="button"
               disabled={busy}
               onClick={() => void handleCreateFromQuery()}
-              className="flex w-full cursor-pointer px-3 py-2 text-left text-sm font-medium text-zinc-900 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex w-full cursor-pointer px-3 py-2 text-left text-sm font-medium text-zinc-900 hover:bg-[color:var(--surface1)] disabled:cursor-not-allowed disabled:opacity-40"
             >
               Створити «{query}»
             </button>
@@ -271,7 +271,7 @@ export default function LocationPicker({
                       'min-w-0 flex-1 px-3 py-2 text-left text-sm',
                       locationId === loc.id
                         ? 'bg-zinc-100 font-medium text-zinc-900'
-                        : 'text-zinc-700 hover:bg-zinc-50',
+                        : 'text-zinc-700 hover:bg-[color:var(--surface1)]',
                     ].join(' ')}
                   >
                     <span className="truncate">{loc.name}</span>

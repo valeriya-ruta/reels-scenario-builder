@@ -8,7 +8,7 @@ function Bar({ className }: { className: string }) {
 
 export default function SettingsLoading() {
   return (
-    <div className="min-h-screen bg-white">
+    <div className="app-canvas">
       <div className="mx-auto max-w-2xl px-4 py-8">
         <Bar className="mb-8 h-9 w-40" />
         <div className="space-y-4 rounded-xl border border-[color:var(--border)] bg-white p-6 card-shadow">

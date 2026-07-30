@@ -8,7 +8,7 @@ function Bar({ className }: { className: string }) {
 
 export default function ProjectsLoading() {
   return (
-    <div className="min-h-screen bg-white">
+    <div className="app-canvas">
       <div className="mx-auto max-w-4xl px-4 py-8">
         <div className="mb-8 flex items-center justify-between gap-4">
           <Bar className="h-9 w-48" />
