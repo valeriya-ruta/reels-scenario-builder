@@ -853,10 +853,10 @@ export default function CarouselEditorLayout({
       {/* Mobile top bar: icon-back · [status · date meta] · export icon. The
           status + date pills live here (task 86d3d23nj UI pass) so the header
           reads as an app row, not a crowded webpage bar. */}
-      <header className="flex h-[52px] shrink-0 items-center gap-2 border-b border-[color:var(--border)] pl-1 pr-2 md:hidden">
+      <header className="flex h-[54px] shrink-0 items-center gap-2 border-b border-[color:var(--border)] bg-[color:var(--background)] pl-1 pr-2 md:hidden">
         <Link
           href="/carousel"
-          className="inline-flex shrink-0 items-center justify-center rounded-full p-2 text-zinc-800"
+          className="app-icon-btn shrink-0"
           aria-label="Всі каруселі"
         >
           <ChevronLeft className="h-5 w-5" />
@@ -869,7 +869,7 @@ export default function CarouselEditorLayout({
           onClick={onExport}
           disabled={isGenerating}
           aria-label="Експортувати"
-          className="inline-flex shrink-0 items-center justify-center rounded-full border border-[color:var(--border)] bg-white p-2 text-zinc-900 disabled:opacity-50"
+          className="inline-flex shrink-0 items-center justify-center rounded-full border border-[color:var(--border)] bg-white p-2.5 text-[color:var(--foreground)] shadow-[var(--elev-1)] disabled:opacity-50"
         >
           {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
         </button>

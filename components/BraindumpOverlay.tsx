@@ -545,7 +545,7 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
                       data-testid={`braindump-type-${type}`}
                       data-status={status}
                       disabled={status === 'loading'}
-                      className="flex flex-col items-center gap-2 rounded-2xl border-2 px-2 py-4 text-sm font-semibold transition-colors"
+                      className="flex flex-col items-center gap-2 rounded-[16px] border-2 px-2 py-4 text-[13px] font-semibold transition-colors"
                       style={{
                         borderColor: done ? 'var(--success)' : meta.color,
                         color: done ? 'var(--success)' : meta.color,

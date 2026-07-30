@@ -201,7 +201,7 @@ export default function SettingsClient({
   };
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="app-page max-w-5xl">
       <div className="flex items-center gap-2 border-b border-[color:var(--border)] pb-3">
         <Link
           href="/profile"
@@ -210,14 +210,14 @@ export default function SettingsClient({
         >
           <ChevronLeft className="h-5 w-5" />
         </Link>
-        <h1 className="font-display text-2xl font-semibold text-black">Брендинг</h1>
+        <h1 className="app-title">Брендинг</h1>
       </div>
 
       <div className="mt-5">
         {tab === 'account' ? (
           <div className="max-w-3xl">
             <section className="py-2">
-              <h2 className="font-display text-lg font-semibold text-zinc-900">Профіль</h2>
+              <h2 className="font-display text-[17px] font-bold tracking-tight text-[color:var(--foreground)]">Профіль</h2>
               <div className="mt-4 space-y-4">
                 <label className="block">
                   <span className="mb-1.5 block text-sm text-zinc-600">Display name</span>
@@ -229,7 +229,7 @@ export default function SettingsClient({
                     onBlur={() => {
                       void saveDisplayName();
                     }}
-                    className="w-full rounded-xl border border-[color:var(--border)] bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-[color:var(--accent)]"
+                    className="w-full rounded-[10px] border border-[color:var(--border)] bg-white px-3.5 py-2.5 text-[15px] text-[color:var(--foreground)] outline-none transition focus:border-[color:var(--accent)] focus:ring-2 focus:ring-[color:var(--accent)]/15"
                     placeholder="Введи імʼя"
                   />
                 </label>
@@ -241,7 +241,7 @@ export default function SettingsClient({
                       value={email}
                       disabled={profileLoading || savingEmail}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="min-w-[240px] flex-1 rounded-xl border border-[color:var(--border)] bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-[color:var(--accent)]"
+                      className="min-w-[240px] flex-1 rounded-[10px] border border-[color:var(--border)] bg-white px-3.5 py-2.5 text-[15px] text-[color:var(--foreground)] outline-none transition focus:border-[color:var(--accent)] focus:ring-2 focus:ring-[color:var(--accent)]/15"
                       placeholder="you@example.com"
                     />
                     <button
@@ -273,7 +273,7 @@ export default function SettingsClient({
             <div className="my-6 h-px bg-[color:var(--border)]" />
 
             <section className="py-2">
-              <h2 className="font-display text-lg font-semibold text-zinc-900">Підписка</h2>
+              <h2 className="font-display text-[17px] font-bold tracking-tight text-[color:var(--foreground)]">Підписка</h2>
               <div className="mt-4 space-y-3 text-sm">
                 <div className="flex items-center gap-3">
                   <span className="text-zinc-600">Поточний план</span>
@@ -307,7 +307,7 @@ export default function SettingsClient({
             <div className="my-6 h-px bg-[color:var(--border)]" />
 
             <section className="py-2">
-              <h2 className="font-display text-lg font-semibold text-zinc-900">Акаунт</h2>
+              <h2 className="font-display text-[17px] font-bold tracking-tight text-[color:var(--foreground)]">Акаунт</h2>
               <div className="mt-4 space-y-3">
                 <button
                   type="button"
@@ -358,7 +358,7 @@ export default function SettingsClient({
             onClick={() => setDeleteModalOpen(false)}
           />
           <div
-            className="relative z-[111] w-full max-w-md rounded-2xl border border-[color:var(--border)] bg-white p-6 shadow-xl"
+            className="relative z-[111] w-full max-w-md rounded-[18px] border border-[color:var(--border)] bg-white p-6 shadow-[var(--elev-3)]"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 id="delete-account-modal-title" className="font-display text-xl font-semibold text-zinc-900">

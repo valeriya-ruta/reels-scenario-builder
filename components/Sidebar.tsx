@@ -179,7 +179,7 @@ export default function Sidebar({ userName, userEmail }: SidebarProps) {
   };
 
   return (
-    <aside className="relative flex h-full w-full flex-col overflow-hidden border-r border-[color:var(--border)] bg-white px-2 pb-4 pt-3">
+    <aside className="relative flex h-full w-full flex-col overflow-hidden border-r border-[color:var(--border)] px-2 pb-4 pt-3" style={{ background: 'var(--background)' }}>
       <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
         {/* Головна first, then the create entry point. */}
         {renderNavItem(navItems[0])}
@@ -226,7 +226,7 @@ export default function Sidebar({ userName, userEmail }: SidebarProps) {
 
       <div className="relative mt-auto border-t border-[color:var(--border)] pt-3" ref={popoverRef}>
         {accountOpen && (
-          <div className="absolute bottom-full left-0 z-20 mb-2 w-52 rounded-xl border border-[color:var(--border)] bg-white py-1 shadow-xl">
+          <div className="absolute bottom-full left-0 z-20 mb-2 w-52 rounded-[14px] border border-[color:var(--border)] bg-white py-1 shadow-[var(--elev-3)]">
             <a
               href="/settings"
               className="flex w-full cursor-pointer items-center px-4 py-2.5 text-left text-sm leading-normal text-zinc-800 transition-colors hover:bg-[color:var(--surface)]"

@@ -322,8 +322,8 @@ export default function SceneCard({
     <div
       ref={setNodeRef}
       style={style}
-      className={`relative rounded-lg border p-5 card-shadow transition-shadow duration-300 ease-in-out ${variantSurface} ${
-        isExiting ? 'pointer-events-none' : 'cursor-pointer hover:shadow-[0_4px_12px_rgba(0,0,0,0.1)]'
+      className={`relative rounded-[16px] border p-5 shadow-[var(--elev-1)] transition-shadow duration-300 ease-in-out ${variantSurface} ${
+        isExiting ? 'pointer-events-none' : 'cursor-pointer hover:shadow-[var(--elev-2)]'
       } ${shouldGlow ? 'reels-planner-scene-glow' : ''}`}
       onClick={handleCardClick}
     >

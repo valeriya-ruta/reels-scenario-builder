@@ -629,11 +629,11 @@ export default function CompetitorAnalysisView() {
     n < 0 ? '—' : formatCompactCount(n);
 
   return (
-    <div className="-mx-8 -my-8 flex min-h-0 flex-1 flex-col bg-white p-6 sm:p-8">
+    <div className="app-canvas flex min-h-0 flex-1 flex-col p-4 pb-28 sm:p-6">
       {screen === 'home' && (
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
           <div
-            className="rounded-[var(--border-radius-xl)] bg-white p-5 sm:p-6"
+            className="app-card p-5 sm:p-6"
             style={{ boxShadow: 'var(--shadow-card-sm)' }}
           >
             <form
@@ -645,7 +645,7 @@ export default function CompetitorAnalysisView() {
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 placeholder="@username або посилання на профіль"
-                className="min-w-0 flex-1 rounded-[var(--border-radius-lg)] border border-[var(--color-border-primary)] bg-[var(--color-background-secondary)] px-4 py-3 text-sm text-[var(--color-text-primary)] transition-shadow placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-link)] focus:bg-white focus:ring-2 focus:ring-[var(--color-link-soft)]"
+                className="min-w-0 flex-1 rounded-[10px] border border-[color:var(--border)] bg-white px-4 py-3 text-[15px] text-[var(--color-text-primary)] transition-shadow placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-link)] focus:bg-white focus:ring-2 focus:ring-[var(--color-link-soft)]"
               />
               <button
                 type="submit"
@@ -656,7 +656,7 @@ export default function CompetitorAnalysisView() {
               </button>
             </form>
             {scanError && (
-              <div className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm leading-normal text-zinc-700">
+              <div className="mt-3 rounded-[12px] border border-[color:var(--border)] bg-[color:var(--surface1)] px-4 py-3 text-sm leading-normal text-[color:var(--text-secondary)]">
                 {scanError}
               </div>
             )}
@@ -667,12 +667,12 @@ export default function CompetitorAnalysisView() {
               Нещодавні
             </h2>
             {homeError && (
-              <div className="mt-2 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm leading-normal text-zinc-700">
+              <div className="mt-2 rounded-[12px] border border-[color:var(--border)] bg-[color:var(--surface1)] px-4 py-3 text-sm leading-normal text-[color:var(--text-secondary)]">
                 {homeError}
               </div>
             )}
             <div
-              className="mt-3 overflow-hidden rounded-[var(--border-radius-xl)] bg-white"
+              className="app-card mt-3 overflow-hidden"
               style={{ boxShadow: 'var(--shadow-card)' }}
             >
               <div className="overflow-x-auto">
@@ -777,7 +777,7 @@ export default function CompetitorAnalysisView() {
       {screen === 'scanning' && (
         <div className="flex min-h-[calc(100dvh-7rem)] flex-1 items-center justify-center px-4">
           <div
-            className="w-full max-w-md rounded-[var(--border-radius-xl)] bg-white px-8 py-10 text-center"
+            className="app-card w-full max-w-md px-8 py-10 text-center"
             style={{ boxShadow: 'var(--shadow-card-sm)' }}
           >
             <p className="text-lg font-semibold text-[var(--color-text-primary)]">
@@ -804,7 +804,7 @@ export default function CompetitorAnalysisView() {
       {screen === 'results' && currentScan && (
         <div className="mx-auto flex min-h-[calc(100dvh-8rem)] w-full max-w-6xl flex-1 flex-col overflow-hidden">
           <div
-            className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[var(--border-radius-2xl)] bg-white"
+            className="app-card flex min-h-0 flex-1 flex-col overflow-hidden"
             style={{ boxShadow: 'var(--shadow-card)' }}
           >
             <header className="shrink-0 border-b border-[var(--color-border-primary)] px-6 pb-6 pt-5">

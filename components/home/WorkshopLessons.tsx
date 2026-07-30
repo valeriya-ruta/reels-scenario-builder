@@ -16,12 +16,12 @@ export default function WorkshopLessons() {
   const lessons = flattenedWorkshopLessons();
 
   return (
-    <section className="space-y-2" aria-labelledby="workshop-heading">
-      <h2 id="workshop-heading" className="font-display text-lg font-semibold text-black">
+    <section className="space-y-2.5" aria-labelledby="workshop-heading">
+      <h2 id="workshop-heading" className="app-section-label px-0.5">
         Уроки воркшопу
       </h2>
 
-      <ul data-testid="workshop-list" className="divide-y divide-[color:var(--border)]">
+      <ul data-testid="workshop-list" className="app-card divide-y divide-[color:var(--border)] overflow-hidden">
         {lessons.map((lesson) => (
           <li key={lesson.id}>
             <a
@@ -29,14 +29,16 @@ export default function WorkshopLessons() {
               target="_blank"
               rel="noopener noreferrer"
               data-testid="workshop-row"
-              className="flex items-center gap-3 py-3 transition-colors active:bg-[color:var(--surface)]"
+              className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-[color:var(--surface1)] active:bg-[color:var(--surface1)]"
             >
-              <span className="flex w-6 shrink-0 items-center justify-center">
-                <PlayCircle className="h-5 w-5 text-[color:var(--accent)]" strokeWidth={1.9} />
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color:var(--accent-soft)]">
+                <PlayCircle className="h-[18px] w-[18px] text-[color:var(--accent)]" strokeWidth={2} />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium text-black">{lesson.title}</span>
-                <span className="mt-0.5 block truncate text-xs text-zinc-500">
+                <span className="block truncate text-[14px] font-semibold text-[color:var(--foreground)]">
+                  {lesson.title}
+                </span>
+                <span className="mt-0.5 block truncate text-[12px] text-[color:var(--text-muted)]">
                   Урок {lesson.index} · {lesson.moduleTitle}
                 </span>
               </span>
