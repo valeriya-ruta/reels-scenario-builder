@@ -366,3 +366,18 @@ today flag, month wrap, group-by-date (badge counts), header formatting. Build +
   delete-only; the spec wants swipe-*left* with two actions. That's real surgery on a gesture used by
   every list, so I didn't rework it blind — it plugs into the same `setContentScheduledDate` action.
 - **Picker style + chip placement** were your two explicit OPEN/"pending Kunj confirm" items.
+
+### План calendar — entry points completed (follow-up)
+
+Ruta asked to finish the deferred entry points. Both done:
+- **Schedule chip in all 3 editors** — `ScheduleChip` now in the reel header (near «Поділитися»),
+  carousel header (near «Експортувати»), and story/storytelling header. `scheduled_date` threaded
+  through each editor's page → builder (added to `Project` / `CarouselProject` / `StorytellingProject`
+  types). Native date picker (the lean on the open picker-style question).
+- **Swipe entry point** — reworked the shared `SwipeRow` from swipe-right-delete-only to
+  **swipe-left revealing 📅 DATE (zinc) + 🗑 DELETE (red)** per spec (red stays destructive-only).
+  DATE opens a native picker; wired `onSchedule` into both `ContentRows` and `SwipeableContentList`
+  with optimistic stamp + rollback. Delete arm/confirm + 4s undo preserved.
+
+Build + tsc clean; 30 logic tests green. Both entry points call the same `setContentScheduledDate`.
+Remaining open item is purely your call: picker style (native vs open-the-calendar) — shipped native.

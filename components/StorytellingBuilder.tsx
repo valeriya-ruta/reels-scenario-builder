@@ -24,6 +24,7 @@ import {
   makeOptimisticColumn,
   makeOptimisticStory,
 } from '@/lib/storytelling/optimistic';
+import ScheduleChip from '@/components/content/ScheduleChip';
 
 interface Props {
   project: StorytellingProject;
@@ -283,6 +284,14 @@ export default function StorytellingBuilder({ project: initialProject, initialCo
               {project.name}
             </h1>
           )}
+          {/* Entry point 1: schedule chip in the story editor header (task 86d3d23nj). */}
+          <span className="ml-auto">
+            <ScheduleChip
+              refTable="storytelling_projects"
+              id={project.id}
+              initialDate={project.scheduled_date ?? null}
+            />
+          </span>
         </div>
       </div>
 
