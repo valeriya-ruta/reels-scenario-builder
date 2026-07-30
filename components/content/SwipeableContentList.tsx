@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronRight, Film, LayoutGrid, Play, CalendarDays, Plus } from 'lucide-react';
 import { dayHeaderLabel } from '@/lib/content/calendar';
+import DateSheet from '@/components/content/DateSheet';
 import StatusRing from '@/components/content/StatusRing';
 import SwipeRow from '@/components/content/SwipeRow';
 import { setContentStatus, setContentScheduledDate } from '@/app/content-actions';
@@ -64,6 +65,8 @@ export default function SwipeableContentList({
   const [armedId, setArmedId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [undo, setUndo] = useState<{ piece: ContentPiece; index: number } | null>(null);
+  // Piece whose date sheet is open (app's own picker, never the OS one).
+  const [dateFor, setDateFor] = useState<ContentPiece | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => setItems(pieces), [pieces]);
@@ -205,8 +208,7 @@ export default function SwipeableContentList({
                 }}
                 onArm={() => setArmedId(piece.id)}
                 onDelete={() => removeRow(piece)}
-                onSchedule={(date) => schedule(piece, date)}
-                scheduledDate={piece.scheduledDate}
+                onSchedule={() => setDateFor(piece)}
                 onTap={() => {
                   closeAll();
                   if (opensBraindumpOverlay(piece)) {
@@ -282,6 +284,16 @@ export default function SwipeableContentList({
         </div>
       ) : null}
       <style>{`@keyframes undo-drain{from{width:100%}to{width:0%}}`}</style>
+
+      {/* App's own date picker — never the OS one (consistent with the editors). */}
+      <DateSheet
+        open={dateFor !== null}
+        onClose={() => setDateFor(null)}
+        value={dateFor?.scheduledDate ?? null}
+        onPick={(date) => {
+          if (dateFor) schedule(dateFor, date);
+        }}
+      />
     </div>
   );
 }

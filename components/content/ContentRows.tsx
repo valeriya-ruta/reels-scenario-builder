@@ -18,6 +18,7 @@ import {
 } from '@/lib/content/statusSystem';
 import { formatRelativeTime } from '@/lib/content/relativeTime';
 import { dayHeaderLabel } from '@/lib/content/calendar';
+import DateSheet from '@/components/content/DateSheet';
 
 /**
  * Interactive list of content rows (Status system 4/8). Shared by the Home
@@ -60,6 +61,8 @@ export default function ContentRows({
   const [openId, setOpenId] = useState<string | null>(null);
   const [armedId, setArmedId] = useState<string | null>(null);
   const [undo, setUndo] = useState<{ piece: ContentPiece; index: number } | null>(null);
+  // Piece whose date sheet is open (app's own picker, never the OS one).
+  const [dateFor, setDateFor] = useState<ContentPiece | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => setItems(initialPieces), [initialPieces]);
@@ -190,8 +193,7 @@ export default function ContentRows({
             }}
             onArm={() => setArmedId(piece.id)}
             onDelete={() => removeRow(piece)}
-            onSchedule={(date) => schedule(piece, date)}
-            scheduledDate={piece.scheduledDate}
+            onSchedule={() => setDateFor(piece)}
             onTap={() => {
               closeAll();
               open(piece);
@@ -265,6 +267,16 @@ export default function ContentRows({
         </div>
       ) : null}
       <style>{`@keyframes undo-drain{from{width:100%}to{width:0%}}`}</style>
+
+      {/* App's own date picker — never the OS one (consistent with the editors). */}
+      <DateSheet
+        open={dateFor !== null}
+        onClose={() => setDateFor(null)}
+        value={dateFor?.scheduledDate ?? null}
+        onPick={(date) => {
+          if (dateFor) schedule(dateFor, date);
+        }}
+      />
     </>
   );
 }

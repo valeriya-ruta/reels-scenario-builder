@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { requireAuth } from '@/lib/auth';
 import { getAllContent } from '@/lib/content/contentList';
+import { dateKey } from '@/lib/content/calendar';
 import HomeView from '@/components/home/HomeView';
 
 export const dynamic = 'force-dynamic';
@@ -11,8 +12,13 @@ export default async function DashboardPage() {
     redirect('/');
   }
 
-  // Latest few across all types/statuses for the Home recents (full list at /content).
-  const recents = await getAllContent(6);
+  // One read powers both sections: everything scheduled for today (the «Сьогодні»
+  // plan) and the latest few across all types (recents; full list at /content).
+  const all = await getAllContent();
+  const now = new Date();
+  const todayKey = dateKey(now.getFullYear(), now.getMonth(), now.getDate());
+  const today = all.filter((p) => p.scheduledDate?.slice(0, 10) === todayKey);
+  const recents = all.slice(0, 6);
 
   const fullName =
     (user.user_metadata?.full_name as string | undefined) ??
@@ -21,5 +27,5 @@ export default async function DashboardPage() {
   // First name only keeps the greeting compact.
   const firstName = fullName?.trim().split(/\s+/)[0] ?? null;
 
-  return <HomeView userName={firstName} recents={recents} />;
+  return <HomeView userName={firstName} today={today} recents={recents} />;
 }

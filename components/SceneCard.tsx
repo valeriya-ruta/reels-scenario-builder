@@ -356,10 +356,10 @@ export default function SceneCard({
               </svg>
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-                Сцена {sceneIndexLabel}
-              </p>
-              <div className="mt-0.5 flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-[6px] bg-[color:var(--surface2)] px-1.5 text-[11px] font-bold tabular-nums text-[color:var(--text-secondary)]">
+                  {sceneIndexLabel}
+                </span>
                 {isEditingName ? (
                   <input
                     autoFocus
@@ -379,7 +379,7 @@ export default function SceneCard({
                   />
                 ) : (
                   <span
-                    className="cursor-text text-sm font-medium text-zinc-800 decoration-dashed underline-offset-2 hover:text-zinc-950 hover:underline"
+                    className="cursor-text text-[15px] font-semibold text-[color:var(--foreground)] decoration-dashed underline-offset-2 hover:underline"
                     onClick={(e) => {
                       e.stopPropagation();
                       setIsEditingName(true);
@@ -391,7 +391,7 @@ export default function SceneCard({
                 )}
               </div>
               {!isExpanded && (
-                <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-normal text-zinc-700">
+                <p className="mt-1.5 whitespace-pre-wrap break-words text-[14px] leading-relaxed text-[color:var(--text-secondary)]">
                   {dialoguePreview}
                 </p>
               )}

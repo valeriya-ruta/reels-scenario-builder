@@ -21,8 +21,8 @@ function vibrate(ms: number) {
  * «Твій контент») behave identically.
  *
  * Behaviour (task 86d3d23nj): swiping the row LEFT reveals action buttons pinned
- * to the RIGHT edge — a neutral 📅 DATE action (schedule, opens a native date
- * picker) and a red 🗑 DELETE action. Delete arms «Точно?» on the first tap
+ * to the RIGHT edge — a neutral 📅 DATE action (asks the parent to open the app's own
+ * date sheet) and a red 🗑 DELETE action. Delete arms «Точно?» on the first tap
  * (pointerup, so the post-swipe ghost-click can't eat it) and a second tap
  * confirms; red stays reserved for the destructive action only.
  *
@@ -39,7 +39,6 @@ export default function SwipeRow({
   onDelete,
   onTap,
   onSchedule,
-  scheduledDate,
   children,
 }: {
   open: boolean;
@@ -50,9 +49,8 @@ export default function SwipeRow({
   onDelete: () => void;
   /** Tap (no drag) on a closed row — open the item. */
   onTap: () => void;
-  /** Schedule action handler; when omitted the 📅 action is hidden. */
-  onSchedule?: (date: string | null) => void;
-  scheduledDate?: string | null;
+  /** Asks the parent to open the app's own date sheet; omit to hide the 📅 action. */
+  onSchedule?: () => void;
   children: ReactNode;
 }) {
   const actionsW = onSchedule ? DATE_W + DELETE_W : DELETE_W;
@@ -60,7 +58,6 @@ export default function SwipeRow({
   const [removing, setRemoving] = useState(false);
   const start = useRef<{ x: number; base: number; moved: boolean; offset: number } | null>(null);
   const [dragging, setDragging] = useState(false);
-  const dateInputRef = useRef<HTMLInputElement>(null);
 
   // Negative offset = row slid LEFT to expose the actions pinned to the RIGHT.
   const restX = armed ? -9999 : open ? -actionsW : 0;
@@ -114,13 +111,6 @@ export default function SwipeRow({
     }
   };
 
-  const openDatePicker = () => {
-    const el = dateInputRef.current;
-    if (!el) return;
-    if (typeof el.showPicker === 'function') el.showPicker();
-    else el.click();
-  };
-
   return (
     <li
       className="relative overflow-hidden transition-[max-height,opacity] duration-300 ease-in"
@@ -138,7 +128,7 @@ export default function SwipeRow({
             aria-label="Запланувати"
             onPointerUp={(e) => {
               e.stopPropagation();
-              openDatePicker();
+              onSchedule();
             }}
             className="flex items-center justify-center bg-zinc-200 text-zinc-700"
             style={{ width: DATE_W, touchAction: 'manipulation' }}
@@ -167,21 +157,6 @@ export default function SwipeRow({
         </button>
       </div>
 
-      {/* Hidden native date input the 📅 action drives. */}
-      {onSchedule && (
-        <input
-          ref={dateInputRef}
-          type="date"
-          value={scheduledDate ?? ''}
-          onChange={(e) => {
-            onSchedule(e.target.value || null);
-            onRequestClose();
-          }}
-          className="pointer-events-none absolute h-0 w-0 opacity-0"
-          tabIndex={-1}
-          aria-hidden
-        />
-      )}
 
       {/* Foreground row — slides left to reveal the action layer. */}
       <div

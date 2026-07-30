@@ -1,23 +1,28 @@
 import { Suspense } from 'react';
 import WelcomeModal from '@/components/WelcomeModal';
 import Greeting from './Greeting';
+import TodayPlan from './TodayPlan';
 import HomeRecents from './HomeRecents';
 import InsightsSkeleton from './InsightsSkeleton';
 import WorkshopLessons from './WorkshopLessons';
-import HomeQuickActions from './HomeQuickActions';
 import type { ContentPiece } from '@/lib/content/contentPiece';
 
 /**
- * Home (Головна) — the landing screen, rebuilt on the app UI system: off-white
- * canvas, a large greeting, quick-create actions, then grouped cards
- * (recents → insights → lessons). Structure mirrors the productivity apps this
- * app sits next to: big title, immediate actions, then content groups.
+ * Home (Головна). The app opens as an assistant, not a menu: greeting →
+ * «Сьогодні» (what you're posting today, or a single low-friction way in when
+ * nothing is planned) → recents → insights → lessons.
+ *
+ * Deliberately NO grid of "create a reel / carousel / story" buttons: the user's
+ * problem isn't choosing a format, it's knowing what to make — so the app leads
+ * with the plan and keeps creation to one entry point.
  */
 export default function HomeView({
   userName,
+  today,
   recents,
 }: {
   userName?: string | null;
+  today: ContentPiece[];
   recents: ContentPiece[];
 }) {
   return (
@@ -26,7 +31,7 @@ export default function HomeView({
         <WelcomeModal />
       </Suspense>
       <Greeting name={userName} />
-      <HomeQuickActions />
+      <TodayPlan pieces={today} />
       <HomeRecents pieces={recents} />
       <InsightsSkeleton />
       <WorkshopLessons />

@@ -1,12 +1,19 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 /**
- * iOS-style bottom sheet (app-wide UI system). Slides up from the bottom over a
- * dimmed backdrop, rounded top, grab handle. The native pattern that reads as an
- * app (Linear / monday / Substack) rather than a shrunk webpage. Used for the
- * status picker, date picker, and other quick actions.
+ * iOS-style bottom sheet (app UI system). Slides up from the bottom over a
+ * dimmed backdrop, rounded top, grab handle.
+ *
+ * Portalled to <body> so it is never clipped by (or stacked under) the floating
+ * bottom nav or a scrolling `overflow` ancestor — that's what hid the last
+ * option behind the navbar. Content also clears the nav's height.
+ *
+ * Animation: mount at translateY(100%), then flip on the NEXT frame (double
+ * rAF) so the browser paints the closed state first and actually transitions —
+ * a single rAF can batch with the mount render and the sheet just appears.
  */
 export default function BottomSheet({
   open,
@@ -25,11 +32,17 @@ export default function BottomSheet({
   useEffect(() => {
     if (open) {
       setMounted(true);
-      const r = requestAnimationFrame(() => setShown(true));
-      return () => cancelAnimationFrame(r);
+      let raf2 = 0;
+      const raf1 = requestAnimationFrame(() => {
+        raf2 = requestAnimationFrame(() => setShown(true));
+      });
+      return () => {
+        cancelAnimationFrame(raf1);
+        if (raf2) cancelAnimationFrame(raf2);
+      };
     }
     setShown(false);
-    const t = window.setTimeout(() => setMounted(false), 240);
+    const t = window.setTimeout(() => setMounted(false), 260);
     return () => window.clearTimeout(t);
   }, [open]);
 
@@ -47,22 +60,23 @@ export default function BottomSheet({
     };
   }, [open, onClose]);
 
-  if (!mounted) return null;
+  if (!mounted || typeof document === 'undefined') return null;
 
-  return (
-    <div className="fixed inset-0 z-[90]" role="dialog" aria-modal="true" aria-label={title}>
+  return createPortal(
+    <div className="fixed inset-0 z-[120]" role="dialog" aria-modal="true" aria-label={title}>
       <div
         onClick={onClose}
-        className="absolute inset-0 bg-black/35 transition-opacity duration-200"
+        className="absolute inset-0 bg-black/35 transition-opacity duration-[240ms]"
         style={{ opacity: shown ? 1 : 0 }}
         aria-hidden
       />
       <div
-        className="absolute inset-x-0 bottom-0 rounded-t-[22px] border border-b-0 border-[color:var(--border)] bg-[color:var(--background)] pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_40px_rgba(0,0,0,0.16)]"
+        className="absolute inset-x-0 bottom-0 rounded-t-[22px] border border-b-0 border-[color:var(--border)] bg-[color:var(--background)] shadow-[0_-8px_40px_rgba(0,0,0,0.16)]"
         style={{
           transform: shown ? 'translateY(0)' : 'translateY(100%)',
-          transition: 'transform 240ms cubic-bezier(0.22,1,0.36,1)',
+          transition: 'transform 280ms cubic-bezier(0.22,1,0.36,1)',
           maxHeight: '82vh',
+          paddingBottom: 'calc(16px + env(safe-area-inset-bottom))',
         }}
       >
         <div className="flex justify-center pb-1 pt-2.5">
@@ -73,10 +87,11 @@ export default function BottomSheet({
             {title}
           </h3>
         ) : null}
-        <div className="max-h-[74vh] overflow-y-auto px-4 pb-5 pt-1" style={{ overscrollBehavior: 'contain' }}>
+        <div className="max-h-[70vh] overflow-y-auto px-4 pt-1" style={{ overscrollBehavior: 'contain' }}>
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

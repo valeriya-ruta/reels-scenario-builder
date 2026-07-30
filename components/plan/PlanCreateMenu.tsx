@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus } from 'lucide-react';
-import BottomSheet from '@/components/ui/BottomSheet';
+import CenterModal from '@/components/ui/CenterModal';
 import { RADIAL_OPTIONS, type RadialOptionId } from '@/components/CreateRadialMenu';
 import { CONTENT_TYPES } from '@/lib/contentTypes';
 import { OPEN_BRAINDUMP_FRESH_EVENT } from '@/lib/content/braindumpIdeaEvent';
@@ -39,7 +39,7 @@ export default function PlanCreateMenu() {
         Створити
       </button>
 
-      <BottomSheet open={open} onClose={() => setOpen(false)} title="Створити">
+      <CenterModal open={open} onClose={() => setOpen(false)} title="Створити">
         <div className="flex flex-col">
           {RADIAL_OPTIONS.map((opt) => {
             const { Icon } = opt;
@@ -49,7 +49,7 @@ export default function PlanCreateMenu() {
                 type="button"
                 data-testid={`plan-create-${opt.id}`}
                 onClick={() => select(opt.id)}
-                className="flex min-h-[52px] items-center gap-3 rounded-xl px-3 text-left transition-colors hover:bg-zinc-100"
+                className="flex min-h-[52px] items-center gap-3 rounded-[14px] px-3 text-left transition-colors hover:bg-[color:var(--surface1)]"
               >
                 <span
                   className="flex h-9 w-9 items-center justify-center rounded-full text-white"
@@ -62,7 +62,7 @@ export default function PlanCreateMenu() {
             );
           })}
         </div>
-      </BottomSheet>
+      </CenterModal>
     </>
   );
 }
