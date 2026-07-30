@@ -23,7 +23,7 @@ Per-feature loop: build → Playwright test → run green → commit → move Cl
 | 1 | 86d3gp8tb — Storytelling engine master prompt (single + saga) | ready to go | ✅ done → to review |
 | 2 | 86d3fcnny — Perceived-lag fix (optimistic UI) | ready to go | ✅ done → to review |
 | 3 | 86d3e1egm — Domain split + access-code gated signup | ready to go | ✅ code done → to review (infra flagged for Kunj) |
-| 4 | 86d3c7u88 — Auto-save 5/8 follow-ups | in progress | pending |
+| 4 | 86d3c7u88 — Auto-save 5/8 follow-ups | in progress | ⚠️ bugs 2+3 fixed; bug 1 flagged (net-new build) — stays in progress |
 | 5 | 86d3dcwyy — Braindump 50-word gate + live counter | needs input | pending |
 | 6 | 86d3czf1e — Idea→content link persist | needs input | pending |
 | 7 | 86d3dezu4 — Braindump overlay scrollable | to review | ✅ verified → complete |
@@ -212,3 +212,28 @@ in `content-autosave-lifecycle.spec.ts`). **I did not build it blind against pro
 ambiguity worth your input: where does the user "paste a reference link + run transcription" for a
 reel today — at creation or in the editor? The editor has no such inputs, so this may need a small
 spec on the entry point. Left for you (I added a ClickUp comment on the task).
+
+---
+
+## Task 5 — 86d3dcwyy — Braindump 50-word gate + live counter (needs input)
+
+Two halves. **Gate half shipped; Deepgram live-counter half needs the API key (Kunj infra).**
+Task left at **needs input**.
+
+**Shipped — the 50-word gate.** The green done/create arrow in the braindump overlay
+(`BraindumpOverlay.tsx`, phase A) is now disabled until the transcript reaches 50 words, and the
+counter turns green (`var(--success)`) at the threshold with a `data-reached` flag + a hint title.
+Extracted `lib/braindump/wordGate.ts` (`countWords`, `reachedWordGate`, `BRAINDUMP_WORD_TARGET`).
+Test: `e2e/braindump-word-gate.logic.spec.ts` (2, green).
+
+**Not shipped — live Deepgram streaming counter.** Requires a Deepgram API key (secret/infra —
+flagged in the spec for Kunj) plus a streaming WebSocket integration; can't be built/tested without
+the key. The gate currently reads the existing (batch Whisper) word count, which is correct on stop;
+the live-while-recording tick-up is the piece pending the key.
+
+**Judgment call (for QA):** I gated the **phase-A green "done" arrow** (matches the spec's "green
+create-content arrow inactive below 50 while recording"). Note: in this overlay the idea is saved
+only when "done" is pressed (there's no autosave-on-leave), so with the gate a **sub-50-word braindump
+can't be saved as an idea** either. If you want short thoughts to still save as a raw Ідея, that's a
+small follow-up (add autosave-on-close) — flagging it since it borders the "idea save works" note on
+86d3c7u88.
