@@ -6,14 +6,15 @@ import { aiLimit } from '@/lib/ratelimit';
 export const runtime = 'nodejs';
 
 export async function POST(req: Request) {
-  let body: { rant?: string };
+  let body: { rant?: string; name?: string };
   try {
-    body = (await req.json()) as { rant?: string };
+    body = (await req.json()) as { rant?: string; name?: string };
   } catch {
     return NextResponse.json({ error: 'Некоректний формат запиту.' }, { status: 400 });
   }
 
   const rant = body.rant?.trim();
+  const name = body.name?.trim() ?? '';
   if (!rant) {
     return NextResponse.json({ error: 'Введи рент перед генерацією.' }, { status: 400 });
   }
@@ -35,7 +36,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const normalized = await generateStoriesFromRant(rant);
+    const normalized = await generateStoriesFromRant(rant, name);
     return NextResponse.json(normalized);
   } catch (error) {
     const message =

@@ -38,22 +38,32 @@ export async function createStorytellingColumn(
   projectId: string,
   name: string,
   orderIndex: number,
+  ids?: { columnId?: string; storyId?: string },
 ): Promise<{ column: StorytellingColumn; story: StorytellingStory } | null> {
   const user = await requireAuth();
   if (!user) return null;
   const supabase = await createServerSupabaseClient();
 
+  // Client-provided ids (optimistic UI): the client already rendered the column
+  // + first story under these ids, so persist them as-is rather than minting new
+  // ones — keeps StoryCard autosave targeting a real row with no reconcile race.
+  const columnInsert: Record<string, unknown> = { project_id: projectId, name, order_index: orderIndex };
+  if (ids?.columnId) columnInsert.id = ids.columnId;
+
   const { data: column, error } = await supabase
     .from('storytelling_columns')
-    .insert({ project_id: projectId, name, order_index: orderIndex })
+    .insert(columnInsert)
     .select()
     .single();
 
   if (error || !column) return null;
 
+  const storyInsert: Record<string, unknown> = { column_id: column.id, order_index: 0, text: '' };
+  if (ids?.storyId) storyInsert.id = ids.storyId;
+
   const { data: story, error: storyErr } = await supabase
     .from('storytelling_stories')
-    .insert({ column_id: column.id, order_index: 0, text: '' })
+    .insert(storyInsert)
     .select()
     .single();
 
@@ -104,14 +114,18 @@ export async function reorderStorytellingColumns(projectId: string, columnIds: s
 export async function createStorytellingStory(
   columnId: string,
   orderIndex: number,
+  id?: string,
 ): Promise<StorytellingStory | null> {
   const user = await requireAuth();
   if (!user) return null;
   const supabase = await createServerSupabaseClient();
 
+  const storyInsert: Record<string, unknown> = { column_id: columnId, order_index: orderIndex, text: '' };
+  if (id) storyInsert.id = id;
+
   const { data, error } = await supabase
     .from('storytelling_stories')
-    .insert({ column_id: columnId, order_index: orderIndex, text: '' })
+    .insert(storyInsert)
     .select()
     .single();
 
@@ -185,6 +199,7 @@ export type CreateStorytellingFromRantResult =
  */
 export async function createStorytellingProjectFromRant(
   rant: string,
+  name = '',
 ): Promise<CreateStorytellingFromRantResult> {
   const user = await requireAuth();
   if (!user) {
@@ -203,7 +218,7 @@ export async function createStorytellingProjectFromRant(
 
   let output: Awaited<ReturnType<typeof generateStoriesFromRant>>;
   try {
-    output = await generateStoriesFromRant(trimmed);
+    output = await generateStoriesFromRant(trimmed, name);
   } catch (error) {
     const message =
       error instanceof Error && error.message.trim().length > 0
@@ -213,7 +228,7 @@ export async function createStorytellingProjectFromRant(
   }
 
   const supabase = await createServerSupabaseClient();
-  const projectName = output.template_name.trim() || 'Сторітел з ренту';
+  const projectName = (name.trim() || output.template_name.trim() || 'Сторітел з ренту').slice(0, 120);
 
   const { data: project, error: projectError } = await supabase
     .from('storytelling_projects')
@@ -226,35 +241,42 @@ export async function createStorytellingProjectFromRant(
     return { ok: false, error: 'Не вдалося створити проєкт сторітелу.' };
   }
 
-  const columnName = `Шаблон ${output.template_used} — ${output.template_name}`.slice(0, 120);
+  // One column per day. A single story => one column; a saga => one column per
+  // day (the storytelling board already renders N columns, so no new UI needed).
+  const days = output.days.length > 0 ? output.days : [{ day_number: 1, title: projectName, slides: output.slides }];
 
-  const { data: column, error: columnError } = await supabase
-    .from('storytelling_columns')
-    .insert({ project_id: project.id, name: columnName, order_index: 0 })
-    .select()
-    .single();
+  for (let d = 0; d < days.length; d++) {
+    const day = days[d];
+    const columnName = (day.title?.trim() || `День ${d + 1}`).slice(0, 120);
 
-  if (columnError || !column) {
-    await supabase.from('storytelling_projects').delete().eq('id', project.id);
-    console.error('createStorytellingProjectFromRant column', columnError);
-    return { ok: false, error: 'Не вдалося створити колонку сторітелу.' };
-  }
+    const { data: column, error: columnError } = await supabase
+      .from('storytelling_columns')
+      .insert({ project_id: project.id, name: columnName, order_index: d })
+      .select()
+      .single();
 
-  const rows = output.slides.map((slide, index) => ({
-    column_id: column.id,
-    order_index: index,
-    text: formatSlideTextForStorytelling(slide),
-    visual: mapSlideVisualToDb(slide.visual),
-    engagement: mapSlideInteractiveToDb(slide.interactive),
-  }));
+    if (columnError || !column) {
+      await supabase.from('storytelling_projects').delete().eq('id', project.id);
+      console.error('createStorytellingProjectFromRant column', columnError);
+      return { ok: false, error: 'Не вдалося створити колонку сторітелу.' };
+    }
 
-  const { error: storiesError } = await supabase.from('storytelling_stories').insert(rows);
+    const rows = day.slides.map((slide, index) => ({
+      column_id: column.id,
+      order_index: index,
+      text: formatSlideTextForStorytelling(slide),
+      visual: mapSlideVisualToDb(slide.visual),
+      engagement: mapSlideInteractiveToDb(slide.interactive),
+    }));
 
-  if (storiesError) {
-    await supabase.from('storytelling_columns').delete().eq('id', column.id);
-    await supabase.from('storytelling_projects').delete().eq('id', project.id);
-    console.error('createStorytellingProjectFromRant stories', storiesError);
-    return { ok: false, error: 'Не вдалося зберегти сторіс. Спробуй ще раз.' };
+    if (rows.length > 0) {
+      const { error: storiesError } = await supabase.from('storytelling_stories').insert(rows);
+      if (storiesError) {
+        await supabase.from('storytelling_projects').delete().eq('id', project.id);
+        console.error('createStorytellingProjectFromRant stories', storiesError);
+        return { ok: false, error: 'Не вдалося зберегти сторіс. Спробуй ще раз.' };
+      }
+    }
   }
 
   await supabase

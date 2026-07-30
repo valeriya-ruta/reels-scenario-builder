@@ -13,6 +13,7 @@ type Row = {
   user_id: string;
   name: string | null;
   status: string | null;
+  scheduled_date: string | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -24,7 +25,7 @@ export default async function StorytellingsPage() {
   const supabase = await createServerSupabaseClient();
   const { data: projects, error } = await supabase
     .from('storytelling_projects')
-    .select('id, user_id, name, status, created_at, updated_at')
+    .select('id, user_id, name, status, scheduled_date, created_at, updated_at')
     .eq('user_id', user.id)
     .order('updated_at', { ascending: false });
 
@@ -38,6 +39,7 @@ export default async function StorytellingsPage() {
     status: (p.status ?? 'idea') as ContentStatus,
     title: p.name?.trim() || 'Без назви',
     refTable: 'storytelling_projects',
+    scheduledDate: p.scheduled_date ?? null,
     createdAt: p.created_at ?? now,
     updatedAt: p.updated_at ?? now,
   }));

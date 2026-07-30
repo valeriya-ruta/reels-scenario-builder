@@ -16,9 +16,22 @@ export type ContentPiece = {
   text?: string;
   /** Underlying table the piece lives in (for opening the right editor). */
   refTable: 'carousel_projects' | 'projects' | 'storytelling_projects' | 'ideas';
+  /** Calendar placement (YYYY-MM-DD) or null if unscheduled (task 86d3d23nj). */
+  scheduledDate: string | null;
   createdAt: string;
   updatedAt: string;
 };
+
+/**
+ * A row that lives in the `ideas` table always reopens the braindump overlay
+ * (task 86d3c7u88 bug 3) — never a content editor. Routing keys off the table,
+ * not `type`, so a promoted idea (still in `ideas`, content_type flipped to
+ * reel/carousel/story) also reopens the braindump instead of falling through to
+ * the old dead `/?idea=` route.
+ */
+export function opensBraindumpOverlay(piece: Pick<ContentPiece, 'type' | 'refTable'>): boolean {
+  return piece.refTable === 'ideas' || piece.type === 'idea';
+}
 
 /** Route a content piece to its editor URL (used by the row's tap-to-open). */
 export function contentHref(piece: Pick<ContentPiece, 'type' | 'refTable' | 'id'>): string {
@@ -30,7 +43,9 @@ export function contentHref(piece: Pick<ContentPiece, 'type' | 'refTable' | 'id'
     case 'storytelling_projects':
       return `/storytelling/${piece.id}`;
     case 'ideas':
-      return `/?idea=${piece.id}`;
+      // Ideas open the braindump overlay (see opensBraindumpOverlay), so this is
+      // only a safety fallback — never the old dead `/?idea=` route.
+      return '/dashboard';
     default:
       return '/';
   }

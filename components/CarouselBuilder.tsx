@@ -19,6 +19,7 @@ import {
   resolveTitleAndBodyColors,
 } from '@/lib/carousel/colorSystem';
 import Link from 'next/link';
+import ScheduleChip from '@/components/content/ScheduleChip';
 import { resolveBrandFont } from '@/lib/brandFonts';
 import CarouselEditorLayout from '@/components/carousel/CarouselEditorLayout';
 import CarouselExportOverlay from '@/components/carousel/CarouselExportOverlay';
@@ -250,6 +251,7 @@ export interface CarouselBuilderProps {
   projectId: string;
   initialProjectName: string;
   initialSlides: Slide[];
+  initialScheduledDate?: string | null;
 }
 
 /** Small, fast string hash (djb2) — keeps the export fingerprint cache keys
@@ -279,6 +281,7 @@ export default function CarouselBuilder({
   projectId,
   initialProjectName,
   initialSlides,
+  initialScheduledDate = null,
 }: CarouselBuilderProps) {
   const { brandSettings } = useBrandStore();
   const brandFont = useMemo(() => resolveBrandFont(brandSettings?.fontId), [brandSettings?.fontId]);
@@ -981,11 +984,15 @@ export default function CarouselBuilder({
           <span className="text-sm text-zinc-500">
             {slides.length} / {MAX_SLIDES}
           </span>
+          {/* Entry point 1: schedule chip near Експорт (task 86d3d23nj). */}
+          <span className="ml-auto">
+            <ScheduleChip refTable="carousel_projects" id={projectId} initialDate={initialScheduledDate} />
+          </span>
           <button
             type="button"
             disabled={isGenerating}
             onClick={() => startExport()}
-            className="ml-auto hidden items-center justify-center gap-2 rounded-xl bg-[color:var(--accent)] px-4 py-2 text-sm font-medium text-white transition hover:brightness-110 disabled:opacity-50 md:inline-flex"
+            className="hidden items-center justify-center gap-2 rounded-xl bg-[color:var(--accent)] px-4 py-2 text-sm font-medium text-white transition hover:brightness-110 disabled:opacity-50 md:inline-flex"
           >
             {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
             {isGenerating ? 'Експортуємо…' : 'Експортувати'}

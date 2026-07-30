@@ -39,6 +39,12 @@ export default defineConfig({
   },
 
   projects: [
+    // Pure-logic specs (`*.logic.spec.ts`): no browser, no auth-setup dependency,
+    // no dev server. These test deterministic core logic (e.g. AI-output
+    // normalization) and run green with zero configuration. Because they never
+    // touch the `page` fixture, Playwright never launches a browser for them.
+    { name: 'logic', testMatch: /\.logic\.spec\.ts$/ },
+
     // Logs in seeded test users and writes storage-state files. Skips cleanly
     // when E2E_* credentials are not configured.
     { name: 'setup', testMatch: /auth\.setup\.ts/ },
@@ -47,17 +53,22 @@ export default defineConfig({
     // mobile-first, so destination/nav specs run against a phone viewport.
     {
       name: 'mobile-chromium',
+      testIgnore: /\.logic\.spec\.ts$/,
       use: { ...devices['Pixel 5'] },
       dependencies: ['setup'],
     },
   ],
 
-  webServer: {
-    command: 'npm run dev',
-    url: baseURL,
-    timeout: 180_000,
-    reuseExistingServer: !process.env.CI,
-    stdout: 'ignore',
-    stderr: 'pipe',
-  },
+  // The dev server is only needed for browser specs. Logic specs skip it via
+  // PW_SKIP_WEBSERVER=1 so they can run in environments without a booted app.
+  webServer: process.env.PW_SKIP_WEBSERVER
+    ? undefined
+    : {
+        command: 'npm run dev',
+        url: baseURL,
+        timeout: 180_000,
+        reuseExistingServer: !process.env.CI,
+        stdout: 'ignore',
+        stderr: 'pipe',
+      },
 });

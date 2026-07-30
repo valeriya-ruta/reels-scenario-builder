@@ -6,7 +6,7 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 function isPublicPath(pathname: string): boolean {
-  if (pathname === '/' || pathname === '/signup') return true;
+  if (pathname === '/' || pathname === '/login' || pathname === '/signup') return true;
   if (pathname.startsWith('/auth')) return true;
   if (pathname === '/subscribe' || pathname === '/trial/success') return true;
   if (pathname.startsWith('/share')) return true;

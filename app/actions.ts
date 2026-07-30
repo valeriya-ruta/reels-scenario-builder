@@ -361,6 +361,27 @@ export async function updateScene(sceneId: string, updates: Partial<Scene>) {
     .from('scenes')
     .update(updates)
     .eq('id', sceneId);
+
+  // Authored-script promotion (task 86d3c7u88 bug 2): the moment the user writes
+  // real script text into a scene, a reel sitting at Ідея auto-promotes to
+  // Скрипт. Raw transcription poured into scenes at creation uses a different
+  // path (bulk insert), so it never trips this. Best-effort, and the
+  // `.eq('status','idea')` guard means it never clobbers a manually-advanced
+  // status (film/design/…).
+  if (typeof updates.lines === 'string' && updates.lines.trim().length > 0) {
+    const { data: scene } = await supabase
+      .from('scenes')
+      .select('project_id')
+      .eq('id', sceneId)
+      .single();
+    if (scene?.project_id) {
+      await supabase
+        .from('projects')
+        .update({ status: 'script' })
+        .eq('id', scene.project_id)
+        .eq('status', 'idea');
+    }
+  }
 }
 
 export async function deleteScene(sceneId: string) {

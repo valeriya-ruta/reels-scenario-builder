@@ -43,6 +43,35 @@ export async function setContentStatus(
 }
 
 /**
+ * Schedule (or unschedule) a content piece on the План calendar (task 86d3d23nj).
+ * `date` is 'YYYY-MM-DD' to place it, or null to clear. Ownership-enforced; does
+ * NOT bump updated_at (scheduling shouldn't reorder the recents list).
+ */
+export async function setContentScheduledDate(
+  refTable: ContentPiece['refTable'],
+  id: string,
+  date: string | null,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await requireAuth();
+  if (!user) return { ok: false, error: 'UNAUTHORIZED' };
+  if (!ALLOWED_TABLES.includes(refTable)) return { ok: false, error: 'BAD_TABLE' };
+  if (date !== null && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return { ok: false, error: 'BAD_DATE' };
+
+  const supabase = await createServerSupabaseClient();
+  const { error } = await supabase
+    .from(refTable)
+    .update({ scheduled_date: date })
+    .eq('id', id)
+    .eq('user_id', user.id);
+
+  if (error) {
+    console.error('[content] setContentScheduledDate failed', { refTable, id, date, message: error.message });
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
+}
+
+/**
  * Delete a content piece from whichever table it lives in (ref_table), enforcing
  * ownership. Used by swipe-to-delete on the all-content rows (Home + «Твій
  * контент»), where pieces are a mix of types — task 86d3d2fqy.

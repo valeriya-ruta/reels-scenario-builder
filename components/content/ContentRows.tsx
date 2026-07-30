@@ -4,8 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import StatusRing from '@/components/content/StatusRing';
 import SwipeRow from '@/components/content/SwipeRow';
-import { setContentStatus, deleteContentPiece } from '@/app/content-actions';
-import { contentHref, type ContentPiece } from '@/lib/content/contentPiece';
+import { setContentStatus, deleteContentPiece, setContentScheduledDate } from '@/app/content-actions';
+import { contentHref, opensBraindumpOverlay, type ContentPiece } from '@/lib/content/contentPiece';
 import { OPEN_BRAINDUMP_IDEA_EVENT } from '@/lib/content/braindumpIdeaEvent';
 import {
   STATUS_COLORS,
@@ -97,7 +97,7 @@ export default function ContentRows({
 
   const advance = useCallback(
     (piece: ContentPiece) => {
-      if (piece.type === 'idea') {
+      if (opensBraindumpOverlay(piece)) {
         openIdea(piece);
         return;
       }
@@ -111,13 +111,28 @@ export default function ContentRows({
 
   const open = useCallback(
     (piece: ContentPiece) => {
-      if (piece.type === 'idea') {
+      if (opensBraindumpOverlay(piece)) {
         openIdea(piece);
         return;
       }
       router.push(contentHref(piece));
     },
     [router, openIdea],
+  );
+
+  // Swipe 📅 DATE action → optimistically stamp/clear scheduled_date (task 86d3d23nj).
+  const schedule = useCallback(
+    (piece: ContentPiece, date: string | null) => {
+      const prev = piece.scheduledDate;
+      setItems((list) => list.map((p) => (p.id === piece.id ? { ...p, scheduledDate: date } : p)));
+      void setContentScheduledDate(piece.refTable, piece.id, date).then((res) => {
+        if (!res.ok) {
+          setItems((list) => list.map((p) => (p.id === piece.id ? { ...p, scheduledDate: prev } : p)));
+          onHint?.('Не вдалося запланувати');
+        }
+      });
+    },
+    [onHint],
   );
 
   // --- swipe-to-delete (optimistic + 4s undo) ---
@@ -173,6 +188,8 @@ export default function ContentRows({
             }}
             onArm={() => setArmedId(piece.id)}
             onDelete={() => removeRow(piece)}
+            onSchedule={(date) => schedule(piece, date)}
+            scheduledDate={piece.scheduledDate}
             onTap={() => {
               closeAll();
               open(piece);

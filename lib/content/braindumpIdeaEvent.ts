@@ -7,6 +7,12 @@ export const OPEN_BRAINDUMP_IDEA_EVENT = 'ruta:open-braindump-idea';
 
 export type OpenBraindumpIdeaDetail = { id: string; text: string };
 
+/** Dispatch the "reopen braindump with this idea" event (shared by content lists). */
+export function dispatchOpenBraindumpIdea(id: string, text: string): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(OPEN_BRAINDUMP_IDEA_EVENT, { detail: { id, text } }));
+}
+
 /**
  * Window event used to open the SAME global braindump overlay for a FRESH
  * capture (no pre-loaded idea) — the desktop sidebar's "Наговорити" create

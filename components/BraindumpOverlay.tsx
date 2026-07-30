@@ -3,12 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Mic, Keyboard, Check, X } from 'lucide-react';
 import { pickBraindumpPrompt } from '@/lib/braindumpPrompts';
+import { countWords, BRAINDUMP_WORD_TARGET } from '@/lib/braindump/wordGate';
 import { CONTENT_TYPES, CONTENT_TYPE_ORDER, type ContentType } from '@/lib/contentTypes';
 import ContentTypeIcon from '@/components/ContentTypeIcon';
 import BlurScrim from '@/components/BlurScrim';
 import { generateReelFromRant } from '@/app/actions';
 import { createStorytellingProjectFromRant } from '@/app/storytelling-actions';
 import { createCarouselProjectFromRant } from '@/app/carousel-actions';
+import { linkIdeaToContent, getIdeaContentLinks } from '@/app/ideas-actions';
 import type { CarouselRantOutput } from '@/lib/carouselTypes';
 
 /**
@@ -27,18 +29,13 @@ import type { CarouselRantOutput } from '@/lib/carouselTypes';
  * audio code. Auto-save posts to /api/ideas/braindump.
  */
 
-const SOFT_WORD_TARGET = 50;
+const SOFT_WORD_TARGET = BRAINDUMP_WORD_TARGET;
 const ACCENT = '#004BA8';
 
 type Phase = 'A' | 'B';
 type InputMode = 'voice' | 'type';
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 type TypeStatus = 'idle' | 'loading' | 'done' | 'error';
-
-function countWords(text: string): number {
-  const t = text.trim();
-  return t ? t.split(/\s+/).filter(Boolean).length : 0;
-}
 
 function pickRecorderMime(): string | undefined {
   if (typeof MediaRecorder === 'undefined') return undefined;
@@ -102,6 +99,16 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
       setText(initialIdea.text);
       setSavedId(initialIdea.id);
       setSaveStatus('saved');
+      // Reflect content already created from this idea: mark those types 'done'
+      // so we show the created state instead of offering a duplicate (86d3czf1e).
+      void getIdeaContentLinks(initialIdea.id).then((types) => {
+        if (types.length === 0) return;
+        setTypeStatus((s) => {
+          const next = { ...s };
+          for (const t of types) next[t] = 'done';
+          return next;
+        });
+      });
     } else {
       setPhase('A');
       setText('');
@@ -268,12 +275,15 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
       setTypeStatus((s) => ({ ...s, [type]: 'loading' }));
       try {
         let ok = false;
+        let createdId: string | null = null;
         if (type === 'reels') {
           const r = await generateReelFromRant(snapshot);
           ok = r.ok;
+          if (r.ok) createdId = r.projectId;
         } else if (type === 'stories') {
           const r = await createStorytellingProjectFromRant(snapshot);
           ok = r.ok;
+          if (r.ok) createdId = r.projectId;
         } else {
           const res = await fetch('/api/carousel/rant-to-slides', {
             method: 'POST',
@@ -284,14 +294,20 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
           if (res.ok && data.slides?.length) {
             const created = await createCarouselProjectFromRant(data, snapshot);
             ok = created.ok;
+            if (created.ok) createdId = created.projectId;
           }
         }
         setTypeStatus((s) => ({ ...s, [type]: ok ? 'done' : 'error' }));
+        // Persist the idea → content link so reopening this idea shows the
+        // already-created type and never offers a duplicate (task 86d3czf1e).
+        if (ok && createdId && savedId) {
+          void linkIdeaToContent(savedId, type, createdId);
+        }
       } catch {
         setTypeStatus((s) => ({ ...s, [type]: 'error' }));
       }
     },
-    [typeStatus]
+    [typeStatus, savedId]
   );
 
   // Keep the transcript scrolled to its newest content (State A) so appended
@@ -315,6 +331,10 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
   if (!open) return null;
 
   const words = countWords(text);
+  // 50-word gate (task 86d3dcwyy): a braindump must reach the target before the
+  // user can turn it into content. The green "done/create" arrow is inactive
+  // below the threshold and flips active at ≥50 as the count ticks up.
+  const reachedWordGate = words >= SOFT_WORD_TARGET;
 
   return (
     // One shared full-screen scrim for EVERY page braindump can open from (it is
@@ -467,8 +487,9 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
                   onClick={handleDone}
                   data-testid="braindump-done"
                   aria-label="Готово"
-                  disabled={transcribing}
-                  className="flex h-14 w-14 items-center justify-center rounded-full text-white shadow-md transition-transform active:scale-95 disabled:opacity-50"
+                  disabled={transcribing || !reachedWordGate}
+                  title={reachedWordGate ? 'Готово' : `Треба щонайменше ${SOFT_WORD_TARGET} слів`}
+                  className="flex h-14 w-14 items-center justify-center rounded-full text-white shadow-md transition-transform active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
                   style={{ backgroundColor: 'var(--success)' }}
                 >
                   <Check className="h-7 w-7" strokeWidth={2.4} />
@@ -476,7 +497,12 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
               </div>
 
               <div className="flex items-center justify-between">
-                <span data-testid="braindump-counter" className="text-xs tabular-nums text-zinc-400">
+                <span
+                  data-testid="braindump-counter"
+                  data-reached={reachedWordGate ? 'true' : 'false'}
+                  className="text-xs font-medium tabular-nums transition-colors"
+                  style={{ color: reachedWordGate ? 'var(--success)' : '#a1a1aa' }}
+                >
                   {words}/{SOFT_WORD_TARGET}
                 </span>
 

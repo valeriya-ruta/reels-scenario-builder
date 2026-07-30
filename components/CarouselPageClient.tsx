@@ -12,7 +12,7 @@ export default function CarouselPageClient({
   carouselProject,
 }: {
   initialBrandSettings: BrandSettings | null;
-  carouselProject: { id: string; name: string; slides: Slide[] };
+  carouselProject: { id: string; name: string; slides: Slide[]; scheduledDate: string | null };
 }) {
   const { brandSettings, loading, refetchBrand, setBrandSettings } = useBrandStore();
   const effectiveBrandSettings = brandSettings ?? initialBrandSettings;
@@ -46,6 +46,7 @@ export default function CarouselPageClient({
         projectId={carouselProject.id}
         initialProjectName={carouselProject.name}
         initialSlides={carouselProject.slides}
+        initialScheduledDate={carouselProject.scheduledDate}
       />
     </div>
   );

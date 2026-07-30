@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation';
 import { ChevronRight, Film, LayoutGrid, Play } from 'lucide-react';
 import StatusRing from '@/components/content/StatusRing';
 import SwipeRow from '@/components/content/SwipeRow';
-import { setContentStatus } from '@/app/content-actions';
-import { contentHref, type ContentPiece } from '@/lib/content/contentPiece';
+import { setContentStatus, setContentScheduledDate } from '@/app/content-actions';
+import { contentHref, opensBraindumpOverlay, type ContentPiece } from '@/lib/content/contentPiece';
+import { dispatchOpenBraindumpIdea } from '@/lib/content/braindumpIdeaEvent';
 import { STATUS_COLORS, STATUS_LABELS, nextStatus, type ContentStatus } from '@/lib/content/statusSystem';
 import { formatShortDate } from '@/lib/content/relativeTime';
 
@@ -99,6 +100,17 @@ export default function SwipeableContentList({
     [items, onDelete, commitDelete],
   );
 
+  // Swipe 📅 DATE action → optimistically stamp/clear scheduled_date (task 86d3d23nj).
+  const schedule = useCallback((piece: ContentPiece, date: string | null) => {
+    const prev = piece.scheduledDate;
+    setItems((list) => list.map((p) => (p.id === piece.id ? { ...p, scheduledDate: date } : p)));
+    void setContentScheduledDate(piece.refTable, piece.id, date).then((res) => {
+      if (!res.ok) {
+        setItems((list) => list.map((p) => (p.id === piece.id ? { ...p, scheduledDate: prev } : p)));
+      }
+    });
+  }, []);
+
   const restore = useCallback(() => {
     if (undoTimer.current) clearTimeout(undoTimer.current);
     setUndo((cur) => {
@@ -123,6 +135,10 @@ export default function SwipeableContentList({
   // the piece exactly one stage along its track; optimistic with rollback.
   const advance = useCallback(
     (piece: ContentPiece) => {
+      if (opensBraindumpOverlay(piece)) {
+        dispatchOpenBraindumpIdea(piece.id, piece.text ?? piece.title);
+        return;
+      }
       const current = statusById[piece.id] ?? piece.status;
       const next = nextStatus(piece.type, current);
       if (!next) return; // already at the final stage → gentle no-op
@@ -183,8 +199,14 @@ export default function SwipeableContentList({
                 }}
                 onArm={() => setArmedId(piece.id)}
                 onDelete={() => removeRow(piece)}
+                onSchedule={(date) => schedule(piece, date)}
+                scheduledDate={piece.scheduledDate}
                 onTap={() => {
                   closeAll();
+                  if (opensBraindumpOverlay(piece)) {
+                    dispatchOpenBraindumpIdea(piece.id, piece.text ?? piece.title);
+                    return;
+                  }
                   router.push(contentHref(piece));
                 }}
               >

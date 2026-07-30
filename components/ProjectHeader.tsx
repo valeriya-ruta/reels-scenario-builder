@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Project } from '@/lib/domain';
 import { updateProjectName, createSnapshot } from '@/app/actions';
 import ShareModal from './ShareModal';
+import ScheduleChip from './content/ScheduleChip';
 
 interface ProjectHeaderProps {
   project: Project;
@@ -132,14 +133,23 @@ export default function ProjectHeader({
             )}
           </div>
 
-          <button
-            type="button"
-            onClick={handleShare}
-            disabled={isSharing}
-            className="btn-primary shrink-0 rounded-xl bg-[color:var(--accent)] px-4 py-2 text-sm font-medium text-white transition-[background,transform] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            {isSharing ? 'Створюю посилання...' : 'Поділитися'}
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            {/* Entry point 1: schedule chip near Поділитися (task 86d3d23nj).
+                Exact placement across the 3 editors is an OPEN question. */}
+            <ScheduleChip
+              refTable="projects"
+              id={project.id}
+              initialDate={project.scheduled_date ?? null}
+            />
+            <button
+              type="button"
+              onClick={handleShare}
+              disabled={isSharing}
+              className="btn-primary rounded-xl bg-[color:var(--accent)] px-4 py-2 text-sm font-medium text-white transition-[background,transform] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {isSharing ? 'Створюю посилання...' : 'Поділитися'}
+            </button>
+          </div>
         </div>
         {errorMessage && <p className="text-sm text-red-600">{errorMessage}</p>}
       </div>

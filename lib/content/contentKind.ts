@@ -73,12 +73,20 @@ export function carouselSignals(name: string | null | undefined, slides: Carouse
  */
 export function reelSignals(
   project: { name?: string | null; reference_url?: string | null; reference_note?: string | null },
-  scenes: { description?: string | null; dialogue?: string | null; script?: string | null }[],
+  scenes: {
+    /** Authored script text for a scene (the real column on `scenes`). */
+    lines?: string | null;
+    description?: string | null;
+    dialogue?: string | null;
+    script?: string | null;
+  }[],
 ): ContentSignals {
   const hasName = isUserNamed(project.name);
   const hasRawInput = nonEmpty(project.reference_url) || nonEmpty(project.reference_note);
+  // Authored work = real script text in a scene. The column is `lines`; the older
+  // description/dialogue/script keys are kept as a tolerant fallback.
   const hasAuthoredWork = scenes.some(
-    (s) => nonEmpty(s.script) || nonEmpty(s.dialogue) || nonEmpty(s.description),
+    (s) => nonEmpty(s.lines) || nonEmpty(s.script) || nonEmpty(s.dialogue) || nonEmpty(s.description),
   );
   return { hasName, hasRawInput, hasAuthoredWork };
 }

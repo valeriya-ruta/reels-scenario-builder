@@ -86,6 +86,7 @@ export default async function CarouselStudioPage({ params }: PageProps) {
           id: projectRow.id,
           name: projectRow.name,
           slides,
+          scheduledDate: projectRow.scheduled_date ?? null,
         }}
       />
     </div>
