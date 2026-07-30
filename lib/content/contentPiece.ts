@@ -18,6 +18,10 @@ export type ContentPiece = {
   refTable: 'carousel_projects' | 'projects' | 'storytelling_projects' | 'ideas';
   /** Calendar placement (YYYY-MM-DD) or null if unscheduled (task 86d3d23nj). */
   scheduledDate: string | null;
+  /** Position within a multi-day generation (1-based), when part of a set. */
+  setIndex?: number | null;
+  /** How many pieces were generated together, when part of a set. */
+  setSize?: number | null;
   createdAt: string;
   updatedAt: string;
 };

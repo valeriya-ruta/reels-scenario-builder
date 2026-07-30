@@ -26,6 +26,8 @@ type ContentPieceRow = {
   title: string | null;
   ref_table: ContentPiece['refTable'];
   scheduled_date: string | null;
+  set_index: number | null;
+  set_size: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -39,6 +41,8 @@ function rowToPiece(row: ContentPieceRow): ContentPiece {
     title: (row.title ?? '').trim() || 'Без назви',
     refTable: row.ref_table,
     scheduledDate: row.scheduled_date ?? null,
+    setIndex: row.set_index ?? null,
+    setSize: row.set_size ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -57,7 +61,7 @@ export async function getAllContent(limit?: number): Promise<ContentPiece[]> {
 
   let query = supabase
     .from('content_pieces')
-    .select('id,user_id,content_type,status,title,ref_table,scheduled_date,created_at,updated_at')
+    .select('id,user_id,content_type,status,title,ref_table,scheduled_date,set_index,set_size,created_at,updated_at')
     .eq('user_id', user.id)
     .order('updated_at', { ascending: false });
 

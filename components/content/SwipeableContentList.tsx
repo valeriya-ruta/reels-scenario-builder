@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ChevronRight, Film, LayoutGrid, Play, CalendarDays, Plus } from 'lucide-react';
 import { dayHeaderLabel } from '@/lib/content/calendar';
 import DateSheet from '@/components/content/DateSheet';
+import SetChip from '@/components/content/SetChip';
 import StatusRing from '@/components/content/StatusRing';
 import SwipeRow from '@/components/content/SwipeRow';
 import { setContentStatus, setContentScheduledDate } from '@/app/content-actions';
@@ -235,8 +236,9 @@ export default function SwipeableContentList({
                   <StatusRing type={piece.type} status={status} size={34} />
                 </button>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[15.5px] font-semibold text-[color:var(--foreground)]">
-                    {piece.title}
+                  <div className="flex items-center text-[15.5px] font-semibold text-[color:var(--foreground)]">
+                    <span className="truncate">{piece.title}</span>
+                    <SetChip piece={piece} />
                   </div>
                   <div className="mt-0.5 text-[12.5px]">
                     <span className="font-medium" style={{ color: STATUS_COLORS[status] }}>

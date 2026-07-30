@@ -249,6 +249,9 @@ export async function createStorytellingProjectFromRant(
 
   const today = new Date();
   const created: CreatedStorytellingDay[] = [];
+  // Sibling tag for a multi-day generation: no parent object (that would break
+  // dating) — just a shared id so the UI can render 1/3, 2/3, 3/3 anywhere.
+  const setId = days.length > 1 ? globalThis.crypto.randomUUID() : null;
 
   for (let d = 0; d < days.length; d++) {
     const day = days[d];
@@ -265,7 +268,12 @@ export async function createStorytellingProjectFromRant(
 
     const { data: project, error: projectError } = await supabase
       .from('storytelling_projects')
-      .insert({ name: dayName, user_id: user.id, scheduled_date: scheduledDate })
+      .insert({
+        name: dayName,
+        user_id: user.id,
+        scheduled_date: scheduledDate,
+        ...(setId ? { set_id: setId, set_index: d + 1, set_size: days.length } : {}),
+      })
       .select()
       .single();
 

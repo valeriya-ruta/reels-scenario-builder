@@ -19,6 +19,7 @@ import {
 } from '@/app/storytelling-actions';
 import StoryCard from './StoryCard';
 import BackLink from '@/components/ui/BackLink';
+import SetNav, { type SetSibling } from '@/components/storytelling/SetNav';
 import { Pencil } from 'lucide-react';
 import {
   genClientId,
@@ -33,6 +34,8 @@ interface Props {
   project: StorytellingProject;
   initialColumns: StorytellingColumn[];
   initialStories: StorytellingStory[];
+  /** Other days of the same generated saga (empty when this is a standalone). */
+  siblings?: SetSibling[];
 }
 
 type ColumnWithStories = StorytellingColumn & { stories: StorytellingStory[] };
@@ -70,7 +73,7 @@ function buildColumnsWithStories(
     }));
 }
 
-export default function StorytellingBuilder({ project: initialProject, initialColumns, initialStories }: Props) {
+export default function StorytellingBuilder({ project: initialProject, initialColumns, initialStories, siblings = [] }: Props) {
   const [project, setProject] = useState(initialProject);
   const [columns, setColumns] = useState<ColumnWithStories[]>(() =>
     buildColumnsWithStories(initialColumns, initialStories),
@@ -290,6 +293,7 @@ export default function StorytellingBuilder({ project: initialProject, initialCo
             </button>
           )}
         </div>
+        <SetNav siblings={siblings} currentId={project.id} />
         {/* Meta pill row: status + date (app UI system — Linear/Superlist). */}
         <div className="mb-6 flex flex-wrap items-center gap-2">
           <StatusPill

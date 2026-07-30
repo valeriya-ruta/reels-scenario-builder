@@ -7,6 +7,7 @@ import type {
   StorytellingStory,
 } from '@/lib/domain';
 import StorytellingBuilder from '@/components/StorytellingBuilder';
+import type { SetSibling } from '@/components/storytelling/SetNav';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -46,11 +47,30 @@ export default async function StorytellingPage({ params }: PageProps) {
     stories = (data as StorytellingStory[]) || [];
   }
 
+  // Sibling days of the same generated saga (own dates + statuses; no parent).
+  let siblings: SetSibling[] = [];
+  const setId = (project as StorytellingProject).set_id;
+  if (setId) {
+    const { data: sibs } = await supabase
+      .from('storytelling_projects')
+      .select('id,name,scheduled_date,set_index')
+      .eq('set_id', setId)
+      .eq('user_id', user.id)
+      .order('set_index', { ascending: true });
+    siblings = (sibs ?? []).map((r: { id: string; name: string; scheduled_date: string | null; set_index: number | null }) => ({
+      id: r.id,
+      name: r.name,
+      scheduledDate: r.scheduled_date,
+      setIndex: r.set_index,
+    }));
+  }
+
   return (
     <StorytellingBuilder
       project={project as StorytellingProject}
       initialColumns={(columns as StorytellingColumn[]) || []}
       initialStories={stories}
+      siblings={siblings}
     />
   );
 }

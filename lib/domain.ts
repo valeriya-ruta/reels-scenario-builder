@@ -231,6 +231,10 @@ export interface StorytellingProject {
   name: string;
   created_at: string;
   updated_at: string;
+  /** Sibling tag for a multi-day generation (no parent object). */
+  set_id?: string | null;
+  set_index?: number | null;
+  set_size?: number | null;
   /** План calendar placement (YYYY-MM-DD) or null if unscheduled (task 86d3d23nj). */
   scheduled_date?: string | null;
   /** Content status for the status ring/picker (Status system). */

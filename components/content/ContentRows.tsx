@@ -19,6 +19,7 @@ import {
 import { formatRelativeTime } from '@/lib/content/relativeTime';
 import { dayHeaderLabel } from '@/lib/content/calendar';
 import DateSheet from '@/components/content/DateSheet';
+import SetChip from '@/components/content/SetChip';
 
 /**
  * Interactive list of content rows (Status system 4/8). Shared by the Home
@@ -216,8 +217,9 @@ export default function ContentRows({
               <StatusRing type={piece.type} status={piece.status} size={30} />
             </button>
             <div className="min-w-0 flex-1">
-              <div className="truncate text-[15px] font-semibold text-[color:var(--foreground)]">
-                {piece.title || 'Без назви'}
+              <div className="flex items-center text-[15px] font-semibold text-[color:var(--foreground)]">
+                <span className="truncate">{piece.title || 'Без назви'}</span>
+                <SetChip piece={piece} />
               </div>
               <div className="mt-0.5 flex items-center gap-1.5 text-[12px] text-zinc-500">
                 <span className="shrink-0 font-medium" style={{ color: STATUS_COLORS[piece.status] }}>
