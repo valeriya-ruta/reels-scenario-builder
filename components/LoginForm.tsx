@@ -76,7 +76,7 @@ export default function LoginForm({ initialFlow = 'sign-in' }: LoginFormProps) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="card-shadow space-y-4 rounded-xl border border-[color:var(--border)] bg-white p-6"
+      className="app-card space-y-4 p-6"
     >
       {error && (
         <div className="rounded bg-red-50 px-3 py-2 text-sm text-red-700 border border-red-200">
@@ -102,7 +102,7 @@ export default function LoginForm({ initialFlow = 'sign-in' }: LoginFormProps) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               required={isSignUp}
-              className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm leading-normal text-zinc-900 placeholder-zinc-500 focus:border-[color:var(--accent)] focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]/25"
+              className="mt-1 w-full rounded-[10px] border border-[color:var(--border)] bg-white px-3.5 py-2.5 text-[15px] leading-normal text-[color:var(--foreground)] placeholder-[color:var(--text-muted)] outline-none transition focus:border-[color:var(--accent)] focus:ring-2 focus:ring-[color:var(--accent)]/15"
               placeholder="Як тебе звати?"
             />
           </div>
@@ -118,7 +118,7 @@ export default function LoginForm({ initialFlow = 'sign-in' }: LoginFormProps) {
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               required={isSignUp}
-              className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm leading-normal text-zinc-900 placeholder-zinc-500 focus:border-[color:var(--accent)] focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]/25"
+              className="mt-1 w-full rounded-[10px] border border-[color:var(--border)] bg-white px-3.5 py-2.5 text-[15px] leading-normal text-[color:var(--foreground)] placeholder-[color:var(--text-muted)] outline-none transition focus:border-[color:var(--accent)] focus:ring-2 focus:ring-[color:var(--accent)]/15"
               placeholder="+380..."
             />
           </div>
@@ -135,7 +135,7 @@ export default function LoginForm({ initialFlow = 'sign-in' }: LoginFormProps) {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
-          className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm leading-normal text-zinc-900 placeholder-zinc-500 focus:border-[color:var(--accent)] focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]/25"
+          className="mt-1 w-full rounded-[10px] border border-[color:var(--border)] bg-white px-3.5 py-2.5 text-[15px] leading-normal text-[color:var(--foreground)] placeholder-[color:var(--text-muted)] outline-none transition focus:border-[color:var(--accent)] focus:ring-2 focus:ring-[color:var(--accent)]/15"
           placeholder="you@example.com"
         />
       </div>
@@ -168,7 +168,7 @@ export default function LoginForm({ initialFlow = 'sign-in' }: LoginFormProps) {
               onChange={(e) => setPassword(e.target.value)}
               required={!isForgot}
               autoComplete={isSignUp ? 'new-password' : 'current-password'}
-              className="w-full rounded-lg border border-zinc-300 bg-white py-2 pl-3 pr-11 text-sm leading-normal text-zinc-900 placeholder-zinc-500 focus:border-[color:var(--accent)] focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]/25"
+              className="w-full rounded-[10px] border border-[color:var(--border)] bg-white py-2.5 pl-3.5 pr-11 text-[15px] leading-normal text-[color:var(--foreground)] placeholder-[color:var(--text-muted)] outline-none transition focus:border-[color:var(--accent)] focus:ring-2 focus:ring-[color:var(--accent)]/15"
               placeholder="••••••••"
             />
             <button

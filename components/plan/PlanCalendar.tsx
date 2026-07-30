@@ -38,12 +38,17 @@ export default function PlanCalendar({ pieces }: { pieces: ContentPiece[] }) {
   const dayPieces = selected ? byDay.get(selected) ?? [] : [];
 
   return (
-    <div className="mx-auto w-full max-w-md px-4 pb-24 pt-6">
+    <div className="app-page">
       {/* Header: Month YYYY + arrows */}
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="font-display text-xl font-semibold text-[color:var(--foreground)]">
-          {monthLabel(view.year, view.month0)}
-        </h1>
+        <div className="min-w-0">
+          <h1 className="font-display text-[26px] font-bold tracking-tight text-[color:var(--foreground)]">
+            План
+          </h1>
+          <p className="mt-0.5 text-[13px] font-medium text-zinc-500">
+            {monthLabel(view.year, view.month0)}
+          </p>
+        </div>
         <div className="flex items-center gap-1">
           <button
             type="button"
@@ -66,10 +71,12 @@ export default function PlanCalendar({ pieces }: { pieces: ContentPiece[] }) {
         </div>
       </div>
 
+      {/* Calendar card */}
+      <div className="app-card px-2 pb-2 pt-3">
       {/* Weekday header */}
       <div className="mb-1 grid grid-cols-7 text-center">
         {WEEKDAY_LABELS.map((w) => (
-          <div key={w} className="py-1 text-[11px] font-medium uppercase tracking-wide text-zinc-400">
+          <div key={w} className="py-1 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--text-muted)]">
             {w}
           </div>
         ))}
@@ -126,28 +133,34 @@ export default function PlanCalendar({ pieces }: { pieces: ContentPiece[] }) {
           );
         })}
       </div>
+      </div>
 
       {/* Detail panel */}
-      <div className="mt-6" data-testid="cal-detail">
+      <div className="mt-5" data-testid="cal-detail">
         {!selected ? (
-          <p className="px-2 py-10 text-center text-sm text-zinc-400">
+          <p className="px-2 py-8 text-center text-[13px] text-[color:var(--text-muted)]">
             Обери дату, щоб побачити деталі.
           </p>
         ) : (
           <div>
-            <div className="mb-3 flex items-center justify-between px-1">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
-                {dayHeaderLabel(selected)}
-              </h2>
+            <div className="mb-2.5 flex items-center justify-between px-0.5">
+              <h2 className="app-section-label">{dayHeaderLabel(selected)}</h2>
               {/* Create is always available on a selected day — full state or empty. */}
               <PlanCreateMenu />
             </div>
             {dayPieces.length > 0 ? (
-              <ContentRows pieces={dayPieces} />
+              <div className="app-card overflow-hidden px-1.5 py-0.5">
+                <ContentRows pieces={dayPieces} />
+              </div>
             ) : (
-              <p className="px-2 py-8 text-center text-sm text-zinc-400">
-                Нічого не заплановано — створи щось нове.
-              </p>
+              <div className="app-card px-6 py-9 text-center">
+                <p className="text-[14px] font-semibold text-[color:var(--foreground)]">
+                  Нічого не заплановано
+                </p>
+                <p className="mt-1 text-[13px] text-[color:var(--text-muted)]">
+                  Створи щось нове на цей день.
+                </p>
+              </div>
             )}
           </div>
         )}

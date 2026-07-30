@@ -44,7 +44,7 @@ export default function AccessCodeGate() {
 
   return (
     <div
-      className="w-full max-w-[420px] rounded-2xl border border-[#e8e3dc] bg-white p-10 shadow-sm"
+      className="app-card w-full max-w-[420px] p-8"
       style={{ borderRadius: 16, padding: 40 }}
     >
       <div className="mb-8">

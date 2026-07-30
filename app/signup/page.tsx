@@ -21,7 +21,7 @@ export default async function SignupPage() {
   return (
     <div
       className="flex min-h-screen w-full flex-col items-center justify-center px-4 py-12"
-      style={{ backgroundColor: '#f5f2ed' }}
+      style={{ backgroundColor: 'var(--canvas)' }}
     >
       {granted ? <SignupForm /> : <AccessCodeGate />}
     </div>

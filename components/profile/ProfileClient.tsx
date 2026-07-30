@@ -133,13 +133,13 @@ export default function ProfileClient({
   };
 
   return (
-    <div className="mx-auto w-full max-w-md pb-4">
-      <h1 className="font-display text-2xl font-semibold text-zinc-900">Профіль</h1>
+    <div className="app-page">
+      <h1 className="app-title px-0.5">Профіль</h1>
 
       {/* Account header */}
       <section className="mt-5">
         {editing ? (
-          <div className="rounded-2xl border border-[color:var(--border)] bg-white p-4">
+          <div className="app-card p-4">
             <div className="flex items-center gap-3">
               <div
                 className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[color:var(--surface)] text-lg font-semibold text-zinc-600"
@@ -220,7 +220,7 @@ export default function ProfileClient({
         ) : (
           <div
             data-testid="account-header"
-            className="flex items-center gap-4 rounded-2xl border border-[color:var(--border)] bg-white p-4"
+            className="app-card flex items-center gap-4 p-4"
           >
             <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[color:var(--surface)] text-lg font-semibold text-zinc-600">
               {avatarUrl ? (
@@ -262,11 +262,11 @@ export default function ProfileClient({
 
       {/* Subscription */}
       <section className="mt-7">
-        <h2 className="px-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">Підписка</h2>
+        <h2 className="px-1 app-section-label">Підписка</h2>
         {subscription ? (
           <div
             data-testid="subscription-active"
-            className="mt-2 rounded-2xl border border-[color:rgba(0,75,168,0.18)] bg-[color:var(--accent-soft)] p-4"
+            className="mt-2 rounded-[18px] border border-[color:rgba(0,75,168,0.18)] bg-[color:var(--accent-soft)] p-4"
           >
             <div className="flex items-center justify-between gap-2">
               <p className="text-base font-semibold text-zinc-900">{subscription.planName}</p>
@@ -293,7 +293,7 @@ export default function ProfileClient({
         ) : (
           <div
             data-testid="subscription-none"
-            className="mt-2 rounded-2xl border border-[color:var(--border)] bg-white p-4"
+            className="app-card mt-2 p-4"
           >
             <p className="text-base font-semibold text-zinc-900">Немає активної підписки</p>
             <p className="mt-1.5 text-sm text-zinc-600">
@@ -314,12 +314,12 @@ export default function ProfileClient({
 
       {/* Settings */}
       <section className="mt-7">
-        <h2 className="px-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+        <h2 className="px-1 app-section-label">
           Налаштування
         </h2>
         <div
             data-testid="settings-list"
-            className="mt-2 overflow-hidden rounded-2xl border border-[color:var(--border)] bg-white"
+            className="app-card mt-2 overflow-hidden"
         >
           {/* Branding — LIVE, links to the existing brand settings */}
           <a

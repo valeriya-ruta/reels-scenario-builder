@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronRight, Film, LayoutGrid, Play, CalendarDays } from 'lucide-react';
+import { ChevronRight, Film, LayoutGrid, Play, CalendarDays, Plus } from 'lucide-react';
 import { dayHeaderLabel } from '@/lib/content/calendar';
 import StatusRing from '@/components/content/StatusRing';
 import SwipeRow from '@/components/content/SwipeRow';
@@ -155,35 +155,40 @@ export default function SwipeableContentList({
   return (
     <div className="mx-auto w-full max-w-2xl">
       {/* Header */}
-      <div className="flex items-center justify-between px-1 pb-3">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between gap-3 px-0.5 pb-4">
+        <div className="flex min-w-0 items-center gap-3">
           <span
-            className="flex h-[38px] w-[38px] items-center justify-center rounded-[11px]"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px]"
             style={{ backgroundColor: accentTint }}
           >
-            <HeaderIcon size={20} style={{ color: accent }} />
+            <HeaderIcon size={21} style={{ color: accent }} />
           </span>
-          <div className="leading-tight">
-            <h1 className="text-[21px] font-bold text-[color:var(--foreground)]">{heading}</h1>
-            <p className="text-[12.5px] text-[#9a9aa6]">{items.length} матеріалів</p>
+          <div className="min-w-0 leading-tight">
+            <h1 className="app-title truncate">{heading}</h1>
+            <p className="app-subtitle">{items.length} матеріалів</p>
           </div>
         </div>
         <button
           type="button"
           onClick={create}
           disabled={creating}
-          className="rounded-full border-[1.5px] px-3.5 py-2 text-[13px] font-semibold transition active:scale-95 disabled:opacity-50"
-          style={{ borderColor: accent, color: accent }}
+          aria-label="Створити"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white shadow-[var(--elev-1)] transition active:scale-95 disabled:opacity-50"
+          style={{ backgroundColor: accent }}
         >
-          {creating ? '…' : '+ Створити'}
+          {creating ? '…' : <Plus className="h-5 w-5" strokeWidth={2.4} />}
         </button>
       </div>
       <div className="h-px bg-[color:var(--border)]" />
 
       {items.length === 0 ? (
-        <p className="px-2 py-14 text-center text-sm leading-relaxed text-zinc-500">{emptyText}</p>
+        <div className="app-card px-6 py-12 text-center">
+          <p className="mx-auto max-w-[17rem] text-[14px] leading-relaxed text-[color:var(--text-muted)]">
+            {emptyText}
+          </p>
+        </div>
       ) : (
-        <ul>
+        <ul className="app-card overflow-hidden px-1.5 py-0.5">
           {items.map((piece) => {
             const status = statusById[piece.id] ?? piece.status;
             return (

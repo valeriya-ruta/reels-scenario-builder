@@ -59,7 +59,7 @@ export default function StoryCard({ story, index, onUpdate, onDelete }: StoryCar
   };
 
   return (
-    <div className="flex flex-col gap-4 rounded-2xl border border-zinc-100 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
+    <div className="app-card flex flex-col gap-4 p-4 transition-shadow hover:shadow-[var(--elev-2)]">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
           Сторіс {index + 1}

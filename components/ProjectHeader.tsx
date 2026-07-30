@@ -80,30 +80,15 @@ export default function ProjectHeader({
 
   return (
     <>
-      <div className="mb-8">
-        <div className="mb-3">
-          <Link
-            href={backHref}
-            aria-label={backLabel}
-            className="-ml-1 inline-flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
-          >
-            <svg
-              className="h-5 w-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 19l-7-7 7-7"
-              />
+      <div className="mb-6">
+        <div className="-ml-2 mb-1 flex items-center justify-between">
+          <Link href={backHref} aria-label={backLabel} className="app-icon-btn">
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-            <span>{backLabel}</span>
           </Link>
         </div>
-        <div className="mb-4 flex items-center justify-between gap-4">
+        <div className="mb-3 flex items-center justify-between gap-4">
           <div className="flex min-w-0 flex-1 items-center">
             {isEditingName ? (
               <input
@@ -126,7 +111,7 @@ export default function ProjectHeader({
             ) : (
               <h1
                 onClick={() => setIsEditingName(true)}
-                className="font-display cursor-pointer truncate text-2xl font-semibold text-zinc-900 hover:text-zinc-700"
+                className="app-title cursor-pointer truncate"
                 title={project.name}
               >
                 {project.name}

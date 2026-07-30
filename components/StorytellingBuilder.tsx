@@ -236,7 +236,7 @@ export default function StorytellingBuilder({ project: initialProject, initialCo
   };
 
   return (
-    <div className="min-h-screen">
+    <div className="app-canvas min-h-screen">
       {/* Optimistic-create failure toast (rollback already happened in state). */}
       {toast && (
         <div
@@ -249,7 +249,7 @@ export default function StorytellingBuilder({ project: initialProject, initialCo
       )}
 
       {/* Header */}
-      <div className="mx-auto max-w-[calc(100vw-2rem)] px-4 py-6">
+      <div className="mx-auto max-w-[calc(100vw-2rem)] px-4 pb-4 pt-5">
         <div className="mb-3">
           <Link
             href="/storytellings"
@@ -279,7 +279,7 @@ export default function StorytellingBuilder({ project: initialProject, initialCo
           ) : (
             <h1
               onClick={() => setEditingName(true)}
-              className="cursor-pointer text-2xl font-semibold text-zinc-900 hover:text-zinc-700"
+              className="app-title cursor-pointer truncate"
               title={project.name}
             >
               {project.name}

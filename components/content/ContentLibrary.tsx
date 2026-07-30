@@ -31,11 +31,12 @@ export default function ContentLibrary({ pieces }: { pieces: ContentPiece[] }) {
   }, [pieces, statuses]);
 
   return (
-    <div className="min-h-screen bg-[color:var(--background)]">
-      <div className="mx-auto max-w-2xl px-4 py-8">
-        <h1 className="font-display text-2xl font-semibold text-[color:var(--foreground)]">
-          Твій контент
-        </h1>
+    <div className="app-canvas">
+      <div className="app-page">
+        <div className="px-0.5">
+          <h1 className="app-title">Твій контент</h1>
+          {pieces.length > 0 ? <p className="app-subtitle">{pieces.length} матеріалів</p> : null}
+        </div>
 
         {pieces.length > 0 ? (
           <div className="mt-4">
@@ -44,20 +45,22 @@ export default function ContentLibrary({ pieces }: { pieces: ContentPiece[] }) {
         ) : null}
 
         {pieces.length === 0 ? (
-          <div
-            data-testid="content-empty"
-            className="mt-10 rounded-2xl bg-[color:var(--surface)] px-6 py-12 text-center"
-          >
-            <p className="mx-auto max-w-xs text-base font-semibold leading-relaxed text-[color:var(--foreground)]">
-              Ой, тут ще нічого немає! Можливо, саме час створити контент?
+          <div data-testid="content-empty" className="app-card mt-6 px-6 py-12 text-center">
+            <p className="mx-auto max-w-[17rem] text-[15px] font-semibold leading-relaxed text-[color:var(--foreground)]">
+              Тут ще нічого немає
+            </p>
+            <p className="mx-auto mt-1 max-w-[17rem] text-[13px] leading-relaxed text-[color:var(--text-muted)]">
+              Саме час створити контент.
             </p>
           </div>
         ) : visible.length === 0 ? (
-          <div className="mt-10 rounded-2xl bg-[color:var(--surface)] px-6 py-10 text-center" data-testid="content-filter-empty">
-            <p className="text-sm text-zinc-500">Ой, тут ще нічого немає! Можливо, саме час створити контент?</p>
+          <div className="app-card mt-6 px-6 py-10 text-center" data-testid="content-filter-empty">
+            <p className="text-[13px] text-[color:var(--text-muted)]">
+              Нічого не знайдено за цим фільтром.
+            </p>
           </div>
         ) : (
-          <div className="mt-4" data-testid="content-list">
+          <div className="app-card mt-4 overflow-hidden px-1.5 py-0.5" data-testid="content-list">
             <ContentRows pieces={visible} onHint={showHint} />
           </div>
         )}

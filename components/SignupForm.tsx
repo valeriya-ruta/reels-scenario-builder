@@ -60,7 +60,7 @@ export default function SignupForm() {
 
   return (
     <div
-      className="w-full max-w-[420px] rounded-2xl border border-[#e8e3dc] bg-white p-10 shadow-sm"
+      className="app-card w-full max-w-[420px] p-8"
       style={{ borderRadius: 16, padding: 40 }}
     >
       <div className="mb-8 text-center">
@@ -93,7 +93,7 @@ export default function SignupForm() {
             required
             placeholder="Електронна пошта"
             aria-invalid={!!fieldErrors.email}
-            className={`h-12 w-full rounded-[10px] border px-4 text-[15px] text-[#1a1a1a] outline-none transition-colors placeholder:text-zinc-400 focus:border-[#1a1a1a] ${
+            className={`h-12 w-full rounded-[10px] border px-4 text-[15px] text-[color:var(--foreground)] outline-none transition-colors placeholder:text-[color:var(--text-muted)] focus:border-[color:var(--accent)] ${
               fieldErrors.email ? 'border-[#e05c40]' : 'border-[#e8e3dc]'
             }`}
           />
@@ -112,7 +112,7 @@ export default function SignupForm() {
               minLength={6}
               placeholder="Пароль"
               aria-invalid={!!fieldErrors.password}
-              className={`h-12 w-full rounded-[10px] border py-0 pl-4 pr-12 text-[15px] text-[#1a1a1a] outline-none transition-colors placeholder:text-zinc-400 focus:border-[#1a1a1a] ${
+              className={`h-12 w-full rounded-[10px] border py-0 pl-4 pr-12 text-[15px] text-[color:var(--foreground)] outline-none transition-colors placeholder:text-[color:var(--text-muted)] focus:border-[color:var(--accent)] ${
                 fieldErrors.password ? 'border-[#e05c40]' : 'border-[#e8e3dc]'
               }`}
             />
@@ -133,7 +133,7 @@ export default function SignupForm() {
         <button
           type="submit"
           disabled={loading}
-          className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-[10px] bg-[#1a1a1a] text-[15px] font-bold text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-60"
+          className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-[10px] bg-[color:var(--accent)] text-[15px] font-bold text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-60"
         >
           {loading ? (
             <>

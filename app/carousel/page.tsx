@@ -46,8 +46,8 @@ export default async function CarouselListPage() {
   }));
 
   return (
-    <div className="min-h-screen bg-white">
-      <div className="px-4 py-8">
+    <div className="app-canvas">
+      <div className="app-page">
         <SwipeableContentList
           pieces={pieces}
           heading="Каруселі"

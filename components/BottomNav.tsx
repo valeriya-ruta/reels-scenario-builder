@@ -285,7 +285,15 @@ export default function BottomNav() {
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
         aria-label="Основна навігація"
       >
-        <div className="relative mx-3 mb-3 flex items-end justify-around gap-1 rounded-2xl border border-gray-100 bg-white px-2 pb-1.5 pt-1.5 shadow-[0_2px_6px_rgba(26,28,46,0.08),0_10px_28px_rgba(26,28,46,0.14)]">
+        <div
+          className="relative mx-3 mb-3 flex items-end justify-around gap-1 rounded-[22px] border border-[color:var(--border)] px-2 pb-1.5 pt-1.5"
+          style={{
+            background: 'rgba(255,255,255,0.86)',
+            backdropFilter: 'saturate(180%) blur(20px)',
+            WebkitBackdropFilter: 'saturate(180%) blur(20px)',
+            boxShadow: '0 2px 6px rgba(16,17,33,0.06), 0 12px 32px rgba(16,17,33,0.12)',
+          }}
+        >
           {leftTabs.map((tab) => (
             <TabLink key={tab.href} tab={tab} active={isActive(tab.matchPrefixes)} />
           ))}

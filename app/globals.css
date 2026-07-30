@@ -21,11 +21,17 @@
 @import "tailwindcss";
 
 :root {
+  /* ── Design system (app UI). Canvas is a warm off-white so white cards read as
+     elevated surfaces — the Linear/Notion/Monday layering — instead of a flat
+     white webpage. Text is near-black, never pure #000. ────────────────────── */
+  --canvas: #f7f7f5;
   --background: #ffffff;
-  --foreground: #000000;
-  --color-text-primary: #000000;
-  --color-text-secondary: #525252;
-  --color-text-muted: #737373;
+  --foreground: #17171a;
+  --text-secondary: #5f5f68;
+  --text-muted: #8e8e98;
+  --color-text-primary: #17171a;
+  --color-text-secondary: #5f5f68;
+  --color-text-muted: #8e8e98;
   --color-background-canvas: #ffffff;
   --color-background-secondary: #f5f5f5;
   --color-border-primary: #e5e5e5;
@@ -34,6 +40,15 @@
   --accent: #004ba8;
   --accent-soft: rgba(0, 75, 168, 0.12);
   --accent-rgb: 0, 75, 168;
+  /* Elevation + shape scale */
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+  --elev-1: 0 1px 2px rgba(16, 17, 33, 0.04), 0 1px 3px rgba(16, 17, 33, 0.03);
+  --elev-2: 0 2px 4px rgba(16, 17, 33, 0.04), 0 8px 20px rgba(16, 17, 33, 0.06);
+  --elev-3: 0 8px 40px rgba(16, 17, 33, 0.14);
+  --hairline: rgba(17, 17, 26, 0.08);
   /* Semantic content-type palette (icons/tags only — blue stays the functional
      UI accent). Kept soft. Shared by Home, Create radial menu, Braindump. */
   --type-reels: #004ba8;
@@ -42,11 +57,13 @@
   --type-carousel-soft: rgba(120, 80, 160, 0.12);
   --type-stories: #c08c28;
   --type-stories-soft: rgba(192, 140, 40, 0.12);
-  --border: #e5e5e5;
-  --success: #22c55e;
-  --muted: #a3a3a3;
-  --surface: #f5f5f5;
-  --surface2: #ebebeb;
+  --border: rgba(17, 17, 26, 0.09);
+  --border-strong: rgba(17, 17, 26, 0.16);
+  --success: #16a34a;
+  --muted: #8e8e98;
+  --surface: #f4f4f2;
+  --surface1: #f4f4f2;
+  --surface2: #ededea;
   --shadow-card-sm: 0 1px 2px rgba(26, 28, 46, 0.05),
     0 4px 16px rgba(26, 28, 46, 0.06);
   --shadow-card: 0 1px 3px rgba(26, 28, 46, 0.06),
@@ -143,6 +160,131 @@ button:disabled,
 /* Card shadow utility */
 .card-shadow {
   box-shadow: var(--shadow-card-subtle);
+}
+
+/* ── App UI system ──────────────────────────────────────────────────────────
+   Shared classes so every screen is built from one vocabulary (Linear/Notion/
+   Monday language): an off-white canvas, white elevated cards, hairline rows,
+   quiet outlined pills, and one page-title treatment. */
+
+/* Page canvas: warm off-white so cards read as surfaces above it. */
+.app-canvas {
+  background: var(--canvas);
+  min-height: 100vh;
+}
+
+/* Standard page shell: centred column, mobile-first gutters, nav clearance. */
+.app-page {
+  width: 100%;
+  max-width: 640px;
+  margin-inline: auto;
+  padding-inline: 16px;
+  padding-top: 20px;
+  padding-bottom: 110px;
+}
+
+/* One page-title treatment everywhere. */
+.app-title {
+  font-family: "Google Sans", sans-serif;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: var(--foreground);
+}
+
+.app-subtitle {
+  margin-top: 2px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+/* Section label above a group (uppercase micro-label). */
+.app-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+/* Elevated white card. */
+.app-card {
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--elev-1);
+}
+
+/* Grouped list container (hairline-separated rows inside). */
+.app-group {
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--elev-1);
+  overflow: hidden;
+}
+
+.app-group > * + * {
+  border-top: 1px solid var(--border);
+}
+
+/* Quiet outlined pill (status, date, filters, actions). */
+.app-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  background: var(--background);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: background 0.15s ease, border-color 0.15s ease;
+  white-space: nowrap;
+}
+
+.app-pill:hover {
+  background: var(--surface1);
+  border-color: var(--border-strong);
+}
+
+/* Circular icon button for nav bars. */
+.app-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  width: 38px;
+  border-radius: 999px;
+  color: var(--text-secondary);
+  transition: background 0.15s ease;
+}
+
+.app-icon-btn:hover {
+  background: var(--surface1);
+  color: var(--foreground);
+}
+
+/* Primary action. */
+.app-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  padding: 11px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: var(--elev-1);
+}
+
+.app-btn-primary:active:not(:disabled) {
+  transform: scale(0.98);
 }
 
 /* Skeleton shimmer (spec) */

@@ -72,7 +72,10 @@ export default function AppShell({ children, userName, userEmail }: AppShellProp
               {/* Top bar — desktop chrome only. On mobile the screens start clean
                   (greeting/section content at top); the leftover "Ruta /
                   Твоя контент-подружка" header is hidden (86d39e36r). */}
-              <header className="hidden shrink-0 items-center gap-3 border-b border-[color:var(--border)] bg-white px-4 py-3 md:flex">
+              <header
+                className="hidden shrink-0 items-center gap-3 border-b border-[color:var(--border)] px-4 py-3 md:flex"
+                style={{ background: 'var(--background)' }}
+              >
                 <button
                   type="button"
                   onClick={toggleSidebar}
@@ -132,7 +135,10 @@ export default function AppShell({ children, userName, userEmail }: AppShellProp
                   )}
                 </div>
 
-                <main className="page-enter flex min-h-0 flex-1 flex-col overflow-y-auto bg-white px-3 pt-6 pb-28 md:px-8 md:py-8">
+                <main
+                  className="page-enter flex min-h-0 flex-1 flex-col overflow-y-auto px-0 pb-28 pt-0 md:px-6 md:py-6"
+                  style={{ background: 'var(--canvas)' }}
+                >
                   {children}
                 </main>
               </div>

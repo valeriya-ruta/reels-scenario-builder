@@ -17,15 +17,11 @@ export default function Greeting({ name }: { name?: string | null }) {
   }, []);
 
   return (
-    <header className="space-y-1">
-      <h1
-        data-testid="home-greeting"
-        suppressHydrationWarning
-        className="font-display text-2xl font-bold tracking-tight text-black sm:text-3xl"
-      >
-        {greetingLine(hour, name)} <span aria-hidden>👋</span>
+    <header>
+      <h1 data-testid="home-greeting" suppressHydrationWarning className="app-title">
+        {greetingLine(hour, name)}
       </h1>
-      <p className="text-sm leading-normal text-zinc-500">Готова створювати?</p>
+      <p className="app-subtitle">Готова створювати?</p>
     </header>
   );
 }

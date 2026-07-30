@@ -4,13 +4,14 @@ import Greeting from './Greeting';
 import HomeRecents from './HomeRecents';
 import InsightsSkeleton from './InsightsSkeleton';
 import WorkshopLessons from './WorkshopLessons';
+import HomeQuickActions from './HomeQuickActions';
 import type { ContentPiece } from '@/lib/content/contentPiece';
 
 /**
- * Home (Головна) — the default landing screen. Mobile-first, white surfaces,
- * blue #004BA8 functional accent, clean hairline lists. Sections top→bottom:
- * greeting → "Твій контент" recents (latest few, status rows) → insights
- * coming-soon skeleton → workshop lessons.
+ * Home (Головна) — the landing screen, rebuilt on the app UI system: off-white
+ * canvas, a large greeting, quick-create actions, then grouped cards
+ * (recents → insights → lessons). Structure mirrors the productivity apps this
+ * app sits next to: big title, immediate actions, then content groups.
  */
 export default function HomeView({
   userName,
@@ -20,11 +21,12 @@ export default function HomeView({
   recents: ContentPiece[];
 }) {
   return (
-    <div className="mx-auto w-full max-w-2xl space-y-8 pb-24">
+    <div className="app-page space-y-7">
       <Suspense fallback={null}>
         <WelcomeModal />
       </Suspense>
       <Greeting name={userName} />
+      <HomeQuickActions />
       <HomeRecents pieces={recents} />
       <InsightsSkeleton />
       <WorkshopLessons />

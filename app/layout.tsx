@@ -30,7 +30,7 @@ export default async function RootLayout({
 
   return (
     <html lang="uk">
-      <body className="antialiased bg-white text-zinc-900">
+      <body className="antialiased" style={{ background: 'var(--canvas)', color: 'var(--foreground)' }}>
         <PostHogProvider>
           <Suspense>
             <PostHogPageView />
@@ -43,7 +43,10 @@ export default async function RootLayout({
               {children}
             </AppShell>
           ) : (
-            <div className="flex min-h-screen items-center justify-center bg-white px-4">
+            <div
+              className="flex min-h-screen items-center justify-center px-4"
+              style={{ background: 'var(--canvas)' }}
+            >
               {children}
             </div>
           )}

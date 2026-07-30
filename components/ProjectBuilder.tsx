@@ -46,8 +46,8 @@ export default function ProjectBuilder({
   }, [initialProject.id, initialProject.scenario_unseen]);
 
   return (
-    <div className="min-h-screen bg-white">
-      <div className="mx-auto max-w-7xl px-4 py-8">
+    <div className="app-canvas">
+      <div className="mx-auto max-w-7xl px-4 pb-28 pt-5">
         <ProjectHeader
           project={project}
           onProjectUpdate={setProject}
@@ -55,7 +55,7 @@ export default function ProjectBuilder({
           backLabel={backLabel}
         />
         {project.project_type === 'reels' && project.reference_url ? (
-          <div className="mb-6 rounded-lg border border-zinc-200/90 bg-zinc-50/90 px-4 py-3 text-[13px] leading-snug text-zinc-600">
+          <div className="app-card mb-5 px-4 py-3 text-[13px] leading-snug text-[color:var(--text-secondary)]">
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
               <span aria-hidden className="text-zinc-500">
                 📎

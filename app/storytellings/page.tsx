@@ -45,10 +45,13 @@ export default async function StorytellingsPage() {
   }));
 
   return (
-    <div className="min-h-screen">
-      <div className="mx-auto max-w-2xl px-4 py-8">
-        <div className="mb-6 flex items-center justify-between">
-          <h1 className="font-display text-2xl font-semibold text-zinc-900">Мої сторітелінги</h1>
+    <div className="app-canvas">
+      <div className="app-page">
+        <div className="mb-4 flex items-center justify-between gap-3 px-0.5">
+          <div className="min-w-0">
+            <h1 className="app-title truncate">Сторітелінги</h1>
+            <p className="app-subtitle">{pieces.length} матеріалів</p>
+          </div>
           <CreateButton />
         </div>
         <ContentRowsSection

@@ -459,7 +459,7 @@ export default function SceneCard({
                   onScroll={updateSplitPopup}
                   onBlur={hideSplitPopup}
                   onClick={(e) => e.stopPropagation()}
-                  className="w-full rounded border border-zinc-300 bg-white px-3 py-2 pr-16 pb-8 text-sm leading-normal text-zinc-900 placeholder-zinc-500 focus:border-zinc-400 focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]/30"
+                  className="w-full rounded-[10px] border border-[color:var(--border)] bg-white px-3.5 py-2.5 pr-16 pb-8 text-[14px] leading-normal text-[color:var(--foreground)] placeholder-[color:var(--text-muted)] outline-none transition focus:border-[color:var(--accent)] focus:ring-2 focus:ring-[color:var(--accent)]/15"
                   rows={3}
                   placeholder="Діалог або голос за кадром..."
                 />
@@ -500,7 +500,7 @@ export default function SceneCard({
               </div>
             </div>
 
-            <div className="rounded-lg border border-zinc-200 bg-zinc-50/80">
+            <div className="rounded-[12px] border border-[color:var(--border)] bg-[color:var(--surface1)]">
               <button
                 type="button"
                 id={`${advancedPanelId}-trigger`}
@@ -648,7 +648,7 @@ export default function SceneCard({
                         persist({ actor_note: e.target.value });
                       }}
                       onClick={(e) => e.stopPropagation()}
-                      className="w-full rounded border border-zinc-300 bg-white px-3 py-2 text-sm leading-normal text-zinc-900 placeholder-zinc-500 focus:border-zinc-400 focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]/30"
+                      className="w-full rounded-[10px] border border-[color:var(--border)] bg-white px-3.5 py-2.5 text-[14px] leading-normal text-[color:var(--foreground)] placeholder-[color:var(--text-muted)] outline-none transition focus:border-[color:var(--accent)] focus:ring-2 focus:ring-[color:var(--accent)]/15"
                       rows={2}
                       placeholder="Примітка для актора..."
                     />
@@ -667,7 +667,7 @@ export default function SceneCard({
                         });
                       }}
                       onClick={(e) => e.stopPropagation()}
-                      className="w-full rounded border border-zinc-300 bg-white px-3 py-2 text-sm leading-normal text-zinc-900 placeholder-zinc-500 focus:border-zinc-400 focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]/30"
+                      className="w-full rounded-[10px] border border-[color:var(--border)] bg-white px-3.5 py-2.5 text-[14px] leading-normal text-[color:var(--foreground)] placeholder-[color:var(--text-muted)] outline-none transition focus:border-[color:var(--accent)] focus:ring-2 focus:ring-[color:var(--accent)]/15"
                       rows={2}
                       placeholder="Примітка для редактора..."
                     />
