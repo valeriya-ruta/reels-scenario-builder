@@ -6,7 +6,8 @@ import { ChevronRight, Film, LayoutGrid, Play } from 'lucide-react';
 import StatusRing from '@/components/content/StatusRing';
 import SwipeRow from '@/components/content/SwipeRow';
 import { setContentStatus } from '@/app/content-actions';
-import { contentHref, type ContentPiece } from '@/lib/content/contentPiece';
+import { contentHref, opensBraindumpOverlay, type ContentPiece } from '@/lib/content/contentPiece';
+import { dispatchOpenBraindumpIdea } from '@/lib/content/braindumpIdeaEvent';
 import { STATUS_COLORS, STATUS_LABELS, nextStatus, type ContentStatus } from '@/lib/content/statusSystem';
 import { formatShortDate } from '@/lib/content/relativeTime';
 
@@ -123,6 +124,10 @@ export default function SwipeableContentList({
   // the piece exactly one stage along its track; optimistic with rollback.
   const advance = useCallback(
     (piece: ContentPiece) => {
+      if (opensBraindumpOverlay(piece)) {
+        dispatchOpenBraindumpIdea(piece.id, piece.text ?? piece.title);
+        return;
+      }
       const current = statusById[piece.id] ?? piece.status;
       const next = nextStatus(piece.type, current);
       if (!next) return; // already at the final stage → gentle no-op
@@ -185,6 +190,10 @@ export default function SwipeableContentList({
                 onDelete={() => removeRow(piece)}
                 onTap={() => {
                   closeAll();
+                  if (opensBraindumpOverlay(piece)) {
+                    dispatchOpenBraindumpIdea(piece.id, piece.text ?? piece.title);
+                    return;
+                  }
                   router.push(contentHref(piece));
                 }}
               >

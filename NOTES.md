@@ -166,3 +166,49 @@ needed. All three were built in commit `5ccc9fa`; I verified each against its ac
   This is structurally correct for "transcript scrolls internally, controls never covered" at any
   length. **Marked complete** — a 10-second glance on a phone is the only thing left, but the layout
   is correct by construction.
+
+---
+
+## Feature 4 — 86d3c7u88 — Auto-save 5/8 follow-ups (in progress)
+
+Three bugs. **Bugs 2 & 3 fixed & tested; Bug 1 is a net-new build I did NOT do blind — details below.**
+Task left at **in progress** (Bug 1 outstanding).
+
+**Bug 2 — status not promoting Ідея→Скрипт (FIXED).** The promotion rule lived in
+`lib/content/contentKind.ts` but (a) `reelSignals` checked non-existent scene fields
+(`script`/`dialogue`/`description`) instead of the real `Scene.lines`, and (b) it was never wired for
+reels (only carousel). Fixed `reelSignals` to read `lines`, and wired promotion into `updateScene`
+(`app/actions.ts`): when a scene gets non-empty authored `lines` and the project is at `idea`, it
+promotes to `script` (guarded by `.eq('status','idea')` so it never clobbers a manually-advanced
+status). **Trigger implemented:** user-authored script text in a scene (`updates.lines` non-empty).
+Raw transcription poured into scenes at creation uses a bulk-insert path, so it does NOT trip this —
+matches the locked rule.
+
+**Bug 3 — idea rows opened the wrong thing (FIXED).** Routing keyed off `type==='idea'`, so a
+promoted idea (still in the `ideas` table, `content_type` flipped) fell through to the dead
+`/?idea=` route. Added `opensBraindumpOverlay(piece)` (routes by `refTable==='ideas'`), used it in
+`ContentRows` (open + advance) and `SwipeableContentList` (onTap + advance), added a shared
+`dispatchOpenBraindumpIdea`, and changed `contentHref`'s ideas case from the dead `/?idea=` to a safe
+`/dashboard` fallback.
+
+**Test:** `e2e/content-status-routing.logic.spec.ts` (7 tests, green) — promotion signals + idea
+routing predicate + no-dead-route.
+
+**Bug 1 — reference link + transcription lost on reopen: NOT done (flagged).** The subagent code map
+showed this is **not a small persistence fix — it's a net-new build**:
+- `components/ProjectBuilder.tsx` renders `reference_url` **read-only** and has **no** editable
+  reference input and **no** transcription field/state at all.
+- `projects` has `reference_url`/`reference_note` columns but **no `transcription` column**; the
+  transcript is templatized into scenes at creation and discarded as a standalone value.
+- There is **no** update/save path for these and **no** flush-on-leave (unmount/visibilitychange).
+- The acceptance testids (`reel-reference-url` / `reel-transcribe` / `reel-transcript`) don't exist in
+  the app — only in the still-skipped `e2e/content-autosave-lifecycle.spec.ts`.
+
+Delivering Bug 1 means: a DB migration (new `transcription` column on `projects`), editable
+reference+transcription inputs in the editor, a save route with keepalive flush (mirroring the
+carousel autosave route), and hydration on reopen. That's a production schema change, and the team
+explicitly deferred blind-wiring these leave/flush flows without a staging target (see the skip note
+in `content-autosave-lifecycle.spec.ts`). **I did not build it blind against prod.** It also has an
+ambiguity worth your input: where does the user "paste a reference link + run transcription" for a
+reel today — at creation or in the editor? The editor has no such inputs, so this may need a small
+spec on the entry point. Left for you (I added a ClickUp comment on the task).

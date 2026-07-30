@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import StatusRing from '@/components/content/StatusRing';
 import SwipeRow from '@/components/content/SwipeRow';
 import { setContentStatus, deleteContentPiece } from '@/app/content-actions';
-import { contentHref, type ContentPiece } from '@/lib/content/contentPiece';
+import { contentHref, opensBraindumpOverlay, type ContentPiece } from '@/lib/content/contentPiece';
 import { OPEN_BRAINDUMP_IDEA_EVENT } from '@/lib/content/braindumpIdeaEvent';
 import {
   STATUS_COLORS,
@@ -97,7 +97,7 @@ export default function ContentRows({
 
   const advance = useCallback(
     (piece: ContentPiece) => {
-      if (piece.type === 'idea') {
+      if (opensBraindumpOverlay(piece)) {
         openIdea(piece);
         return;
       }
@@ -111,7 +111,7 @@ export default function ContentRows({
 
   const open = useCallback(
     (piece: ContentPiece) => {
-      if (piece.type === 'idea') {
+      if (opensBraindumpOverlay(piece)) {
         openIdea(piece);
         return;
       }
