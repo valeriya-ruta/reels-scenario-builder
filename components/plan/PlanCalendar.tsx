@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import ContentRows from '@/components/content/ContentRows';
+import PlanCreateMenu from '@/components/plan/PlanCreateMenu';
 import type { ContentPiece } from '@/lib/content/contentPiece';
 import {
   monthGrid,
@@ -134,14 +135,18 @@ export default function PlanCalendar({ pieces }: { pieces: ContentPiece[] }) {
           </p>
         ) : (
           <div>
-            <h2 className="mb-3 px-1 text-sm font-semibold uppercase tracking-wide text-zinc-500">
-              {dayHeaderLabel(selected)}
-            </h2>
+            <div className="mb-3 flex items-center justify-between px-1">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+                {dayHeaderLabel(selected)}
+              </h2>
+              {/* Create is always available on a selected day — full state or empty. */}
+              <PlanCreateMenu />
+            </div>
             {dayPieces.length > 0 ? (
               <ContentRows pieces={dayPieces} />
             ) : (
               <p className="px-2 py-8 text-center text-sm text-zinc-400">
-                Нічого не заплановано.
+                Нічого не заплановано — створи щось нове.
               </p>
             )}
           </div>
