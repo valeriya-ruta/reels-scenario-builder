@@ -38,22 +38,32 @@ export async function createStorytellingColumn(
   projectId: string,
   name: string,
   orderIndex: number,
+  ids?: { columnId?: string; storyId?: string },
 ): Promise<{ column: StorytellingColumn; story: StorytellingStory } | null> {
   const user = await requireAuth();
   if (!user) return null;
   const supabase = await createServerSupabaseClient();
 
+  // Client-provided ids (optimistic UI): the client already rendered the column
+  // + first story under these ids, so persist them as-is rather than minting new
+  // ones — keeps StoryCard autosave targeting a real row with no reconcile race.
+  const columnInsert: Record<string, unknown> = { project_id: projectId, name, order_index: orderIndex };
+  if (ids?.columnId) columnInsert.id = ids.columnId;
+
   const { data: column, error } = await supabase
     .from('storytelling_columns')
-    .insert({ project_id: projectId, name, order_index: orderIndex })
+    .insert(columnInsert)
     .select()
     .single();
 
   if (error || !column) return null;
 
+  const storyInsert: Record<string, unknown> = { column_id: column.id, order_index: 0, text: '' };
+  if (ids?.storyId) storyInsert.id = ids.storyId;
+
   const { data: story, error: storyErr } = await supabase
     .from('storytelling_stories')
-    .insert({ column_id: column.id, order_index: 0, text: '' })
+    .insert(storyInsert)
     .select()
     .single();
 
@@ -104,14 +114,18 @@ export async function reorderStorytellingColumns(projectId: string, columnIds: s
 export async function createStorytellingStory(
   columnId: string,
   orderIndex: number,
+  id?: string,
 ): Promise<StorytellingStory | null> {
   const user = await requireAuth();
   if (!user) return null;
   const supabase = await createServerSupabaseClient();
 
+  const storyInsert: Record<string, unknown> = { column_id: columnId, order_index: orderIndex, text: '' };
+  if (id) storyInsert.id = id;
+
   const { data, error } = await supabase
     .from('storytelling_stories')
-    .insert({ column_id: columnId, order_index: orderIndex, text: '' })
+    .insert(storyInsert)
     .select()
     .single();
 

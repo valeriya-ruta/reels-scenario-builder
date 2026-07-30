@@ -20,8 +20,8 @@ Per-feature loop: build → Playwright test → run green → commit → move Cl
 
 | # | Task | Status | Result |
 |---|------|--------|--------|
-| 1 | 86d3gp8tb — Storytelling engine master prompt (single + saga) | ready to go | in progress |
-| 2 | 86d3fcnny — Perceived-lag fix (optimistic UI) | ready to go | pending |
+| 1 | 86d3gp8tb — Storytelling engine master prompt (single + saga) | ready to go | ✅ done → to review |
+| 2 | 86d3fcnny — Perceived-lag fix (optimistic UI) | ready to go | ✅ done → to review |
 | 3 | 86d3e1egm — Domain split + access-code gated signup | ready to go | pending |
 | 4 | 86d3c7u88 — Auto-save 5/8 follow-ups | in progress | pending |
 | 5 | 86d3dcwyy — Braindump 50-word gate + live counter | needs input | pending |
@@ -68,3 +68,30 @@ now fixed in `storiesNormalize`.
 5. **New `logic` Playwright project** (`*.logic.spec.ts`) added to `playwright.config.ts`: no
    browser, no auth-setup, `webServer` skipped via `PW_SKIP_WEBSERVER=1`. Lets deterministic core
    logic be tested in CI without a booted app. Existing browser projects untouched.
+
+---
+
+## Feature 2 — 86d3fcnny — Perceived-lag fix (optimistic UI)
+
+**Shipped:** `StorytellingBuilder.handleAddColumn` / `handleAddStory` no longer `await` the insert
+before rendering — they append to local state instantly, then persist in the background. New pure
+module `lib/storytelling/optimistic.ts` (genClientId / nextOrderIndex / builders). Server actions
+`createStorytellingColumn` / `createStorytellingStory` accept optional client-provided ids.
+
+**Test:** `e2e/storytelling-optimistic.logic.spec.ts` (4 tests, green) pins the ordering + builder
+contract; `e2e/storytelling-optimistic.spec.ts` is the guarded browser harness for the full
+instant-render + reload-persists flow (self-skips without `E2E_ACTIVE_*`).
+
+**Judgment calls (for QA):**
+1. **Client-generated stable UUIDs, not temp-id -> reconcile.** The spec suggests a temp id swapped
+   for the real id after insert. But `StoryCard` autosaves by `story.id` on every keystroke — during
+   a reconcile window, edits to a just-created card would target a non-existent row and be lost.
+   Instead I generate the id on the client (`crypto.randomUUID`, with a v4 fallback for non-secure
+   contexts) and pass it into the insert, so the id is real from the first render. No reconcile, no
+   race, no lost edits. Payload otherwise unchanged (RLS-safe).
+2. **`order_index` = max+1, not array length.** Spec explicitly asked for max(order_index)+1; the old
+   code used array length, which collides after deletes/reorders. Fixed.
+3. **Minimal toast for rollback.** No toast system existed, so I added a small self-dismissing banner
+   (`data-testid="storytelling-toast"`) shown only when a background insert fails.
+4. Browser e2e can't run in this environment (no seeded auth / no server), so it's a guarded harness
+   matching the repo's existing convention; the logic spec is the executed green coverage.

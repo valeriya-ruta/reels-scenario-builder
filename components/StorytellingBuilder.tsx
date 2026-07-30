@@ -18,6 +18,12 @@ import {
   reorderStorytellingStories,
 } from '@/app/storytelling-actions';
 import StoryCard from './StoryCard';
+import {
+  genClientId,
+  nextOrderIndex,
+  makeOptimisticColumn,
+  makeOptimisticStory,
+} from '@/lib/storytelling/optimistic';
 
 interface Props {
   project: StorytellingProject;
@@ -70,6 +76,12 @@ export default function StorytellingBuilder({ project: initialProject, initialCo
   const [editingColId, setEditingColId] = useState<string | null>(null);
   const [colNameValue, setColNameValue] = useState('');
   const [copiedColumnId, setCopiedColumnId] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const showError = useCallback((message: string) => {
+    setToast(message);
+    window.setTimeout(() => setToast((t) => (t === message ? null : t)), 3500);
+  }, []);
 
   const copyColumnText = async (col: ColumnWithStories) => {
     try {
@@ -96,18 +108,28 @@ export default function StorytellingBuilder({ project: initialProject, initialCo
 
   // ── Column operations ──
 
-  const handleAddColumn = async () => {
-    const result = await createStorytellingColumn(
-      project.id,
-      `Storytelling ${columns.length + 1}`,
-      columns.length,
-    );
-    if (result) {
-      setColumns((prev) => [
-        ...prev,
-        { ...result.column, stories: [result.story] },
-      ]);
-    }
+  // Optimistic: render the new column (with its first empty story) instantly
+  // from local state, then persist in the background under client-generated ids.
+  // No await-before-render (that was the 1–3s lag) and no full-tree refetch.
+  const handleAddColumn = () => {
+    const columnId = genClientId();
+    const storyId = genClientId();
+    const orderIndex = nextOrderIndex(columns);
+    const name = `Storytelling ${columns.length + 1}`;
+    const optimisticCol: ColumnWithStories = {
+      ...makeOptimisticColumn(project.id, name, orderIndex, columnId),
+      stories: [makeOptimisticStory(columnId, 0, storyId)],
+    };
+    setColumns((prev) => [...prev, optimisticCol]);
+
+    void createStorytellingColumn(project.id, name, orderIndex, { columnId, storyId })
+      .then((result) => {
+        if (!result) throw new Error('insert failed');
+      })
+      .catch(() => {
+        setColumns((prev) => prev.filter((c) => c.id !== columnId));
+        showError('Не вдалося створити сторітел. Спробуй ще раз.');
+      });
   };
 
   const handleDeleteColumn = async (colId: string) => {
@@ -142,17 +164,31 @@ export default function StorytellingBuilder({ project: initialProject, initialCo
 
   // ── Story operations ──
 
-  const handleAddStory = async (colId: string) => {
+  // Optimistic: append the new story card instantly under a client-generated id,
+  // persist in the background. StoryCard autosaves to this same id (a real row),
+  // so edits made before the insert resolves are never lost.
+  const handleAddStory = (colId: string) => {
     const col = columns.find((c) => c.id === colId);
     if (!col) return;
-    const story = await createStorytellingStory(colId, col.stories.length);
-    if (story) {
-      setColumns((prev) =>
-        prev.map((c) =>
-          c.id === colId ? { ...c, stories: [...c.stories, story] } : c,
-        ),
-      );
-    }
+    const storyId = genClientId();
+    const orderIndex = nextOrderIndex(col.stories);
+    const optimisticStory = makeOptimisticStory(colId, orderIndex, storyId);
+    setColumns((prev) =>
+      prev.map((c) => (c.id === colId ? { ...c, stories: [...c.stories, optimisticStory] } : c)),
+    );
+
+    void createStorytellingStory(colId, orderIndex, storyId)
+      .then((story) => {
+        if (!story) throw new Error('insert failed');
+      })
+      .catch(() => {
+        setColumns((prev) =>
+          prev.map((c) =>
+            c.id === colId ? { ...c, stories: c.stories.filter((s) => s.id !== storyId) } : c,
+          ),
+        );
+        showError('Не вдалося додати сторіс. Спробуй ще раз.');
+      });
   };
 
   const handleDeleteStory = async (colId: string, storyId: string) => {
@@ -199,6 +235,17 @@ export default function StorytellingBuilder({ project: initialProject, initialCo
 
   return (
     <div className="min-h-screen">
+      {/* Optimistic-create failure toast (rollback already happened in state). */}
+      {toast && (
+        <div
+          role="status"
+          data-testid="storytelling-toast"
+          className="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-white shadow-lg"
+        >
+          {toast}
+        </div>
+      )}
+
       {/* Header */}
       <div className="mx-auto max-w-[calc(100vw-2rem)] px-4 py-6">
         <div className="mb-3">
@@ -242,7 +289,7 @@ export default function StorytellingBuilder({ project: initialProject, initialCo
       {/* Columns */}
       <div className="flex gap-6 overflow-x-auto px-4 pb-12" style={{ scrollbarWidth: 'thin', scrollbarColor: '#d4d4d8 transparent' }}>
         {columns.map((col, colIndex) => (
-          <div key={col.id} className="w-80 shrink-0 md:w-[min(380px,calc(33.333vw-32px))]">
+          <div key={col.id} data-testid="story-column" className="w-80 shrink-0 md:w-[min(380px,calc(33.333vw-32px))]">
             {/* Column header */}
             <div className="mb-4 px-1">
               <div className="group flex items-center justify-between gap-2">
@@ -375,6 +422,7 @@ export default function StorytellingBuilder({ project: initialProject, initialCo
               <button
                 type="button"
                 onClick={() => handleAddStory(col.id)}
+                data-testid="add-story"
                 className="flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-zinc-200 bg-zinc-50/50 p-6 transition-colors hover:border-zinc-300 hover:bg-zinc-100/50"
               >
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-zinc-400 shadow-sm">
@@ -392,6 +440,7 @@ export default function StorytellingBuilder({ project: initialProject, initialCo
             <button
               type="button"
               onClick={handleAddColumn}
+              data-testid="add-column"
               className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 transition-colors hover:border-zinc-300 hover:bg-zinc-100"
             >
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19" strokeWidth={2} strokeLinecap="round" /><line x1="5" y1="12" x2="19" y2="12" strokeWidth={2} strokeLinecap="round" /></svg>
