@@ -26,9 +26,9 @@ Per-feature loop: build → Playwright test → run green → commit → move Cl
 | 4 | 86d3c7u88 — Auto-save 5/8 follow-ups | in progress | pending |
 | 5 | 86d3dcwyy — Braindump 50-word gate + live counter | needs input | pending |
 | 6 | 86d3czf1e — Idea→content link persist | needs input | pending |
-| 7 | 86d3dezu4 — Braindump overlay scrollable | to review | verify |
-| 8 | 86d3dcn4d — idea→reel double hooks/CTAs | to review | verify |
-| 9 | 86d3d23qu — Hide global navbar on editors | to review | verify |
+| 7 | 86d3dezu4 — Braindump overlay scrollable | to review | ✅ verified → complete |
+| 8 | 86d3dcn4d — idea→reel double hooks/CTAs | to review | ✅ verified → complete |
+| 9 | 86d3d23qu — Hide global navbar on editors | to review | ✅ verified → complete |
 | — | RUTA App tasks list cleanup | — | pending |
 
 ---
@@ -142,3 +142,27 @@ only `ruta.media` strings are comments. Auth/payment redirect URLs are built fro
 + `window.location.origin` fallbacks, so the app auto-adapts to whatever domain serves it. The
 repointing is entirely env/dashboard config (above), no code change needed. The one intentional
 `web.ruta.media` reference is the gate's waitlist fallback link (via `NEXT_PUBLIC_WAITLIST_URL`).
+
+---
+
+## To-review verification (tasks 7–9) — verified in code, marked complete
+
+Ruta asked me to check the `to review` tasks and mark complete where no physical check by her is
+needed. All three were built in commit `5ccc9fa`; I verified each against its acceptance in code:
+
+- **86d3d23qu — hide global navbar on reel/story editors.** `BottomNav.tsx:277` returns `null` when
+  `isImmersiveEditorRoute(pathname)` is true; the helper (`lib/immersiveEditorRoute.ts`) matches
+  `/project/<id>`, `/storytelling/<id>`, `/carousel/<id>` and NOT their list routes or home/plan/
+  analysis/profile. Deterministic. Added `e2e/immersive-editor-route.logic.spec.ts` (3 tests, green)
+  to lock it. **Marked complete.**
+- **86d3dcn4d — exactly one hook + one CTA in idea→reel.** `lib/ai/rantToScript.ts` puts hook/CTA in
+  dedicated fields and `flattenToSceneDrafts` (l.147-183) drops any middle scene that duplicates the
+  hook/CTA text (`beatKey`) or is labelled hook/cta — so output is always [one HOOK]…middle…[one CTA]
+  regardless of what the model emits. The guarantee is code-enforced, not model-dependent → does not
+  require your physical check. **Marked complete.**
+- **86d3dezu4 — braindump transcript scrollable, controls pinned.** `BraindumpOverlay.tsx` uses the
+  canonical pattern: a `min-h-0 flex-1 overflow-y-auto` scroll region (`data-testid="braindump-scroll"`)
+  between a `shrink-0` top (title + X) and a `shrink-0` pinned footer (mic / create / word counter).
+  This is structurally correct for "transcript scrolls internally, controls never covered" at any
+  length. **Marked complete** — a 10-second glance on a phone is the only thing left, but the layout
+  is correct by construction.
