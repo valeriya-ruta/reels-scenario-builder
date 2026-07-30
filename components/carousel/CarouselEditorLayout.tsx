@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type ReactNode,
 } from 'react';
 import Link from 'next/link';
 import {
@@ -213,6 +214,7 @@ export default function CarouselEditorLayout({
   /** Export (opens the blur overlay off the editor canvas) */
   isGenerating,
   onExport,
+  headerMeta,
   validationError,
   validationErrorDetail,
 }: {
@@ -231,6 +233,7 @@ export default function CarouselEditorLayout({
   brandColorOptions: string[];
   isGenerating: boolean;
   onExport: () => void;
+  headerMeta?: ReactNode;
   validationError: string | null;
   validationErrorDetail: string | null;
 }) {
@@ -847,28 +850,29 @@ export default function CarouselEditorLayout({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Mobile top bar */}
-      <header className="flex h-[52px] shrink-0 items-center justify-between border-b border-[color:var(--border)] pl-1 pr-3 md:hidden">
+      {/* Mobile top bar: icon-back · [status · date meta] · export icon. The
+          status + date pills live here (task 86d3d23nj UI pass) so the header
+          reads as an app row, not a crowded webpage bar. */}
+      <header className="flex h-[52px] shrink-0 items-center gap-2 border-b border-[color:var(--border)] pl-1 pr-2 md:hidden">
         <Link
           href="/carousel"
-          className="inline-flex items-center gap-1 rounded-full px-2 py-1.5 text-sm font-medium text-zinc-800"
+          className="inline-flex shrink-0 items-center justify-center rounded-full p-2 text-zinc-800"
           aria-label="Всі каруселі"
         >
           <ChevronLeft className="h-5 w-5" />
-          <span>Всі каруселі</span>
         </Link>
-        <p className="text-sm font-medium text-zinc-800">Слайд {activeIndex + 1} / {slides.length}</p>
-        <div className="flex items-center gap-1 md:hidden">
-          <button
-            type="button"
-            onClick={onExport}
-            disabled={isGenerating}
-            className="inline-flex items-center gap-1 rounded-full border border-[color:var(--border)] bg-white px-3 py-1.5 text-[13px] font-medium text-zinc-900 disabled:opacity-50"
-          >
-            {isGenerating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-            Експорт
-          </button>
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {headerMeta}
         </div>
+        <button
+          type="button"
+          onClick={onExport}
+          disabled={isGenerating}
+          aria-label="Експортувати"
+          className="inline-flex shrink-0 items-center justify-center rounded-full border border-[color:var(--border)] bg-white p-2 text-zinc-900 disabled:opacity-50"
+        >
+          {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+        </button>
       </header>
 
       <div

@@ -6,13 +6,20 @@ import BrandDNASetup from '@/components/BrandDNASetup';
 import { useBrandStore } from '@/components/BrandProvider';
 import type { BrandSettings } from '@/lib/brand';
 import type { Slide } from '@/lib/carouselTypes';
+import type { ContentStatus } from '@/lib/content/statusSystem';
 
 export default function CarouselPageClient({
   initialBrandSettings,
   carouselProject,
 }: {
   initialBrandSettings: BrandSettings | null;
-  carouselProject: { id: string; name: string; slides: Slide[]; scheduledDate: string | null };
+  carouselProject: {
+    id: string;
+    name: string;
+    slides: Slide[];
+    scheduledDate: string | null;
+    status: string;
+  };
 }) {
   const { brandSettings, loading, refetchBrand, setBrandSettings } = useBrandStore();
   const effectiveBrandSettings = brandSettings ?? initialBrandSettings;
@@ -47,6 +54,7 @@ export default function CarouselPageClient({
         initialProjectName={carouselProject.name}
         initialSlides={carouselProject.slides}
         initialScheduledDate={carouselProject.scheduledDate}
+        initialStatus={carouselProject.status as ContentStatus}
       />
     </div>
   );

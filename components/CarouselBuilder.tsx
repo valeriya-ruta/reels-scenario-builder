@@ -20,6 +20,8 @@ import {
 } from '@/lib/carousel/colorSystem';
 import Link from 'next/link';
 import ScheduleChip from '@/components/content/ScheduleChip';
+import StatusPill from '@/components/content/StatusPill';
+import type { ContentStatus } from '@/lib/content/statusSystem';
 import { resolveBrandFont } from '@/lib/brandFonts';
 import CarouselEditorLayout from '@/components/carousel/CarouselEditorLayout';
 import CarouselExportOverlay from '@/components/carousel/CarouselExportOverlay';
@@ -252,6 +254,7 @@ export interface CarouselBuilderProps {
   initialProjectName: string;
   initialSlides: Slide[];
   initialScheduledDate?: string | null;
+  initialStatus?: ContentStatus;
 }
 
 /** Small, fast string hash (djb2) — keeps the export fingerprint cache keys
@@ -282,6 +285,7 @@ export default function CarouselBuilder({
   initialProjectName,
   initialSlides,
   initialScheduledDate = null,
+  initialStatus = 'idea',
 }: CarouselBuilderProps) {
   const { brandSettings } = useBrandStore();
   const brandFont = useMemo(() => resolveBrandFont(brandSettings?.fontId), [brandSettings?.fontId]);
@@ -948,6 +952,15 @@ export default function CarouselBuilder({
     return null;
   }
 
+  // Shared status + date meta controls (task 86d3d23nj UI pass) — one compact
+  // row reused in the desktop header and the mobile top bar.
+  const headerMeta = (
+    <>
+      <StatusPill refTable="carousel_projects" id={projectId} type="carousel" initialStatus={initialStatus} />
+      <ScheduleChip refTable="carousel_projects" id={projectId} initialDate={initialScheduledDate} />
+    </>
+  );
+
   return (
     <div ref={slideListTopRef} className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="hidden px-4 pt-4 md:block">
@@ -984,10 +997,8 @@ export default function CarouselBuilder({
           <span className="text-sm text-zinc-500">
             {slides.length} / {MAX_SLIDES}
           </span>
-          {/* Entry point 1: schedule chip near Експорт (task 86d3d23nj). */}
-          <span className="ml-auto">
-            <ScheduleChip refTable="carousel_projects" id={projectId} initialDate={initialScheduledDate} />
-          </span>
+          {/* Status + date meta controls near Експорт (task 86d3d23nj). */}
+          <span className="ml-auto flex items-center gap-2">{headerMeta}</span>
           <button
             type="button"
             disabled={isGenerating}
@@ -1046,6 +1057,7 @@ export default function CarouselBuilder({
           brandColorOptions={brandColorOptions}
           isGenerating={isGenerating}
           onExport={startExport}
+          headerMeta={headerMeta}
           validationError={validationError}
           validationErrorDetail={validationErrorDetail}
         />
