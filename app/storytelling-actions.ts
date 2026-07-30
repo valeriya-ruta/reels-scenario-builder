@@ -190,8 +190,16 @@ function mapSlideInteractiveToDb(interactive: Slide['interactive']): EngagementT
   return null;
 }
 
+/** One generated storytelling day, for the braindump's inline receipt. */
+export type CreatedStorytellingDay = {
+  id: string;
+  name: string;
+  scheduledDate: string;
+  storyCount: number;
+};
+
 export type CreateStorytellingFromRantResult =
-  | { ok: true; projectId: string }
+  | { ok: true; projectId: string; days: CreatedStorytellingDay[] }
   | { ok: false; error: string };
 
 /**
@@ -240,7 +248,7 @@ export async function createStorytellingProjectFromRant(
     output.days.length > 0 ? output.days : [{ day_number: 1, title: baseName, slides: output.slides }];
 
   const today = new Date();
-  const createdIds: string[] = [];
+  const created: CreatedStorytellingDay[] = [];
 
   for (let d = 0; d < days.length; d++) {
     const day = days[d];
@@ -263,12 +271,11 @@ export async function createStorytellingProjectFromRant(
 
     if (projectError || !project) {
       console.error('createStorytellingProjectFromRant project', projectError);
-      if (createdIds.length === 0) {
+      if (created.length === 0) {
         return { ok: false, error: 'Не вдалося створити сторітел.' };
       }
       break; // keep the days that already saved
     }
-    createdIds.push(project.id as string);
 
     const { data: column, error: columnError } = await supabase
       .from('storytelling_columns')
@@ -278,7 +285,6 @@ export async function createStorytellingProjectFromRant(
 
     if (columnError || !column) {
       await supabase.from('storytelling_projects').delete().eq('id', project.id);
-      createdIds.pop();
       console.error('createStorytellingProjectFromRant column', columnError);
       continue;
     }
@@ -297,12 +303,19 @@ export async function createStorytellingProjectFromRant(
         console.error('createStorytellingProjectFromRant stories', storiesError);
       }
     }
+
+    created.push({
+      id: project.id as string,
+      name: dayName,
+      scheduledDate,
+      storyCount: rows.length,
+    });
   }
 
-  if (createdIds.length === 0) {
+  if (created.length === 0) {
     return { ok: false, error: 'Не вдалося зберегти сторіс. Спробуй ще раз.' };
   }
 
-  // Open the first day; the rest are already on the calendar.
-  return { ok: true, projectId: createdIds[0] };
+  // The braindump shows these inline as a receipt; nothing is created silently.
+  return { ok: true, projectId: created[0].id, days: created };
 }

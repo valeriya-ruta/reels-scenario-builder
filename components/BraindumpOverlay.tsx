@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Mic, Keyboard, Check, X } from 'lucide-react';
 import { pickBraindumpPrompt } from '@/lib/braindumpPrompts';
+import { dayHeaderLabel } from '@/lib/content/calendar';
 import { countWords, BRAINDUMP_WORD_TARGET } from '@/lib/braindump/wordGate';
 import { CONTENT_TYPES, CONTENT_TYPE_ORDER, type ContentType } from '@/lib/contentTypes';
 import ContentTypeIcon from '@/components/ContentTypeIcon';
@@ -37,6 +38,20 @@ type InputMode = 'voice' | 'type';
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 type TypeStatus = 'idle' | 'loading' | 'done' | 'error';
 
+/** One created piece, shown in the braindump's inline receipt. */
+type ReceiptEntry = {
+  type: ContentType;
+  id: string;
+  label: string;
+  /** 'YYYY-MM-DD' when the piece was auto-scheduled (stories). */
+  date?: string;
+  /** Number of story cards (stories only). */
+  count?: number;
+  /** e.g. 2 of 3 — marks pieces generated together as one set. */
+  indexInSet?: number;
+  setSize?: number;
+};
+
 function pickRecorderMime(): string | undefined {
   if (typeof MediaRecorder === 'undefined') return undefined;
   const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
@@ -67,6 +82,11 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
     carousel: 'idle',
     stories: 'idle',
   });
+  // Inline receipt — what each type actually produced. Nothing is created
+  // silently: a saga of 3 days shows all 3 dated links right here. It
+  // accumulates because you can fire several types off one braindump, so there
+  // is no single "done" moment to interrupt with a screen.
+  const [receipt, setReceipt] = useState<ReceiptEntry[]>([]);
 
   const prevPromptRef = useRef<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -94,6 +114,7 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
     setInputMode('type');
     setError(null);
     setTypeStatus({ reels: 'idle', carousel: 'idle', stories: 'idle' });
+    setReceipt([]);
     if (initialIdea) {
       setPhase('B');
       setText(initialIdea.text);
@@ -279,11 +300,28 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
         if (type === 'reels') {
           const r = await generateReelFromRant(snapshot);
           ok = r.ok;
-          if (r.ok) createdId = r.projectId;
+          if (r.ok) {
+            createdId = r.projectId;
+            setReceipt((cur) => [...cur, { type, id: r.projectId, label: CONTENT_TYPES[type].label }]);
+          }
         } else if (type === 'stories') {
           const r = await createStorytellingProjectFromRant(snapshot);
           ok = r.ok;
-          if (r.ok) createdId = r.projectId;
+          if (r.ok) {
+            createdId = r.projectId;
+            setReceipt((cur) => [
+              ...cur,
+              ...r.days.map((d, i) => ({
+                type,
+                id: d.id,
+                label: d.name,
+                date: d.scheduledDate,
+                count: d.storyCount,
+                indexInSet: i + 1,
+                setSize: r.days.length,
+              })),
+            ]);
+          }
         } else {
           const res = await fetch('/api/carousel/rant-to-slides', {
             method: 'POST',
@@ -294,7 +332,13 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
           if (res.ok && data.slides?.length) {
             const created = await createCarouselProjectFromRant(data, snapshot);
             ok = created.ok;
-            if (created.ok) createdId = created.projectId;
+            if (created.ok) {
+              createdId = created.projectId;
+              setReceipt((cur) => [
+                ...cur,
+                { type, id: created.projectId, label: CONTENT_TYPES[type].label },
+              ]);
+            }
           }
         }
         setTypeStatus((s) => ({ ...s, [type]: ok ? 'done' : 'error' }));
@@ -567,6 +611,40 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
                   );
                 })}
               </div>
+
+              {/* Inline receipt — created pieces, tappable. A saga lists every
+                  dated day, so multi-day generation is never invisible. */}
+              {receipt.length > 0 && (
+                <div className="mt-3 rounded-[14px] border border-[color:var(--border)] bg-white/80 p-1.5">
+                  {receipt.map((r) => (
+                    <a
+                      key={`${r.type}-${r.id}`}
+                      href={CONTENT_TYPES[r.type].itemHref(r.id)}
+                      data-testid="braindump-receipt-item"
+                      className="flex items-center gap-2.5 rounded-[10px] px-2.5 py-2 transition-colors hover:bg-[color:var(--surface1)]"
+                    >
+                      <ContentTypeIcon type={r.type} size={18} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[13px] font-semibold text-[color:var(--foreground)]">
+                          {r.label}
+                          {r.setSize && r.setSize > 1 ? (
+                            <span className="ml-1.5 rounded-[5px] bg-[color:var(--surface2)] px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-[color:var(--text-secondary)]">
+                              {r.indexInSet}/{r.setSize}
+                            </span>
+                          ) : null}
+                        </span>
+                        {r.date ? (
+                          <span className="mt-0.5 block text-[11px] text-[color:var(--text-muted)]">
+                            {dayHeaderLabel(r.date)}
+                            {typeof r.count === 'number' ? ` · ${r.count} сторіс` : ''}
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="text-[color:var(--text-muted)]">→</span>
+                    </a>
+                  ))}
+                </div>
+              )}
               </div>
             )}
           </div>
