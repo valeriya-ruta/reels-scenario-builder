@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { createClient } from '@/lib/supabaseClient';
 import { localizeAuthError } from '@/lib/authErrorMessages';
 import { useRouter } from 'next/navigation';
+import { assertAccessGranted } from '@/app/signup/actions';
 
 export default function SignupForm() {
   const [email, setEmail] = useState('');
@@ -22,6 +23,15 @@ export default function SignupForm() {
     setLoading(true);
 
     try {
+      // Defense-in-depth: re-check the access grant server-side right before
+      // creating the account, so a stale/forged client state can't slip past
+      // the gate even though the page already gated on the same cookie.
+      const granted = await assertAccessGranted();
+      if (!granted) {
+        setError('Потрібен код доступу. Онови сторінку та введи код.');
+        setLoading(false);
+        return;
+      }
       const { error: signUpError } = await supabase.auth.signUp({
         email,
         password,

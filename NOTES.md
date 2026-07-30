@@ -22,7 +22,7 @@ Per-feature loop: build → Playwright test → run green → commit → move Cl
 |---|------|--------|--------|
 | 1 | 86d3gp8tb — Storytelling engine master prompt (single + saga) | ready to go | ✅ done → to review |
 | 2 | 86d3fcnny — Perceived-lag fix (optimistic UI) | ready to go | ✅ done → to review |
-| 3 | 86d3e1egm — Domain split + access-code gated signup | ready to go | pending |
+| 3 | 86d3e1egm — Domain split + access-code gated signup | ready to go | ✅ code done → to review (infra flagged for Kunj) |
 | 4 | 86d3c7u88 — Auto-save 5/8 follow-ups | in progress | pending |
 | 5 | 86d3dcwyy — Braindump 50-word gate + live counter | needs input | pending |
 | 6 | 86d3czf1e — Idea→content link persist | needs input | pending |
@@ -95,3 +95,50 @@ instant-render + reload-persists flow (self-skips without `E2E_ACTIVE_*`).
    (`data-testid="storytelling-toast"`) shown only when a background insert fails.
 4. Browser e2e can't run in this environment (no seeded auth / no server), so it's a guarded harness
    matching the repo's existing convention; the logic spec is the executed green coverage.
+
+---
+
+## Feature 3 — 86d3e1egm — Domain split + access-code gated signup
+
+**Marked FLAG-KUNJ / branch+PR only.** Built on `autobuild/2026-07-30`, NOT shipped to prod.
+
+**Shipped (code):**
+- **Access-code gate on `/signup`** — the centerpiece. `app/signup/page.tsx` renders
+  `<AccessCodeGate>` until a valid code is validated **server-side** (`app/signup/actions.ts` →
+  `lib/accessCode.ts`), which sets an HttpOnly, HMAC-signed grant cookie. Gate screen matches the
+  spec layout (big left heading «Введи код доступу», subtext, single clean code input, full-width
+  submit disabled until entered, waitlist fallback link). Defense-in-depth: `SignupForm` re-checks
+  `assertAccessGranted()` server-side right before `supabase.auth.signUp`.
+- **Clean `/login` route** (`app/login/page.tsx`) added alongside root login; whitelisted in
+  `middleware.ts` public paths.
+- **Env**: `SIGNUP_ACCESS_CODE` (fail-safe: unset ⇒ gate closed), `NEXT_PUBLIC_WAITLIST_URL`,
+  documented `NEXT_PUBLIC_APP_URL` — added to `.env.example`.
+
+**Test:** `e2e/access-code.logic.spec.ts` (4 tests, green) — empty rejected, fail-safe-closed when
+no code configured, exact case-sensitive match, whitespace trimmed. `e2e/access-code-gate.spec.ts`
+is the guarded browser harness (self-skips without `E2E_SIGNUP_ACCESS_CODE`).
+
+**Judgment calls (for QA):**
+1. **Single clean input, not 6 OTP cells.** The spec explicitly allowed either; a single input is
+   robust to any code length/format (the shared code isn't necessarily 6 chars).
+2. **Errors are neutral, not red.** The spec says red is reserved for destructive actions, so the
+   "wrong code" message uses a neutral tone, unlike the existing SignupForm (which still uses red).
+3. **Signed HttpOnly grant cookie** rather than a plaintext flag — unforgeable client-side; keyed by
+   the current code so rotating the code invalidates all old grants. 1h TTL.
+
+**⚠️ Kunj infra actions required (cannot be done from code — flagged, not blockers):**
+- **Two Vercel projects**: `web.ruta.media` → waitlist site, `app.ruta.media` → this app. Wire both
+  subdomains in the Vercel dashboard.
+- **Set env on the app project**: `SIGNUP_ACCESS_CODE=<the focus-group code>`,
+  `NEXT_PUBLIC_APP_URL=https://app.ruta.media`, `NEXT_PUBLIC_WAITLIST_URL=https://web.ruta.media`,
+  `WAYFORPAY_RETURN_URL=https://app.ruta.media/api/payments/verify-return`.
+- **Supabase dashboard** (project `ohhudfwwdcbpxryxmvmd`): update the auth redirect/callback
+  allowlist from `web.ruta.media` → `app.ruta.media`. To truly close open signups (belt-and-braces
+  beyond the UI gate), consider disabling public email signups so accounts can only be created
+  through the gated flow — optional hardening follow-up.
+
+**Note on the "sweep hardcoded web.ruta.media links" work item:** there were NONE in app code — the
+only `ruta.media` strings are comments. Auth/payment redirect URLs are built from `NEXT_PUBLIC_APP_URL`
++ `window.location.origin` fallbacks, so the app auto-adapts to whatever domain serves it. The
+repointing is entirely env/dashboard config (above), no code change needed. The one intentional
+`web.ruta.media` reference is the gate's waitlist fallback link (via `NEXT_PUBLIC_WAITLIST_URL`).
