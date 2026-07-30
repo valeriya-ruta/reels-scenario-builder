@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireServerEnv } from '@/lib/env';
+import { GROQ_TEXT_MODEL } from '@/lib/ai/groqModel';
 import { postProcessCarouselRant } from '@/lib/ai/carouselRantPostProcess';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import { aiLimit } from '@/lib/ratelimit';
@@ -168,7 +169,7 @@ export async function POST(req: NextRequest) {
       authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+      model: GROQ_TEXT_MODEL,
       temperature: 0.7,
       max_tokens: 3000,
       response_format: { type: 'json_object' },

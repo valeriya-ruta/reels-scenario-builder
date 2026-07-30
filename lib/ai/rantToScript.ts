@@ -1,4 +1,5 @@
 import { requireServerEnv } from '@/lib/env';
+import { GROQ_TEXT_MODEL } from '@/lib/ai/groqModel';
 
 export interface RantSceneDraft {
   text: string;
@@ -195,7 +196,7 @@ export async function transformRantToScript(
       authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+      model: GROQ_TEXT_MODEL,
       temperature: 0.7,
       response_format: { type: 'json_object' },
       messages: [

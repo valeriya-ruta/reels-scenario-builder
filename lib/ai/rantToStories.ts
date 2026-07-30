@@ -1,4 +1,5 @@
 import { requireServerEnv } from '@/lib/env';
+import { GROQ_TEXT_MODEL } from '@/lib/ai/groqModel';
 import { normalizeOutput } from '@/lib/ai/storiesNormalize';
 import type { StoriesOutput } from '@/lib/ai/storiesNormalize';
 
@@ -156,7 +157,7 @@ export async function generateStoriesFromRant(rant: string, name = ''): Promise<
       authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+      model: GROQ_TEXT_MODEL,
       temperature: 0.7,
       response_format: { type: 'json_object' },
       messages: [
