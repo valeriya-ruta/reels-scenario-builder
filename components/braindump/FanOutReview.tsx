@@ -6,6 +6,7 @@ import DateSheet from '@/components/content/DateSheet';
 import ContentTypeIcon from '@/components/ContentTypeIcon';
 import ProposalActions from '@/components/propose/ProposalActions';
 import { dayHeaderLabel } from '@/lib/content/calendar';
+import { wouldFloodStaging } from '@/lib/content/staging';
 import { setContentScheduledDate, deleteContentPiece } from '@/app/content-actions';
 import type { CreatedStorytellingDay } from '@/app/storytelling-actions';
 
@@ -63,6 +64,9 @@ export default function FanOutReview({
     setItems((cur) => cur.map((d) => (d.id === day.id ? { ...d, dropped: true } : d)));
     void deleteContentPiece('storytelling_projects', day.id);
   }, []);
+
+  const undated = useMemo(() => live.filter((d) => !d.scheduledDate), [live]);
+  const floods = wouldFloodStaging(undated.length);
 
   const spreadLine = useMemo(() => {
     if (live.length <= 1) return null;
@@ -156,6 +160,24 @@ export default function FanOutReview({
       {live.length === 0 ? (
         <p className="py-4 text-center text-[13px] text-[color:var(--text-muted)]">
           Прибрала все. Можна згенерувати ще раз або підкрутити думку.
+        </p>
+      ) : null}
+
+      {/* 4.4 — nothing generated gets dumped into staging in bulk. Everything
+          here arrives already dated; if the user strips dates, say plainly where
+          those pieces go and ask for the date now, while the intent is fresh. */}
+      {undated.length > 0 ? (
+        <p
+          data-testid="fanout-staging-warning"
+          className="mt-2 rounded-[12px] border px-3 py-2 text-[12.5px] leading-snug"
+          style={{
+            borderColor: floods ? 'rgba(217,119,38,0.5)' : 'var(--border)',
+            backgroundColor: floods ? 'rgba(217,119,38,0.08)' : 'var(--surface1)',
+            color: 'var(--foreground)',
+          }}
+        >
+          ✻ {undated.length} без дати підуть у Розбір. Постав дату тим, які точно хочеш —
+          потім буде важче вирішувати.
         </p>
       ) : null}
 

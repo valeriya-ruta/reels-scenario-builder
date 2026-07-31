@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { requireAuth } from '@/lib/auth';
 import { getAllContent } from '@/lib/content/contentList';
+import { stagedPieces, countNeedingDecision } from '@/lib/content/staging';
 import PlanCalendar from '@/components/plan/PlanCalendar';
 
 /**
@@ -15,6 +16,14 @@ export default async function PlanPage() {
   }
 
   const pieces = await getAllContent();
+  const staged = stagedPieces(pieces);
+  const nowIso = new Date().toISOString();
 
-  return <PlanCalendar pieces={pieces} />;
+  return (
+    <PlanCalendar
+      pieces={pieces}
+      stagedCount={staged.length}
+      stagedOverdue={countNeedingDecision(staged, nowIso)}
+    />
+  );
 }
