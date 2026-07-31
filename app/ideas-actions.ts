@@ -1,4 +1,5 @@
 'use server';
+import { displayTitle } from '@/lib/content/displayTitle';
 
 import { requireAuth } from '@/lib/auth';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
@@ -118,7 +119,7 @@ export async function getIdeaChildren(ideaId: string): Promise<IdeaChild[]> {
       return {
         contentType: r.content_type as ContentType,
         contentId: r.content_id,
-        title: (piece.title ?? '').trim() || 'Без назви',
+        title: displayTitle(piece.title, 'idea'),
         status: piece.status,
         scheduledDate: piece.scheduled_date,
       };

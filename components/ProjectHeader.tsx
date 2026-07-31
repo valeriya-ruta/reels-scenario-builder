@@ -76,6 +76,7 @@ export default function ProjectHeader({
         backHref={backHref}
         backLabel={backLabel}
         title={project.name}
+        kind="reel"
         onRename={handleRename}
         meta={
           <>

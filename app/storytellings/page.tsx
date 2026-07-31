@@ -6,6 +6,7 @@ import ContentRowsSection from '@/components/content/ContentRowsSection';
 import type { ContentPiece } from '@/lib/content/contentPiece';
 import type { ContentStatus } from '@/lib/content/statusSystem';
 import { attachPreviews } from '@/lib/content/contentPreview';
+import { NEW_LABELS, displayTitle } from '@/lib/content/displayTitle';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,7 +39,7 @@ export default async function StorytellingsPage() {
     userId: p.user_id,
     type: 'story',
     status: (p.status ?? 'idea') as ContentStatus,
-    title: p.name?.trim() || 'Без назви',
+    title: displayTitle(p.name, 'story'),
     refTable: 'storytelling_projects',
     scheduledDate: p.scheduled_date ?? null,
     createdAt: p.created_at ?? now,
@@ -86,7 +87,7 @@ async function createProject() {
 
   const { data: project, error } = await supabase
     .from('storytelling_projects')
-    .insert({ name: 'Без назви', user_id: user.id })
+    .insert({ name: NEW_LABELS.story, user_id: user.id })
     .select()
     .single();
 

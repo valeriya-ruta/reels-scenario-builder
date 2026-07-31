@@ -773,27 +773,32 @@ export default function BraindumpOverlay({
               </p>
             )}
 
-            <div className="mb-3 flex items-center gap-2">
+            {/* ONE exit, bottom-left, identical position on every braindump
+                screen (§6). Its meaning is always "back one step": from capture
+                that is the proposal deck; from the deck (or a result) there is
+                nowhere back to, so it closes. Previously the capture screen
+                carried BOTH an × and a separate back control, which is what made
+                the two screens disagree with each other. */}
+            <div className="mb-3 flex items-center">
               <button
                 type="button"
-                onClick={close}
-                data-testid="braindump-close"
-                aria-label="Закрити"
-                className="app-icon-btn"
+                onClick={phase === 'A' ? backToProposals : close}
+                data-testid={phase === 'A' ? 'braindump-back-to-proposals' : 'braindump-close'}
+                aria-label={phase === 'A' ? 'Інші напрямки' : 'Закрити'}
+                className="app-pill py-2 text-[12.5px]"
               >
-                <X className="h-4 w-4" strokeWidth={2.2} />
+                {phase === 'A' ? (
+                  <>
+                    <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2.2} />
+                    Інші напрямки
+                  </>
+                ) : (
+                  <>
+                    <X className="h-3.5 w-3.5" strokeWidth={2.2} />
+                    Закрити
+                  </>
+                )}
               </button>
-              {phase === 'A' && (
-                <button
-                  type="button"
-                  onClick={backToProposals}
-                  data-testid="braindump-back-to-proposals"
-                  className="app-pill py-2 text-[12.5px]"
-                >
-                  <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2.2} />
-                  Інші напрямки
-                </button>
-              )}
             </div>
 
             {/* State P controls: capture is deliberately SECONDARY here — a quiet

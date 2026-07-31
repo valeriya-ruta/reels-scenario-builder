@@ -18,6 +18,11 @@ export type ContentPreview = {
   count: number;
   /** e.g. «8 слайдів». */
   countLabel: string;
+  /**
+   * Reels only: estimated spoken length, «1:35». §3 — for a reel the useful
+   * signal is how LONG it is, not how many scenes it happens to be cut into.
+   */
+  durationLabel?: string;
   /** Carousel only: the cover's real palette, so the card renders in brand. */
   cover?: {
     background: string;

@@ -3,6 +3,7 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { ChevronLeft, Pencil } from 'lucide-react';
 import BackLink from '@/components/ui/BackLink';
+import { displayTitle, type TitleKind } from '@/lib/content/displayTitle';
 
 /**
  * The one top bar every content editor uses (§1).
@@ -30,6 +31,7 @@ export default function EditorTopBar({
   meta,
   trailing,
   titleClassName = 'app-title',
+  kind,
 }: {
   backHref: string;
   backLabel?: string;
@@ -41,6 +43,8 @@ export default function EditorTopBar({
   /** Rare, non-repeated action. Leave empty by default. */
   trailing?: ReactNode;
   titleClassName?: string;
+  /** Drives the untitled fallback («Новий рілс» / «Нова карусель» / …), §1. */
+  kind: TitleKind;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(title);
@@ -50,7 +54,7 @@ export default function EditorTopBar({
   // effect: an effect would either fight the user's typing or need a guard, and
   // there is exactly one moment the draft should come from the title.
   const startEditing = () => {
-    setDraft(title);
+    setDraft(displayTitle(title, kind));
     setEditing(true);
   };
 
@@ -97,7 +101,7 @@ export default function EditorTopBar({
             title="Перейменувати"
             className="flex min-w-0 flex-1 items-center gap-1.5 rounded-[10px] px-1.5 py-1 text-left transition-colors hover:bg-[color:var(--surface1)]"
           >
-            <span className={`${titleClassName} truncate`}>{title || 'Без назви'}</span>
+            <span className={`${titleClassName} truncate`}>{displayTitle(title, kind)}</span>
             <Pencil
               className="h-3.5 w-3.5 shrink-0 text-[color:var(--text-muted)]"
               strokeWidth={2}

@@ -283,13 +283,27 @@ export default function CarouselSlidePreview({
   const justify =
     placement === 'top' ? 'flex-start' : placement === 'bottom' ? 'flex-end' : 'center';
 
+  /**
+   * The corner radius must SCALE with the preview.
+   *
+   * `baseWrap` is sized at already-scaled dimensions — a strip thumbnail is
+   * ~46×58 CSS px — so a fixed `rounded-xl` (12px) was 26% of the thumbnail's
+   * width and rendered the slide as an oval blob inside its frame (§5, twice
+   * reported). At full size the same 12px is correct. So derive it: 12px at
+   * scale 1, floored at 2px so a thumbnail still reads as a card rather than a
+   * hard square.
+   */
+  const cornerRadius = Math.max(2, Math.round(12 * scale));
+
   const baseWrap: CSSProperties = {
     width: Math.round(CANVAS_WIDTH * scale),
     height: Math.round(CANVAS_HEIGHT * scale),
     overflow: 'hidden',
+    borderRadius: cornerRadius,
   };
 
   const baseCanvas: CSSProperties = {
+    borderRadius: scale > 0 ? cornerRadius / scale : cornerRadius,
     width: CANVAS_WIDTH,
     height: CANVAS_HEIGHT,
     transform: `scale(${scale})`,
@@ -354,9 +368,9 @@ export default function CarouselSlidePreview({
     const showCoverSubline = Boolean(bodyLine || fallbackSub);
     if (refined) {
       return (
-        <div className="relative overflow-hidden rounded-xl shadow-lg" style={baseWrap}>
+        <div className="relative overflow-hidden shadow-lg" style={baseWrap}>
         <div
-          className="relative overflow-hidden rounded-xl shadow-lg"
+          className="relative overflow-hidden shadow-lg"
           style={{
             ...baseCanvas,
             backgroundColor: resolvedBackgroundColor,
@@ -386,9 +400,9 @@ export default function CarouselSlidePreview({
       );
     }
     return (
-      <div className="relative overflow-hidden rounded-xl shadow-lg" style={baseWrap}>
+      <div className="relative overflow-hidden shadow-lg" style={baseWrap}>
         <div
-          className="relative overflow-hidden rounded-xl shadow-lg"
+          className="relative overflow-hidden shadow-lg"
           style={{
             ...baseCanvas,
             backgroundColor: slide.backgroundType === 'color' ? resolvedBackgroundColor : DEFAULT_DARK,
@@ -426,8 +440,8 @@ export default function CarouselSlidePreview({
       ? (slide.titleSize ?? 'L') === 'M' ? 70 : 82
       : (slide.titleSize ?? 'L') === 'M' ? 46 : 52;
     return (
-      <div className="relative overflow-hidden rounded-xl shadow-lg" style={baseWrap}>
-        <div className="relative overflow-hidden rounded-xl shadow-lg" style={{ ...baseCanvas, backgroundColor: quoteBg }}>
+      <div className="relative overflow-hidden shadow-lg" style={baseWrap}>
+        <div className="relative overflow-hidden shadow-lg" style={{ ...baseCanvas, backgroundColor: quoteBg }}>
           {contentShell(
             quoteBg,
             <div className="flex w-full flex-col items-center justify-center py-8">
@@ -453,8 +467,8 @@ export default function CarouselSlidePreview({
   if (slide.layoutPreset === 'list') {
     const items = slide.listItems?.length ? slide.listItems : ['Пункт 1', 'Пункт 2', 'Пункт 3'];
     return (
-      <div className="relative overflow-hidden rounded-xl shadow-lg" style={baseWrap}>
-        <div className="relative overflow-hidden rounded-xl shadow-lg" style={{ ...baseCanvas, backgroundColor: resolvedBackgroundColor }}>
+      <div className="relative overflow-hidden shadow-lg" style={baseWrap}>
+        <div className="relative overflow-hidden shadow-lg" style={{ ...baseCanvas, backgroundColor: resolvedBackgroundColor }}>
           {contentShell(
             resolvedBackgroundColor,
             <>
@@ -486,8 +500,8 @@ export default function CarouselSlidePreview({
   if (slideType === 'final') {
     const bodyClean = stripAccentMarkers(slide.body);
     return (
-      <div className="relative overflow-hidden rounded-xl shadow-lg" style={baseWrap}>
-        <div className="relative overflow-hidden rounded-xl shadow-lg" style={{ ...baseCanvas, backgroundColor: resolvedBackgroundColor }}>
+      <div className="relative overflow-hidden shadow-lg" style={baseWrap}>
+        <div className="relative overflow-hidden shadow-lg" style={{ ...baseCanvas, backgroundColor: resolvedBackgroundColor }}>
           {contentShell(
             darkBg,
             <>
@@ -526,8 +540,8 @@ export default function CarouselSlidePreview({
 
   const pill = (slide.optionalLabel || '').trim();
   return (
-    <div className="relative overflow-hidden rounded-xl shadow-lg" style={baseWrap}>
-      <div className="relative overflow-hidden rounded-xl shadow-lg" style={{ ...baseCanvas, backgroundColor: resolvedBackgroundColor }}>
+    <div className="relative overflow-hidden shadow-lg" style={baseWrap}>
+      <div className="relative overflow-hidden shadow-lg" style={{ ...baseCanvas, backgroundColor: resolvedBackgroundColor }}>
         {contentShell(
           resolvedBackgroundColor,
           <>

@@ -1,4 +1,5 @@
 'use server';
+import { NEW_LABELS } from '@/lib/content/displayTitle';
 
 import { redirect } from 'next/navigation';
 import { requireAuth } from '@/lib/auth';
@@ -14,7 +15,7 @@ export async function createCarouselProject() {
   const supabase = await createServerSupabaseClient();
   const { data: row, error } = await supabase
     .from('carousel_projects')
-    .insert({ name: 'Без назви', user_id: user.id })
+    .insert({ name: NEW_LABELS.carousel, user_id: user.id })
     .select()
     .single();
 

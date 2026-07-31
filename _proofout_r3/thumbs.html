@@ -1,0 +1,291 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="file://C:/Users/Ruta/Desktop/Reels planner/reels-planner/_proofout_r3/tw.css">
+<style>:root {
+  /* ── Design system (app UI). Canvas is a warm off-white so white cards read as
+     elevated surfaces — the Linear/Notion/Monday layering — instead of a flat
+     white webpage. Text is near-black, never pure #000. ────────────────────── */
+  --canvas: #f7f7f5;
+  --background: #ffffff;
+  --foreground: #17171a;
+  --text-secondary: #5f5f68;
+  --text-muted: #8e8e98;
+  --color-text-primary: #17171a;
+  --color-text-secondary: #5f5f68;
+  --color-text-muted: #8e8e98;
+  --color-background-canvas: #ffffff;
+  --color-background-secondary: #f5f5f5;
+  --color-border-primary: #e5e5e5;
+  --color-link: #004ba8;
+  --color-link-soft: #e8f0fc;
+  --accent: #004ba8;
+  --accent-soft: rgba(0, 75, 168, 0.12);
+  --accent-rgb: 0, 75, 168;
+  /* Elevation + shape scale */
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+  --elev-1: 0 1px 2px rgba(16, 17, 33, 0.04), 0 1px 3px rgba(16, 17, 33, 0.03);
+  --elev-2: 0 2px 4px rgba(16, 17, 33, 0.04), 0 8px 20px rgba(16, 17, 33, 0.06);
+  --elev-3: 0 8px 40px rgba(16, 17, 33, 0.14);
+  --hairline: rgba(17, 17, 26, 0.08);
+  /* Semantic content-type palette (icons/tags only — blue stays the functional
+     UI accent). Kept soft. Shared by Home, Create radial menu, Braindump. */
+  --type-reels: #004ba8;
+  --type-reels-soft: rgba(0, 75, 168, 0.1);
+  --type-carousel: #7850a0;
+  --type-carousel-soft: rgba(120, 80, 160, 0.12);
+  --type-stories: #c08c28;
+  --type-stories-soft: rgba(192, 140, 40, 0.12);
+  --border: rgba(17, 17, 26, 0.09);
+  --border-strong: rgba(17, 17, 26, 0.16);
+  --success: #16a34a;
+  --muted: #8e8e98;
+  --surface: #f4f4f2;
+  --surface1: #f4f4f2;
+  --surface2: #ededea;
+  --shadow-card-sm: 0 1px 2px rgba(26, 28, 46, 0.05),
+    0 4px 16px rgba(26, 28, 46, 0.06);
+  --shadow-card: 0 1px 3px rgba(26, 28, 46, 0.06),
+    0 10px 28px rgba(26, 28, 46, 0.08);
+  --shadow-card-subtle: 0 1px 3px rgba(0, 0, 0, 0.12);
+  --border-radius-lg: 0.5rem;
+  --border-radius-md: 0.375rem;
+  --border-radius-xl: 1rem;
+  --border-radius-2xl: 1.25rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-accent: var(--accent);
+  --color-border-token: var(--border);
+  --font-sans: "Google Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Google Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Google Sans", ui-sans-serif, system-ui, sans-serif;
+}
+
+.font-display {
+  font-family: "Google Sans", sans-serif;
+  font-optical-sizing: auto;
+  font-style: normal;
+  font-variation-settings: "GRAD" 0;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: "Google Sans", sans-serif;
+  font-optical-sizing: auto;
+  font-style: normal;
+  font-variation-settings: "GRAD" 0;
+  line-height: 1.6;
+}
+
+/* Scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 99px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}
+
+/* Focus: visible ring (do not remove outline without replacement) */
+:focus {
+  outline: none;
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:not([tabindex="-1"]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+button,
+[role="button"] {
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+button:disabled,
+[role="button"][aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* Card shadow utility */
+.card-shadow {
+  box-shadow: var(--shadow-card-subtle);
+}
+
+/* ── App UI system ──────────────────────────────────────────────────────────
+   Shared classes so every screen is built from one vocabulary (Linear/Notion/
+   Monday language): an off-white canvas, white elevated cards, hairline rows,
+   quiet outlined pills, and one page-title treatment. */
+
+/* Material Symbols ligature glyphs (content-type icons). */
+.material-symbols {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* Page canvas: warm off-white so cards read as surfaces above it. */
+.app-canvas {
+  background: var(--canvas);
+  min-height: 100vh;
+}
+
+/* Standard page shell: centred column, mobile-first gutters, nav clearance. */
+.app-page {
+  width: 100%;
+  max-width: 640px;
+  margin-inline: auto;
+  padding-inline: 16px;
+  padding-top: 20px;
+  padding-bottom: 110px;
+}
+
+/* One page-title treatment everywhere. */
+.app-title {
+  font-family: "Google Sans", sans-serif;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: var(--foreground);
+}
+
+.app-subtitle {
+  margin-top: 2px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+/* Section label above a group (uppercase micro-label). */
+.app-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+/* Elevated white card. */
+.app-card {
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--elev-1);
+}
+
+/* Grouped list container (hairline-separated rows inside). */
+.app-group {
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--elev-1);
+  overflow: hidden;
+}
+
+.app-group > * + * {
+  border-top: 1px solid var(--border);
+}
+
+/* Quiet outlined pill (status, date, filters, actions). */
+.app-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  background: var(--background);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: background 0.15s ease, border-color 0.15s ease;
+  white-space: nowrap;
+}
+
+.app-pill:hover {
+  background: var(--surface1);
+  border-color: var(--border-strong);
+}
+
+/* Circular icon button for nav bars. */
+.app-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  width: 38px;
+  border-radius: 999px;
+  color: var(--text-secondary);
+  transition: background 0.15s ease;
+}
+
+.app-icon-btn:hover {
+  background: var(--surface1);
+  color: var(--foreground);
+}
+
+/* Primary action. */
+.app-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  padding: 11px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: var(--elev-1);
+}
+
+.app-btn-primary:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+/* Skeleton shimmer (spec) */
+
+html,body{margin:0;padding:0;font-family:ui-sans-serif,system-ui,sans-serif}
+#root{width:520px}</style></head><body><div id="root"><div style="padding:20px;background:#fff"><p style="font-size:11px;font-weight:700;letter-spacing:.12em;color:#888;margin:0 0 8px">STRIP sm (58px)</p><div class="flex flex-row items-center gap-2 overflow-x-auto" style="margin-bottom:24px"><div style="width:46px;height:58px" class="relative shrink-0 overflow-hidden rounded-[5px] ring-2"><span class="absolute inset-0 overflow-hidden rounded-[5px]"><div class="relative overflow-hidden shadow-lg" style="width:46px;height:58px;overflow:hidden;border-radius:2px"><div class="relative overflow-hidden shadow-lg" style="border-radius:46.95652173913044px;width:1080px;height:1350px;transform:scale(0.04259259259259259);transform-origin:top left;background-color:#C9A227"><div class="absolute bottom-[100px] left-[88px] right-[88px] top-[140px] flex flex-col justify-end"><div class="text-center font-bold leading-[1.0] whitespace-pre-wrap" style="font-family:&#x27;Inter&#x27;, sans-serif;color:#232C3F;font-size:96px"><span><span>Як ми втратили 700 клієнтів</span></span></div><p class="mt-6 leading-snug text-center" style="font-family:&#x27;Inter&#x27;, sans-serif;color:#000000;font-size:36px"><span><span>Історія однієї дорогої помилки</span></span></p></div></div></div></span><span class="pointer-events-none absolute inset-0" style="border-radius:5px;border:2px solid #C9A227"></span></div><div style="width:46px;height:58px" class="relative shrink-0 overflow-hidden rounded-[5px] ring-1 ring-black/10"><span class="absolute inset-0 overflow-hidden rounded-[5px]"><div class="relative overflow-hidden shadow-lg" style="width:46px;height:58px;overflow:hidden;border-radius:2px"><div class="relative overflow-hidden shadow-lg" style="border-radius:46.95652173913044px;width:1080px;height:1350px;transform:scale(0.04259259259259259);transform-origin:top left;background-color:#F0EEE9"><div class="relative flex h-full w-full flex-col px-[88px] py-[72px]" style="justify-content:flex-end;background-color:#F0EEE9"><div class="w-full text-center"><p class="mt-8 font-bold leading-[1.05] whitespace-pre-wrap" style="font-family:&#x27;Inter&#x27;, sans-serif;color:#232C3F;font-size:72px"><span><span>Що перевірити</span></span></p><p class="mt-6 leading-relaxed whitespace-pre-wrap" style="font-family:&#x27;Inter&#x27;, sans-serif;color:#000000;font-size:42px">Реальні кейси та результати</p></div></div></div></div></span><span class="pointer-events-none absolute inset-0" style="border-radius:5px;border:1px solid rgba(0,0,0,0.08)"></span></div><div style="width:46px;height:58px" class="relative shrink-0 overflow-hidden rounded-[5px] ring-1 ring-black/10"><span class="absolute inset-0 overflow-hidden rounded-[5px]"><div class="relative overflow-hidden shadow-lg" style="width:46px;height:58px;overflow:hidden;border-radius:2px"><div class="relative overflow-hidden shadow-lg" style="border-radius:46.95652173913044px;width:1080px;height:1350px;transform:scale(0.04259259259259259);transform-origin:top left;background-color:#C9A227"><div class="relative flex h-full w-full flex-col px-[88px] py-[72px]" style="justify-content:flex-end;background-color:#C9A227"><div class="w-full text-center"><p class="mt-6 text-[72px] font-bold leading-[1.05] whitespace-pre-wrap" style="color:#232C3F;font-family:&#x27;Inter&#x27;, sans-serif;font-size:72px"><span><span>Готові уникнути?</span></span></p><div class="mt-10 rounded-2xl px-8 py-6" style="background-color:#C9A227"><p class="text-[36px] font-bold" style="color:#000000;font-family:&#x27;Inter&#x27;, sans-serif;font-size:40px">Підпишись</p></div></div></div></div></div></span><span class="pointer-events-none absolute inset-0" style="border-radius:5px;border:1px solid rgba(0,0,0,0.08)"></span></div></div><p style="font-size:11px;font-weight:700;letter-spacing:.12em;color:#888;margin:0 0 8px">STRIP md (78px)</p><div class="flex flex-row items-center gap-2 overflow-x-auto"><div style="width:62px;height:78px" class="relative shrink-0 overflow-hidden rounded-[5px] ring-2"><span class="absolute inset-0 overflow-hidden rounded-[5px]"><div class="relative overflow-hidden shadow-lg" style="width:62px;height:78px;overflow:hidden;border-radius:2px"><div class="relative overflow-hidden shadow-lg" style="border-radius:34.83870967741935px;width:1080px;height:1350px;transform:scale(0.05740740740740741);transform-origin:top left;background-color:#C9A227"><div class="absolute bottom-[100px] left-[88px] right-[88px] top-[140px] flex flex-col justify-end"><div class="text-center font-bold leading-[1.0] whitespace-pre-wrap" style="font-family:&#x27;Inter&#x27;, sans-serif;color:#232C3F;font-size:96px"><span><span>Як ми втратили 700 клієнтів</span></span></div><p class="mt-6 leading-snug text-center" style="font-family:&#x27;Inter&#x27;, sans-serif;color:#000000;font-size:36px"><span><span>Історія однієї дорогої помилки</span></span></p></div></div></div></span><span class="pointer-events-none absolute inset-0" style="border-radius:5px;border:2px solid #C9A227"></span></div><div style="width:62px;height:78px" class="relative shrink-0 overflow-hidden rounded-[5px] ring-1 ring-black/10"><span class="absolute inset-0 overflow-hidden rounded-[5px]"><div class="relative overflow-hidden shadow-lg" style="width:62px;height:78px;overflow:hidden;border-radius:2px"><div class="relative overflow-hidden shadow-lg" style="border-radius:34.83870967741935px;width:1080px;height:1350px;transform:scale(0.05740740740740741);transform-origin:top left;background-color:#F0EEE9"><div class="relative flex h-full w-full flex-col px-[88px] py-[72px]" style="justify-content:flex-end;background-color:#F0EEE9"><div class="w-full text-center"><p class="mt-8 font-bold leading-[1.05] whitespace-pre-wrap" style="font-family:&#x27;Inter&#x27;, sans-serif;color:#232C3F;font-size:72px"><span><span>Що перевірити</span></span></p><p class="mt-6 leading-relaxed whitespace-pre-wrap" style="font-family:&#x27;Inter&#x27;, sans-serif;color:#000000;font-size:42px">Реальні кейси та результати</p></div></div></div></div></span><span class="pointer-events-none absolute inset-0" style="border-radius:5px;border:1px solid rgba(0,0,0,0.08)"></span></div><div style="width:62px;height:78px" class="relative shrink-0 overflow-hidden rounded-[5px] ring-1 ring-black/10"><span class="absolute inset-0 overflow-hidden rounded-[5px]"><div class="relative overflow-hidden shadow-lg" style="width:62px;height:78px;overflow:hidden;border-radius:2px"><div class="relative overflow-hidden shadow-lg" style="border-radius:34.83870967741935px;width:1080px;height:1350px;transform:scale(0.05740740740740741);transform-origin:top left;background-color:#C9A227"><div class="relative flex h-full w-full flex-col px-[88px] py-[72px]" style="justify-content:flex-end;background-color:#C9A227"><div class="w-full text-center"><p class="mt-6 text-[72px] font-bold leading-[1.05] whitespace-pre-wrap" style="color:#232C3F;font-family:&#x27;Inter&#x27;, sans-serif;font-size:72px"><span><span>Готові уникнути?</span></span></p><div class="mt-10 rounded-2xl px-8 py-6" style="background-color:#C9A227"><p class="text-[36px] font-bold" style="color:#000000;font-family:&#x27;Inter&#x27;, sans-serif;font-size:40px">Підпишись</p></div></div></div></div></div></span><span class="pointer-events-none absolute inset-0" style="border-radius:5px;border:1px solid rgba(0,0,0,0.08)"></span></div></div></div></div></body></html>

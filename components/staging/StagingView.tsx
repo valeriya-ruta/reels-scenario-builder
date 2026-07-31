@@ -7,6 +7,7 @@ import DateSheet from '@/components/content/DateSheet';
 import ContentTypeIcon from '@/components/ContentTypeIcon';
 import ProposingEmptyState from '@/components/propose/ProposingEmptyState';
 import TapButton from '@/components/ui/TapButton';
+import { displayTitle } from '@/lib/content/displayTitle';
 import { setContentScheduledDate, deleteContentPiece } from '@/app/content-actions';
 import { contentHref, type ContentPiece } from '@/lib/content/contentPiece';
 import { TYPE_LABELS, STATUS_LABELS, STATUS_COLORS } from '@/lib/content/statusSystem';
@@ -14,7 +15,6 @@ import {
   sortByPressure,
   stagedAgeDays,
   staleness,
-  stagingPressure,
   NUDGE_AFTER_DAYS,
 } from '@/lib/content/staging';
 import type { ContentType as BraindumpType } from '@/lib/contentTypes';
@@ -181,7 +181,7 @@ export default function StagingView({
                           isOpen ? '' : 'truncate'
                         }`}
                       >
-                        {piece.title}
+                        {displayTitle(piece.title, piece.type)}
                       </span>
                       <span className="mt-1 flex flex-wrap items-center gap-1.5 text-[12px]">
                         <span className="font-medium" style={{ color: STATUS_COLORS[piece.status] }}>
@@ -192,13 +192,17 @@ export default function StagingView({
                           {TYPE_LABELS[piece.type]}
                         </span>
                         <span aria-hidden>·</span>
-                        {/* Aging is always shown — there is no neutral "stored". */}
+                        {/* §3: the card face carries the STATE, never a date —
+                            when a thing was made is not something you act on.
+                            Aging still applies pressure through the amber border
+                            and the banner above, so nothing was lost by dropping
+                            the "N дн" string from every row. */}
                         <span
-                          data-testid="staging-pressure"
+                          data-testid="staging-unscheduled"
                           className="font-medium"
                           style={{ color: level === 'fresh' ? 'var(--text-muted)' : '#b45309' }}
                         >
-                          {stagingPressure(age)}
+                          Незаплановано
                         </span>
                       </span>
                     </span>
@@ -223,9 +227,13 @@ export default function StagingView({
                           Тут ще нічого не написано.
                         </p>
                       )}
-                      {piece.preview?.countLabel ? (
+                      {/* A reel is judged by LENGTH, not by how many scenes it
+                          happens to be cut into (§3). */}
+                      {piece.preview?.durationLabel ?? piece.preview?.countLabel ? (
                         <p className="mt-1.5 text-[11.5px] text-[color:var(--text-muted)]">
-                          {piece.preview.countLabel}
+                          {piece.type === 'reel' && piece.preview?.durationLabel
+                            ? piece.preview.durationLabel
+                            : piece.preview?.countLabel}
                         </p>
                       ) : null}
 

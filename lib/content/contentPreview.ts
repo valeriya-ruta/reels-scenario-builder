@@ -2,6 +2,14 @@ import 'server-only';
 
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import type { ContentPiece, ContentPreview } from '@/lib/content/contentPiece';
+import { estimateDialogueSeconds } from '@/lib/dialogueDuration';
+
+/** «1:35» — the shape a creator checks a Reel's length against. */
+function formatDuration(totalSeconds: number): string {
+  const m = Math.floor(totalSeconds / 60);
+  const sec = totalSeconds % 60;
+  return `${m}:${String(sec).padStart(2, '0')}`;
+}
 
 /**
  * Attach a real preview to each content piece (task 3.1).
@@ -82,8 +90,13 @@ export async function attachPreviews(pieces: ContentPiece[]): Promise<ContentPie
         .order('order_index', { ascending: true })
         .returns<{ project_id: string; order_index: number; lines: string | null }[]>();
       const counts = new Map<string, number>();
+      const seconds = new Map<string, number>();
       for (const row of data ?? []) {
         counts.set(row.project_id, (counts.get(row.project_id) ?? 0) + 1);
+        seconds.set(
+          row.project_id,
+          (seconds.get(row.project_id) ?? 0) + estimateDialogueSeconds(row.lines),
+        );
         if (!previews.has(row.project_id)) {
           previews.set(row.project_id, { lead: clean(row.lines), count: 0, countLabel: '' });
         }
@@ -93,6 +106,9 @@ export async function attachPreviews(pieces: ContentPiece[]): Promise<ContentPie
         if (preview) {
           preview.count = count;
           preview.countLabel = `${count} сцен`;
+          const total = seconds.get(id) ?? 0;
+          // Only meaningful once something is actually written.
+          if (total > 0) preview.durationLabel = formatDuration(total);
         }
       }
     })(),

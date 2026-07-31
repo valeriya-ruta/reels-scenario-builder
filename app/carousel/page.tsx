@@ -6,6 +6,7 @@ import SwipeableContentList from '@/components/content/SwipeableContentList';
 import type { ContentPiece } from '@/lib/content/contentPiece';
 import type { ContentStatus } from '@/lib/content/statusSystem';
 import { attachPreviews } from '@/lib/content/contentPreview';
+import { displayTitle } from '@/lib/content/displayTitle';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,7 +40,7 @@ export default async function CarouselListPage() {
     userId: p.user_id,
     type: 'carousel',
     status: (p.status ?? 'idea') as ContentStatus,
-    title: p.name?.trim() || 'Без назви',
+    title: displayTitle(p.name, 'carousel'),
     refTable: 'carousel_projects',
     scheduledDate: p.scheduled_date ?? null,
     createdAt: p.created_at,

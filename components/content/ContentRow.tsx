@@ -3,6 +3,7 @@
 import { type CSSProperties } from 'react';
 import StatusRing from '@/components/content/StatusRing';
 import { formatRelativeTime } from '@/lib/content/relativeTime';
+import { displayTitle } from '@/lib/content/displayTitle';
 import {
   STATUS_COLORS,
   STATUS_LABELS,
@@ -81,7 +82,7 @@ export default function ContentRow({
         className="min-w-0 flex-1 text-left"
       >
         <div className="truncate text-[15px] font-semibold text-[color:var(--foreground)]">
-          {piece.title || 'Без назви'}
+          {displayTitle(piece.title, piece.type)}
         </div>
         <div className="mt-0.5 flex items-center gap-1.5 text-[12px] text-zinc-500">
           <span className="shrink-0 font-medium" style={{ color: STATUS_COLORS[piece.status] }}>

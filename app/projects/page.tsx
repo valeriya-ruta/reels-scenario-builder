@@ -6,6 +6,7 @@ import SwipeableContentList from '@/components/content/SwipeableContentList';
 import type { ContentPiece } from '@/lib/content/contentPiece';
 import type { ContentStatus } from '@/lib/content/statusSystem';
 import { attachPreviews } from '@/lib/content/contentPreview';
+import { NEW_LABELS, displayTitle } from '@/lib/content/displayTitle';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,7 +40,7 @@ export default async function ProjectsPage() {
     userId: p.user_id,
     type: 'reel',
     status: (p.status ?? 'idea') as ContentStatus,
-    title: p.name?.trim() || 'Без назви',
+    title: displayTitle(p.name, 'reel'),
     refTable: 'projects',
     scheduledDate: p.scheduled_date ?? null,
     createdAt: p.created_at ?? now,
@@ -76,7 +77,7 @@ async function createReelProject() {
   const supabase = await createServerSupabaseClient();
   const { data: project, error } = await supabase
     .from('projects')
-    .insert({ name: 'Без назви', crew_mode: 'with_crew', user_id: user.id, project_type: 'reels' })
+    .insert({ name: NEW_LABELS.reel, crew_mode: 'with_crew', user_id: user.id, project_type: 'reels' })
     .select()
     .single();
 

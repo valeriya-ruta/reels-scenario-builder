@@ -5,25 +5,28 @@ import StatusRing from '@/components/content/StatusRing';
 import SetChip from '@/components/content/SetChip';
 import { dayHeaderLabel } from '@/lib/content/calendar';
 import { STATUS_COLORS, STATUS_LABELS, TYPE_LABELS } from '@/lib/content/statusSystem';
-import { formatRelativeTime } from '@/lib/content/relativeTime';
+import { displayTitle, previewAddsInfo } from '@/lib/content/displayTitle';
 import type { ContentPiece } from '@/lib/content/contentPiece';
 
 /**
- * A content piece as an editorial card — the piece previewing what it will
- * BECOME, not a database row with a title and a status pill.
+ * A content piece as an editorial card.
  *
- * • carousel — its actual cover slide, in its actual palette
- * • story    — its opening line, in real type
- * • reel     — its hook
+ * §1 — ONE title, never two. The card used to show the name as an eyebrow AND
+ * the preview line underneath; for carousels those are the SAME string, because
+ * `deriveCarouselNameFromRant` names the project after its first slide's title.
+ * So the title is the headline, and the preview line renders only when it
+ * actually says something the title doesn't.
  *
- * The title drops to a small eyebrow above the content, because the content is
- * the thing the user recognises; a name like "Без назви" tells them nothing.
- * When a piece has no body yet the card degrades to the title as the lead, so
- * an empty draft still reads as itself.
+ * §2 — title · meta · date share one baseline; the date never drops onto its own
+ * line. The type tag is hidden inside a single-type list, where "Карусель" on a
+ * carousel is pure noise.
+ *
+ * §3 — no creation date anywhere. A dated piece shows its date; an undated one
+ * shows «Незаплановано». When it was made is not a thing you act on.
  */
 
 /** Mini cover: the carousel's real background + text colours, 4:5 like the post. */
-function CoverThumb({ piece }: { piece: ContentPiece }) {
+function CoverThumb({ piece, title }: { piece: ContentPiece; title: string }) {
   const cover = piece.preview?.cover;
   if (!cover) return null;
   return (
@@ -42,7 +45,7 @@ function CoverThumb({ piece }: { piece: ContentPiece }) {
         className="line-clamp-4 text-[6.5px] font-bold leading-[1.25] tracking-tight"
         style={{ color: cover.titleColor }}
       >
-        {piece.preview?.lead}
+        {piece.preview?.lead || title}
       </span>
     </div>
   );
@@ -51,16 +54,21 @@ function CoverThumb({ piece }: { piece: ContentPiece }) {
 export default function ContentCard({
   piece,
   onAdvance,
+  hideTypeTag = false,
 }: {
   piece: ContentPiece;
   /** Ring tap — advance one stage (the parent owns persistence). */
   onAdvance: () => void;
+  /** True inside a single-type list, where the type tag is noise (§2). */
+  hideTypeTag?: boolean;
 }) {
   const preview = piece.preview;
-  const lead = preview?.lead || piece.title;
-  // Only show the name as an eyebrow when the content itself is the headline —
-  // otherwise the same string would appear twice.
-  const eyebrow = preview?.lead ? piece.title : null;
+  const title = displayTitle(piece.title, piece.type);
+  // Only render the preview line when it adds something the title doesn't.
+  const sub = previewAddsInfo(piece.title, preview?.lead) ? preview?.lead : null;
+  // A reel is judged by LENGTH; everything else by size (§3).
+  const sizeLabel =
+    piece.type === 'reel' ? preview?.durationLabel ?? preview?.countLabel : preview?.countLabel;
 
   return (
     <div className="flex min-w-0 flex-1 items-start gap-3">
@@ -80,57 +88,63 @@ export default function ContentCard({
       </button>
 
       <div className="min-w-0 flex-1">
-        {eyebrow ? (
-          <div className="flex items-center">
-            <span className="min-w-0 truncate text-[11.5px] font-semibold uppercase tracking-wide text-[color:var(--text-muted)]">
-              {eyebrow}
-            </span>
-            <SetChip piece={piece} />
-          </div>
-        ) : null}
+        {/* THE title. Exactly one. */}
+        <div className="flex items-center">
+          <p
+            className="min-w-0 flex-1 truncate text-[15.5px] font-semibold leading-snug tracking-tight text-[color:var(--foreground)]"
+            data-testid="content-card-title"
+          >
+            {title}
+          </p>
+          <SetChip piece={piece} />
+        </div>
 
-        {/* The content's own words, in real editorial type. */}
-        <p
-          className="mt-0.5 line-clamp-2 text-[15.5px] font-semibold leading-[1.3] tracking-tight text-[color:var(--foreground)]"
-          data-testid="content-card-lead"
-        >
-          {lead}
-        </p>
-        {preview?.sub ? (
-          <p className="mt-1 line-clamp-1 text-[13px] leading-snug text-[color:var(--text-secondary)]">
-            {preview.sub}
+        {sub ? (
+          <p className="mt-0.5 line-clamp-2 text-[13px] leading-snug text-[color:var(--text-secondary)]">
+            {sub}
           </p>
         ) : null}
 
-        <div className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px]">
-          <span className="shrink-0 font-medium" style={{ color: STATUS_COLORS[piece.status] }}>
-            {STATUS_LABELS[piece.status]}
+        {/* One baseline: status · type · count …… date. `flex-nowrap` + a
+            min-w-0 truncating group is what keeps the date pill from wrapping
+            onto its own line (§2). */}
+        <div className="mt-1.5 flex flex-nowrap items-center gap-1.5 text-[12px]">
+          <span className="min-w-0 flex-1 truncate">
+            <span className="font-medium" style={{ color: STATUS_COLORS[piece.status] }}>
+              {STATUS_LABELS[piece.status]}
+            </span>
+            {/* Exactly ONE fact after the status, so the line always fits beside
+                the date instead of truncating to "8 …". In a mixed list the type
+                is what disambiguates; inside a single-type list the type is
+                noise (§2) and the size/length is the useful thing. */}
+            {!hideTypeTag ? (
+              <span className="text-[color:var(--text-muted)]"> · {TYPE_LABELS[piece.type]}</span>
+            ) : sizeLabel ? (
+              <span className="text-[color:var(--text-muted)]"> · {sizeLabel}</span>
+            ) : null}
           </span>
-          <span aria-hidden>·</span>
-          <span className="shrink-0 text-[color:var(--text-muted)]">{TYPE_LABELS[piece.type]}</span>
-          {preview?.countLabel ? (
-            <>
-              <span aria-hidden>·</span>
-              <span className="shrink-0 text-[color:var(--text-muted)]">{preview.countLabel}</span>
-            </>
-          ) : null}
+
           {piece.scheduledDate ? (
             <span
-              className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full bg-[color:var(--surface1)] px-2 py-0.5 text-[11px] font-medium text-zinc-500"
+              className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-[color:var(--surface1)] px-2 py-0.5 text-[11px] font-medium text-zinc-500"
               title="Заплановано"
+              data-testid="content-card-date"
             >
               <CalendarDays className="h-3 w-3" aria-hidden />
               {dayHeaderLabel(piece.scheduledDate)}
             </span>
           ) : (
-            <span className="ml-auto shrink-0 text-[11px] text-[color:var(--text-muted)]">
-              {formatRelativeTime(piece.updatedAt)}
+            <span
+              className="shrink-0 whitespace-nowrap text-[11px] font-medium text-[color:var(--text-muted)]"
+              data-testid="content-card-unscheduled"
+            >
+              Незаплановано
             </span>
           )}
         </div>
       </div>
 
-      <CoverThumb piece={piece} />
+      <CoverThumb piece={piece} title={title} />
     </div>
   );
 }

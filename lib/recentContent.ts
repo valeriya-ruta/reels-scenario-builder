@@ -3,6 +3,7 @@ import 'server-only';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import type { ContentType } from '@/lib/contentTypes';
 
+import { NEW_LABELS } from '@/lib/content/displayTitle';
 /**
  * A single recent content item for the Home "Твій контент" list. Mixes reels,
  * carousels and stories together, sorted most-recent-first by last update.
@@ -14,7 +15,8 @@ export interface RecentContentItem {
   updatedAt: string | null;
 }
 
-const DEFAULT_TITLE = 'Без назви';
+/** §1: never «Без назви». Callers that know the type use displayTitle(). */
+const DEFAULT_TITLE = NEW_LABELS.reel;
 
 interface Row {
   id: string;

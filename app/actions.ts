@@ -1,4 +1,5 @@
 'use server';
+import { NEW_LABELS } from '@/lib/content/displayTitle';
 
 import { requireAuth } from '@/lib/auth';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
@@ -1045,7 +1046,7 @@ export async function createReelFromStructure(
   const { data: project, error } = await supabase
     .from('projects')
     .insert({
-      name: name.slice(0, 120) || 'Без назви',
+      name: name.slice(0, 120) || NEW_LABELS.reel,
       crew_mode: 'with_crew',
       user_id: user.id,
       project_type: 'reels',

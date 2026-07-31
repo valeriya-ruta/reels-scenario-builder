@@ -6,6 +6,7 @@ import { fallbackProposals } from '@/lib/propose/fallback';
 import { proposeAngles, tagWithSourceKinds, dropSeen } from '@/lib/propose/proposeAngles';
 import { PROPOSAL_COUNT, type ProposeResponse } from '@/lib/propose/types';
 import type { ContentType } from '@/lib/contentTypes';
+import { displayTitle } from '@/lib/content/displayTitle';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -78,7 +79,7 @@ export async function GET(req: Request) {
         | null) ?? []
     ).map((p) => ({
       id: p.id,
-      title: (p.title ?? '').trim() || 'Без назви',
+      title: displayTitle(p.title, 'idea'),
       type: VIEW_TYPE_TO_CONTENT_TYPE[p.content_type] ?? null,
       status: p.status,
       scheduledDate: p.scheduled_date,

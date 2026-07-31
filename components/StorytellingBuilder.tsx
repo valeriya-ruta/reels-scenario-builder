@@ -166,6 +166,7 @@ export default function StorytellingBuilder({
         <EditorTopBar
           backHref="/storytellings"
           title={project.name}
+          kind="story"
           onRename={handleRename}
           meta={
             <>

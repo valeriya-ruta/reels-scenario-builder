@@ -218,7 +218,7 @@ export default function SwipeableContentList({
                   router.push(contentHref(piece));
                 }}
               >
-                <ContentCard piece={{ ...piece, status }} onAdvance={() => advance(piece)} />
+                <ContentCard piece={{ ...piece, status }} onAdvance={() => advance(piece)} hideTypeTag />
               </SwipeRow>
             );
           })}

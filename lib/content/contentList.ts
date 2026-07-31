@@ -1,4 +1,5 @@
 import 'server-only';
+import { displayTitle } from '@/lib/content/displayTitle';
 
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import type { ContentStatus, ContentType } from '@/lib/content/statusSystem';
@@ -39,7 +40,7 @@ function rowToPiece(row: ContentPieceRow): ContentPiece {
     userId: row.user_id,
     type: row.content_type,
     status: row.status,
-    title: (row.title ?? '').trim() || 'Без назви',
+    title: displayTitle(row.title, row.content_type === 'idea' ? 'idea' : row.content_type),
     refTable: row.ref_table,
     scheduledDate: row.scheduled_date ?? null,
     setIndex: row.set_index ?? null,

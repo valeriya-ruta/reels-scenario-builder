@@ -13,6 +13,7 @@ import {
 import Link from 'next/link';
 import BackLink from '@/components/ui/BackLink';
 import { useTapGuard } from '@/lib/ui/tapGuard';
+import { displayTitle } from '@/lib/content/displayTitle';
 import {
   closestCenter,
   DndContext,
@@ -68,8 +69,14 @@ import BrandDNASetup from '@/components/BrandDNASetup';
 
 type EditorTab = 'type' | 'text' | 'position' | 'bg' | 'brand';
 const MOBILE_EDITOR_BAR_HEIGHT_PX = 72;
-/** Max slide width as a fraction of the mobile canvas content width (matches ~85vw intent). */
-const MOBILE_SLIDE_MAX_WIDTH_FRAC = 0.92;
+/**
+ * Max slide width as a fraction of the mobile canvas content width.
+ *
+ * Raised from 0.92 → 1.0 (§5): the slide is width-limited on a phone, so every
+ * point of unused width became dead vertical space above and below it. This is
+ * the mobile-only path (`md:hidden`), so tablet spacing is untouched.
+ */
+const MOBILE_SLIDE_MAX_WIDTH_FRAC = 1;
 
 function SortableThumb({
   slide,
@@ -376,7 +383,7 @@ export default function CarouselEditorLayout({
         return;
       }
       const maxW = w * MOBILE_SLIDE_MAX_WIDTH_FRAC;
-      const maxH = Math.max(1, h - 12);
+      const maxH = Math.max(1, h - 4);
       const s = Math.min(maxW / CANVAS_WIDTH, maxH / CANVAS_HEIGHT);
       setPreviewScale(Math.max(0.06, Math.min(s, 1)));
     };
@@ -877,7 +884,7 @@ export default function CarouselEditorLayout({
       {/* Mobile chrome (§1): chevron + inline-editable TITLE on top — a carousel
           previously had no title here at all, so it could not be renamed on a
           phone. Export moved out of the top-right into the bottom thumb bar. */}
-      <header className="shrink-0 border-b border-[color:var(--border)] bg-[color:var(--background)] px-1 pb-1.5 pt-1 md:hidden">
+      <header className="shrink-0 border-b border-[color:var(--border)] bg-[color:var(--background)] px-1 pb-2 pt-3 md:hidden">
         <div className="flex items-center gap-1">
           <BackLink fallbackHref="/carousel" ariaLabel="Назад" className="app-icon-btn shrink-0">
             <ChevronLeft className="h-5 w-5" />
@@ -894,25 +901,43 @@ export default function CarouselEditorLayout({
               }}
               aria-label="Назва каруселі"
               data-testid="editor-title-input"
-              className="min-w-0 flex-1 rounded-[10px] border border-[color:var(--border-strong)] bg-white px-2.5 py-1 text-[16px] font-bold tracking-tight text-[color:var(--foreground)] outline-none"
+              className="min-w-0 flex-1 rounded-[10px] border border-[color:var(--border-strong)] bg-white px-2.5 py-1.5 text-[20px] font-bold tracking-tight text-[color:var(--foreground)] outline-none"
             />
           ) : (
             <button
               type="button"
               onClick={() => {
-                setTitleDraft(projectName ?? '');
+                setTitleDraft(displayTitle(projectName, 'carousel'));
                 setEditingTitle(true);
               }}
               data-testid="editor-title"
               title="Перейменувати"
               className="flex min-w-0 flex-1 items-center gap-1.5 rounded-[10px] px-1.5 py-1 text-left"
             >
-              <span className="truncate text-[16px] font-bold tracking-tight text-[color:var(--foreground)]">
-                {projectName?.trim() || 'Без назви'}
+              <span className="truncate text-[20px] font-bold tracking-tight text-[color:var(--foreground)]">
+                {displayTitle(projectName, 'carousel')}
               </span>
-              <Pencil className="h-3.5 w-3.5 shrink-0 text-[color:var(--text-muted)]" strokeWidth={2} aria-hidden />
+              <Pencil className="h-4 w-4 shrink-0 text-[color:var(--text-muted)]" strokeWidth={2} aria-hidden />
             </button>
           )}
+          {/* THE export control (§4). Exactly one, at the top — not in the chip
+              row below, not a full-width bar at the bottom. */}
+          <button
+            type="button"
+            onClick={onExport}
+            disabled={isGenerating}
+            aria-label="Експортувати"
+            title="Експортувати"
+            data-testid="carousel-export"
+            className="ml-1 inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-[13px] font-semibold text-white disabled:opacity-50"
+            style={{ backgroundColor: 'var(--accent)' }}
+          >
+            {isGenerating ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" strokeWidth={2.2} />
+            )}
+          </button>
         </div>
         <div className="mt-1 flex min-w-0 items-center gap-1.5 overflow-x-auto pl-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {headerMeta}
@@ -1106,7 +1131,7 @@ export default function CarouselEditorLayout({
                 {/* Mobile: direct flex canvas child (no absolute wrapper), centered in both axes */}
                 <div
                   ref={previewAreaRef}
-                  className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden px-2 py-1.5 md:hidden"
+                  className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden px-1.5 py-0.5 md:hidden"
               onClick={(e) => {
                 if (trashForId) setTrashForId(null);
                 if (!mobilePositioningMode) return;
@@ -1276,7 +1301,7 @@ export default function CarouselEditorLayout({
                 modifiers={dragModifiers}
               >
                 <SortableContext items={slides.map((s) => s.id)} strategy={rectSortingStrategy}>
-                  <div className="flex shrink-0 flex-row items-center gap-2 overflow-x-auto px-3 py-1.5">
+                  <div className="flex shrink-0 flex-row items-center gap-2 overflow-x-auto px-3 pb-1.5 pt-1">
                     {slides.map((slide, index) => (
                       <SortableThumb
                         key={slide.id}
@@ -1344,24 +1369,6 @@ export default function CarouselEditorLayout({
             >
               {tabPanelContent}
             </div>
-          </div>
-          {/* Primary action in the thumb zone (§1) — it used to sit in the
-              top-right corner, the hardest place to reach one-handed. */}
-          <div className="px-2 pt-2">
-            <button
-              type="button"
-              onClick={onExport}
-              disabled={isGenerating}
-              data-testid="carousel-export"
-              className="app-btn-primary w-full"
-            >
-              {isGenerating ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Download className="h-4 w-4" strokeWidth={2.2} />
-              )}
-              Експортувати
-            </button>
           </div>
           <div className="grid grid-cols-5 gap-1 px-2 py-2">
             {(['type', 'text', 'position', 'bg', 'brand'] as const).map((t) => (
