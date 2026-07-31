@@ -56,7 +56,7 @@ export default async function StorytellingsPage() {
         </div>
         <ContentRowsSection
           pieces={pieces}
-          emptyText="Тут поки що нічого немає. Створи перший сторітелінг."
+          emptyText="Сторіс ще немає — ось із чого я б почала розповідь"
         />
       </div>
     </div>

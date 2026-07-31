@@ -22,9 +22,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Потрібен вхід.' }, { status: 401 });
   }
 
-  let body: { id?: string; content?: string };
+  let body: { id?: string; content?: string; title?: string | null };
   try {
-    body = (await req.json()) as { id?: string; content?: string };
+    body = (await req.json()) as { id?: string; content?: string; title?: string | null };
   } catch {
     return NextResponse.json({ error: 'Некоректний формат запиту.' }, { status: 400 });
   }
@@ -33,6 +33,10 @@ export async function POST(req: Request) {
   if (!content) {
     return NextResponse.json({ error: 'Порожня ідея.' }, { status: 400 });
   }
+  // The angle the user confirmed in the proposal deck, when there was one. 019
+  // reserved `title` for exactly this; it names the dump in every list instead
+  // of an 80-char slice of its body.
+  const title = body.title?.trim().slice(0, 120) || null;
 
   const supabase = await createServerSupabaseClient();
 
@@ -40,7 +44,12 @@ export async function POST(req: Request) {
   if (body.id) {
     const { data, error } = await supabase
       .from('ideas')
-      .update({ content, updated_at: new Date().toISOString() })
+      .update({
+        content,
+        // Never blank out a name the row already carries with a null.
+        ...(title ? { title } : {}),
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', body.id)
       .eq('user_id', user.id)
       .select('id')
@@ -53,7 +62,7 @@ export async function POST(req: Request) {
 
   const { data, error } = await supabase
     .from('ideas')
-    .insert({ user_id: user.id, content, source: 'braindump' })
+    .insert({ user_id: user.id, content, title, source: 'braindump' })
     .select('id')
     .single();
 

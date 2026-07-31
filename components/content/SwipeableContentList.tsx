@@ -8,6 +8,7 @@ import DateSheet from '@/components/content/DateSheet';
 import SetChip from '@/components/content/SetChip';
 import StatusRing from '@/components/content/StatusRing';
 import SwipeRow from '@/components/content/SwipeRow';
+import ProposingEmptyState from '@/components/propose/ProposingEmptyState';
 import { setContentStatus, setContentScheduledDate } from '@/app/content-actions';
 import { contentHref, opensBraindumpOverlay, type ContentPiece } from '@/lib/content/contentPiece';
 import { dispatchOpenBraindumpIdea } from '@/lib/content/braindumpIdeaEvent';
@@ -186,10 +187,10 @@ export default function SwipeableContentList({
       <div className="h-px bg-[color:var(--border)]" />
 
       {items.length === 0 ? (
-        <div className="app-card px-6 py-12 text-center">
-          <p className="mx-auto max-w-[17rem] text-[14px] leading-relaxed text-[color:var(--text-muted)]">
-            {emptyText}
-          </p>
+        // Never a dead end: an empty type list proposes concrete angles the user
+        // can start from, drawn from their own signals.
+        <div className="pt-3">
+          <ProposingEmptyState headline={emptyText} />
         </div>
       ) : (
         <ul className="app-card overflow-hidden px-1.5 py-0.5">

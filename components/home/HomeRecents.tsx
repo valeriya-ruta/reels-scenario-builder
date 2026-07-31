@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import ContentRows from '@/components/content/ContentRows';
+import ProposingEmptyState from '@/components/propose/ProposingEmptyState';
 import type { ContentPiece } from '@/lib/content/contentPiece';
 
 /**
@@ -28,11 +29,11 @@ export default function HomeRecents({ pieces }: { pieces: ContentPiece[] }) {
       </div>
 
       {pieces.length === 0 ? (
-        <div data-testid="recents-empty" className="app-card px-5 py-8 text-center">
-          <p className="text-[15px] font-semibold text-[color:var(--foreground)]">Поки що порожньо</p>
-          <p className="mx-auto mt-1 max-w-[15rem] text-[13px] leading-relaxed text-[color:var(--text-muted)]">
-            Створи перший контент — з ідеї, рілса, каруселі чи сторіс.
-          </p>
+        <div data-testid="recents-empty">
+          <ProposingEmptyState
+            headline="Почнімо з одного з цих"
+            sub="Тапни напрямок — далі просто наговори своїми словами."
+          />
         </div>
       ) : (
         <div data-testid="recents-list" className="app-card overflow-hidden px-1.5 py-0.5">

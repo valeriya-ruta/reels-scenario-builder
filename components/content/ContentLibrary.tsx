@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import ContentRows from '@/components/content/ContentRows';
 import StatusFilter from '@/components/content/StatusFilter';
+import ProposingEmptyState from '@/components/propose/ProposingEmptyState';
 import type { ContentPiece } from '@/lib/content/contentPiece';
 import type { ContentStatus } from '@/lib/content/statusSystem';
 
@@ -45,13 +46,12 @@ export default function ContentLibrary({ pieces }: { pieces: ContentPiece[] }) {
         ) : null}
 
         {pieces.length === 0 ? (
-          <div data-testid="content-empty" className="app-card mt-6 px-6 py-12 text-center">
-            <p className="mx-auto max-w-[17rem] text-[15px] font-semibold leading-relaxed text-[color:var(--foreground)]">
-              Тут ще нічого немає
-            </p>
-            <p className="mx-auto mt-1 max-w-[17rem] text-[13px] leading-relaxed text-[color:var(--text-muted)]">
-              Саме час створити контент.
-            </p>
+          <div data-testid="content-empty" className="mt-6">
+            <ProposingEmptyState
+              headline="Ось із чого я б почала"
+              sub="Тапни напрямок — далі просто наговори своїми словами."
+              limit={3}
+            />
           </div>
         ) : visible.length === 0 ? (
           <div className="app-card mt-6 px-6 py-10 text-center" data-testid="content-filter-empty">

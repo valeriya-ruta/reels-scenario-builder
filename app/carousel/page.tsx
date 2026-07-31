@@ -56,7 +56,7 @@ export default async function CarouselListPage() {
           accentTint="#eef1ff"
           onCreate={createCarouselProject}
           onDelete={deleteCarouselProject}
-          emptyText="Тут поки що нічого немає. Створи першу карусель, щоб відкрити студію."
+          emptyText="Каруселей ще немає — ось із чого я б зробила першу"
         />
       </div>
     </div>

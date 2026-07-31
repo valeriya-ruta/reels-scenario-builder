@@ -56,7 +56,7 @@ export default async function ProjectsPage() {
           accentTint="#f1ecfd"
           onCreate={createReelProject}
           onDelete={deleteProject}
-          emptyText="Тут поки що нічого немає. Створи перший сценарій рілсу."
+          emptyText="Рілсів ще немає — ось із чого я б зняла перший"
         />
       </div>
     </div>

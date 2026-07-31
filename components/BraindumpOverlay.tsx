@@ -1,13 +1,16 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Mic, Keyboard, Check, X } from 'lucide-react';
+import { Mic, Keyboard, Check, X, ArrowLeft, PenLine } from 'lucide-react';
 import { pickBraindumpPrompt } from '@/lib/braindumpPrompts';
 import { dayHeaderLabel } from '@/lib/content/calendar';
 import { countWords, BRAINDUMP_WORD_TARGET } from '@/lib/braindump/wordGate';
 import { CONTENT_TYPES, CONTENT_TYPE_ORDER, type ContentType } from '@/lib/contentTypes';
 import ContentTypeIcon from '@/components/ContentTypeIcon';
 import BlurScrim from '@/components/BlurScrim';
+import ProposalList from '@/components/propose/ProposalList';
+import { useProposals } from '@/components/propose/useProposals';
+import type { Proposal } from '@/lib/propose/types';
 import { generateReelFromRant } from '@/app/actions';
 import { createStorytellingProjectFromRant } from '@/app/storytelling-actions';
 import { createCarouselProjectFromRant } from '@/app/carousel-actions';
@@ -18,9 +21,13 @@ import type { CarouselRantOutput } from '@/lib/carouselTypes';
  * Braindump overlay (task 86d38zghd) — voice-primary quick capture.
  *
  * NOT a route / not a hard modal-card: a full-screen blur overlay with elements
- * rising from the bottom. Two states on one continuous surface:
- *   State A (capture) — rotating prompt, mic affordance, gray transcript, word
- *     counter (n/50, soft target), keyboard/voice toggle, green check (done).
+ * rising from the bottom. Three states on one continuous surface:
+ *   State P (propose) — THE FRONT DOOR. Ruta's proposed angles, each with a
+ *     one-line rationale, tappable. Capture is demoted to a secondary «або
+ *     наговори своє» affordance underneath. The user never faces a blank box.
+ *   State A (capture) — the chosen angle pinned as the heading (or a rotating
+ *     prompt when the user brought their own thought), mic affordance, gray
+ *     transcript, word counter (n/50), keyboard/voice toggle, green check.
  *   State B (result) — text turns black & rises to the title position, auto-saved
  *     to ideas (faint "✓ Збережено в ідеї"), three independent content-type
  *     buttons that turn green when they create/queue that type.
@@ -33,7 +40,7 @@ import type { CarouselRantOutput } from '@/lib/carouselTypes';
 const SOFT_WORD_TARGET = BRAINDUMP_WORD_TARGET;
 const ACCENT = '#004BA8';
 
-type Phase = 'A' | 'B';
+type Phase = 'P' | 'A' | 'B';
 type InputMode = 'voice' | 'type';
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 type TypeStatus = 'idle' | 'loading' | 'done' | 'error';
@@ -64,16 +71,31 @@ interface BraindumpOverlayProps {
   /** When opening from an existing idea row: preload its text + update that idea
    *  (instead of a fresh capture). Task 86d3cpv9x. */
   initialIdea?: { id: string; text: string } | null;
+  /** An angle the user already confirmed elsewhere (a proposing empty state):
+   *  skip the deck and open straight on capture with it pinned. */
+  initialAngle?: Proposal | null;
 }
 
-export default function BraindumpOverlay({ open, onClose, initialIdea = null }: BraindumpOverlayProps) {
-  const [phase, setPhase] = useState<Phase>('A');
+export default function BraindumpOverlay({
+  open,
+  onClose,
+  initialIdea = null,
+  initialAngle = null,
+}: BraindumpOverlayProps) {
+  const [phase, setPhase] = useState<Phase>('P');
   const [text, setText] = useState('');
   const [inputMode, setInputMode] = useState<InputMode>('voice');
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // The angle the user confirmed from the proposal deck; null = own thought.
+  const [angle, setAngle] = useState<Proposal | null>(null);
+  // Only fetch proposals when the overlay is actually opening on the deck —
+  // reopening an existing idea goes straight to State B.
+  const { proposals, loading: proposalsLoading, refresh: refreshProposals } = useProposals(
+    open && !initialIdea && !initialAngle,
+  );
 
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [savedId, setSavedId] = useState<string | null>(null);
@@ -115,6 +137,7 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
     setError(null);
     setTypeStatus({ reels: 'idle', carousel: 'idle', stories: 'idle' });
     setReceipt([]);
+    setAngle(initialAngle);
     if (initialIdea) {
       setPhase('B');
       setText(initialIdea.text);
@@ -131,7 +154,9 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
         });
       });
     } else {
-      setPhase('A');
+      // Proposals are the front door — unless an angle was already confirmed
+      // upstream, in which case re-asking would be a step backwards.
+      setPhase(initialAngle ? 'A' : 'P');
       setText('');
       setInputMode('voice');
       setSaveStatus('idle');
@@ -239,10 +264,16 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
       setSaveStatus('saving');
       setError(null);
       try {
+        // The confirmed angle is stored as the idea's `title` — the column 019
+        // reserved for exactly this ("future list/swipe-deck labels"). It gives
+        // every dump a real name in lists instead of an 80-char text slice.
+        const title = angle?.title ?? null;
         const res = await fetch('/api/ideas/braindump', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(id ? { id, content: trimmed } : { content: trimmed }),
+          body: JSON.stringify(
+            id ? { id, content: trimmed, title } : { content: trimmed, title },
+          ),
         });
         const data = (await res.json()) as { ok?: boolean; id?: string; error?: string };
         if (!res.ok || !data.ok) {
@@ -255,7 +286,7 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
         setError(e instanceof Error ? e.message : 'Не вдалося зберегти ідею.');
       }
     },
-    []
+    [angle]
   );
 
   // Done → transition to State B and auto-save.
@@ -287,12 +318,45 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
     onClose();
   }, [recording, stopRecording, stopStream, onClose]);
 
+  // --- Proposal deck → capture ---
+
+  /**
+   * Confirm one of Ruta's angles. The angle becomes the heading of the capture
+   * screen; the user's own words are what get recorded. The seed is deliberately
+   * NOT poured into the transcript: the 50-word gate must measure what SHE said,
+   * not what we suggested.
+   */
+  const pickAngle = useCallback((proposal: Proposal) => {
+    setAngle(proposal);
+    setPhase('A');
+    setInputMode('voice');
+    setError(null);
+  }, []);
+
+  /** «Або наговори своє» — the demoted free-capture affordance. */
+  const startOwnThought = useCallback(() => {
+    setAngle(null);
+    setPhase('A');
+    setInputMode('voice');
+    setError(null);
+  }, []);
+
+  const backToProposals = useCallback(() => {
+    if (recording) stopRecording();
+    setPhase('P');
+    setError(null);
+  }, [recording, stopRecording]);
+
   // --- Content-type creation (independent, non-exclusive, no navigation) ---
   const runType = useCallback(
     async (type: ContentType) => {
       if (typeStatus[type] === 'loading' || typeStatus[type] === 'done') return;
-      const snapshot = textRef.current.trim();
-      if (!snapshot) return;
+      const spoken = textRef.current.trim();
+      if (!spoken) return;
+      // Carry the confirmed angle into generation as a plain directive line, so
+      // the output follows the direction the user actually agreed to rather than
+      // whatever the model infers from raw speech.
+      const snapshot = angle ? `Кут подачі: ${angle.title}\n\n${spoken}` : spoken;
       setTypeStatus((s) => ({ ...s, [type]: 'loading' }));
       try {
         let ok = false;
@@ -305,7 +369,8 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
             setReceipt((cur) => [...cur, { type, id: r.projectId, label: CONTENT_TYPES[type].label }]);
           }
         } else if (type === 'stories') {
-          const r = await createStorytellingProjectFromRant(snapshot);
+          // The angle doubles as the storytelling's emotional-goal name.
+          const r = await createStorytellingProjectFromRant(snapshot, angle?.title ?? '');
           ok = r.ok;
           if (r.ok) {
             createdId = r.projectId;
@@ -351,7 +416,7 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
         setTypeStatus((s) => ({ ...s, [type]: 'error' }));
       }
     },
-    [typeStatus, savedId]
+    [typeStatus, savedId, angle]
   );
 
   // Keep the transcript scrolled to its newest content (State A) so appended
@@ -410,6 +475,17 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
             top — only the content+controls below rise from the bottom. */}
         <div className="relative z-10 flex shrink-0 items-center justify-between px-5 pt-6">
           <div className="min-h-[20px]">
+            {phase === 'A' && (
+              <button
+                type="button"
+                onClick={backToProposals}
+                data-testid="braindump-back-to-proposals"
+                className="-ml-1.5 inline-flex items-center gap-1 rounded-full px-1.5 py-1 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-200/60 hover:text-zinc-800"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2.2} />
+                Інші напрямки
+              </button>
+            )}
             {phase === 'B' && saveStatus === 'saved' && (
               <span data-testid="braindump-saved" className="text-xs font-medium text-zinc-400">
                 ✓ Збережено в ідеї
@@ -445,13 +521,36 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
             className="flex min-h-0 flex-1 flex-col overflow-y-auto"
           >
             <div className="mt-auto pb-4">
-              {phase === 'A' ? (
-                <h2
-                  data-testid="braindump-prompt"
-                  className="text-2xl font-bold leading-snug tracking-tight text-black"
-                >
-                  {prompt}
-                </h2>
+              {phase === 'P' ? (
+                <div data-testid="braindump-propose">
+                  <h2 className="text-2xl font-bold leading-snug tracking-tight text-black">
+                    Ось із чого я б почала
+                  </h2>
+                  <p className="mt-1.5 text-[13px] leading-snug text-zinc-500">
+                    Обери напрямок — далі просто наговори своїми словами.
+                  </p>
+                  <div className="mt-4">
+                    <ProposalList
+                      proposals={proposals}
+                      loading={proposalsLoading}
+                      onPick={pickAngle}
+                    />
+                  </div>
+                </div>
+              ) : phase === 'A' ? (
+                <>
+                  <h2
+                    data-testid="braindump-prompt"
+                    className="text-2xl font-bold leading-snug tracking-tight text-black"
+                  >
+                    {angle ? angle.title : prompt}
+                  </h2>
+                  {angle ? (
+                    <p className="mt-1.5 text-[12.5px] leading-snug text-zinc-500">
+                      {angle.rationale}
+                    </p>
+                  ) : null}
+                </>
               ) : (
                 <textarea
                   data-testid="braindump-edit"
@@ -499,6 +598,46 @@ export default function BraindumpOverlay({ open, onClose, initialIdea = null }: 
               <p data-testid="braindump-error" className="mb-3 text-sm font-medium text-zinc-500">
                 {error}
               </p>
+            )}
+
+            {/* State P controls: capture is deliberately SECONDARY here — a quiet
+                outlined row under the proposals, never the primary action. */}
+            {phase === 'P' && (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={startOwnThought}
+                  data-testid="braindump-own-thought"
+                  className="app-pill flex-1 justify-center py-2.5"
+                >
+                  <PenLine className="h-4 w-4" strokeWidth={2} />
+                  Або наговори своє
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void refreshProposals()}
+                  disabled={proposalsLoading}
+                  data-testid="braindump-refresh-proposals"
+                  aria-label="Інші напрямки"
+                  title="Інші напрямки"
+                  className="app-icon-btn"
+                >
+                  <svg
+                    className={`h-4 w-4 ${proposalsLoading ? 'animate-spin' : ''}`}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+                    <path d="M21 3v5h-5" />
+                    <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+                    <path d="M3 21v-5h5" />
+                  </svg>
+                </button>
+              </div>
             )}
 
             {/* State A controls (task 86d3a1aqk): mic (primary) with the green
