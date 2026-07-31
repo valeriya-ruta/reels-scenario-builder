@@ -4,6 +4,7 @@ import { getAllContent } from '@/lib/content/contentList';
 import { dateKey } from '@/lib/content/calendar';
 import { stagedPieces, countNeedingDecision } from '@/lib/content/staging';
 import { buildProducerInsights } from '@/lib/insights/producerInsights';
+import { countPostedLinks } from '@/app/posted-actions';
 import HomeView from '@/components/home/HomeView';
 
 export const dynamic = 'force-dynamic';
@@ -26,6 +27,9 @@ export default async function DashboardPage() {
   const recents = all.slice(0, 6);
   // Kept-but-undecided work — the Розбір count, shown as pressure on Home.
   const staged = stagedPieces(all);
+  // Today only — the daily widget (Prompt 3). The agenda below still answers
+  // "and what's next?".
+  const today = all.filter((p) => p.scheduledDate?.slice(0, 10) === todayKey);
   const nowIso = now.toISOString();
 
   const fullName =
@@ -44,6 +48,8 @@ export default async function DashboardPage() {
       stagedCount={staged.length}
       stagedOverdue={countNeedingDecision(staged, nowIso)}
       insights={buildProducerInsights(all, todayKey)}
+      today={today}
+      postedCount={await countPostedLinks()}
     />
   );
 }

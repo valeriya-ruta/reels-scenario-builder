@@ -1,7 +1,8 @@
 -- 027_posted_links_insights.sql
 --
--- ⚠️ DB SCHEMA CHANGE — BRANCH + PR ONLY. Do NOT apply to prod before sign-off.
---    Branch: `feat/posted-links-insights`.
+-- ✅ APPLIED TO PROD (ohhudfwwdcbpxryxmvmd) on 2026-07-31, on Ruta's sign-off.
+--    Verified after: 5 new columns on each of the three tables and all 5
+--    surfaced on the content_pieces view.
 --
 -- WHY
 -- The whole insights + gamification loop hangs off one fact the app does not
