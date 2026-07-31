@@ -11,6 +11,13 @@ export const metadata: Metadata = {
   title: "Планувальник Рілів",
   description:
     "Покроковий план зйомок та перехідів для коротких відео.",
+  // iOS ignores the manifest's `display`, so standalone mode needs this too.
+  // Without it an added-to-home-screen icon opens in a Safari chrome window.
+  appleWebApp: {
+    capable: true,
+    title: 'Ruta',
+    statusBarStyle: 'default',
+  },
 };
 
 export default async function RootLayout({
