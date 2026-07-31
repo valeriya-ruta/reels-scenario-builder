@@ -4,8 +4,7 @@ import { useState } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
 import BottomSheet from '@/components/ui/BottomSheet';
 import { setContentStatus } from '@/app/content-actions';
-import { countPostedLinks } from '@/app/posted-actions';
-import PostedLinkSheet from '@/components/posted/PostedLinkSheet';
+import { dispatchContentPublished } from '@/lib/content/postedLinkEvent';
 import { PUBLISHED_STATUS } from '@/lib/content/statusSystem';
 import {
   STATUS_COLORS,
@@ -37,9 +36,6 @@ export default function StatusPill({
 }) {
   const [status, setStatus] = useState<ContentStatus>(initialStatus);
   const [open, setOpen] = useState(false);
-  // The link-capture pop-up (Prompt 2) — opens on EVERY flip to Опубліковано.
-  const [askLink, setAskLink] = useState(false);
-  const [postedCount, setPostedCount] = useState(0);
   const track = trackFor(type);
 
   const choose = async (next: ContentStatus) => {
@@ -52,14 +48,9 @@ export default function StatusPill({
       setStatus(prev);
       return;
     }
-    // Ask for the link the moment it goes live. Asking is the default; the
-    // pop-up is dismissible and nothing about the status depends on it.
-    if (next === PUBLISHED_STATUS && refTable !== 'ideas') {
-      // Fetch the count first so the "ще N постів" line is real from the
-      // opening frame rather than flickering from a placeholder.
-      setPostedCount(await countPostedLinks());
-      setAskLink(true);
-    }
+    // Ask for the link the moment it goes live. One shared host renders the
+    // sheet, so every status path behaves identically.
+    if (next === PUBLISHED_STATUS) dispatchContentPublished(refTable, id);
   };
 
   const color = STATUS_COLORS[status] ?? '#9A9A9A';
@@ -78,14 +69,6 @@ export default function StatusPill({
         {STATUS_LABELS[status]}
         <ChevronDown className="h-3.5 w-3.5 text-zinc-400" />
       </button>
-
-      <PostedLinkSheet
-        open={askLink}
-        onClose={() => setAskLink(false)}
-        refTable={refTable}
-        id={id}
-        count={postedCount}
-      />
 
       <BottomSheet open={open} onClose={() => setOpen(false)} title="Статус">
         <div className="flex flex-col">

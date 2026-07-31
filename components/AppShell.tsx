@@ -7,6 +7,7 @@ import { NavBadgeProvider, NavBadgePathSync } from './NavBadgeContext';
 import { RantResultsProvider } from './RantResultsContext';
 import { ToastProvider } from './ToastProvider';
 import { BrandProvider } from './BrandProvider';
+import PostedLinkHost from '@/components/posted/PostedLinkHost';
 
 /** Ignore repeat toggles from double-clicks / touch quirks so close → open doesn’t fire back-to-back. */
 const TOGGLE_COOLDOWN_MS = 320;
@@ -143,6 +144,10 @@ export default function AppShell({ children, userName, userEmail }: AppShellProp
                 </main>
               </div>
               <BottomNav />
+              {/* One app-wide mount: publishing from ANY surface — an editor
+                  pill, a card's ring, a list, a calendar day — asks for the
+                  link through the same sheet. */}
+              <PostedLinkHost />
             </div>
           </BrandProvider>
         </ToastProvider>

@@ -10,7 +10,8 @@ import ProposingEmptyState from '@/components/propose/ProposingEmptyState';
 import { setContentStatus, setContentScheduledDate } from '@/app/content-actions';
 import { contentHref, opensBraindumpOverlay, type ContentPiece } from '@/lib/content/contentPiece';
 import { dispatchOpenBraindumpIdea } from '@/lib/content/braindumpIdeaEvent';
-import { nextStatus, type ContentStatus } from '@/lib/content/statusSystem';
+import { dispatchContentPublished } from '@/lib/content/postedLinkEvent';
+import { nextStatus, PUBLISHED_STATUS, type ContentStatus } from '@/lib/content/statusSystem';
 
 /**
  * Sleek hairline list for a single content type (carousel / reels / …), matching
@@ -148,7 +149,11 @@ export default function SwipeableContentList({
       vibrate(8);
       setStatusById((m) => ({ ...m, [piece.id]: next }));
       void setContentStatus(piece.refTable, piece.id, piece.type, next).then((res) => {
-        if (!res.ok) setStatusById((m) => ({ ...m, [piece.id]: current })); // roll back
+        if (!res.ok) {
+          setStatusById((m) => ({ ...m, [piece.id]: current })); // roll back
+          return;
+        }
+        if (next === PUBLISHED_STATUS) dispatchContentPublished(piece.refTable, piece.id);
       });
     },
     [statusById],

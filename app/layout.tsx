@@ -4,6 +4,7 @@ import "./globals.css";
 import AppShell from "@/components/AppShell";
 import { getCurrentUser } from "@/lib/auth";
 import { PostHogProvider } from "@/components/PostHogProvider";
+import StandaloneLaunchRedirect from '@/components/StandaloneLaunchRedirect';
 import { PostHogPageView } from "@/components/PostHogPageView";
 import { Suspense } from "react";
 
@@ -48,6 +49,12 @@ export default async function RootLayout({
         <PostHogProvider>
           <Suspense>
             <PostHogPageView />
+          </Suspense>
+          {/* iOS ignores the manifest's start_url for Add-to-Home-Screen, so an
+              icon created on Каруселі keeps opening Каруселі. This lands the
+              installed app on Головна on launch, whatever URL got baked in. */}
+          <Suspense>
+            <StandaloneLaunchRedirect />
           </Suspense>
           {user && !isAuthRoute ? (
             <AppShell

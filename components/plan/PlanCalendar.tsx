@@ -17,7 +17,8 @@ import {
 } from '@dnd-kit/core';
 import ContentCard from '@/components/content/ContentCard';
 import { setContentScheduledDate, setContentStatus } from '@/app/content-actions';
-import { nextStatus, STATUS_COLORS } from '@/lib/content/statusSystem';
+import { nextStatus, PUBLISHED_STATUS, STATUS_COLORS } from '@/lib/content/statusSystem';
+import { dispatchContentPublished } from '@/lib/content/postedLinkEvent';
 import { contentHref } from '@/lib/content/contentPiece';
 import PlanCreateMenu from '@/components/plan/PlanCreateMenu';
 import StagingPressureCard from '@/components/staging/StagingPressureCard';
@@ -131,7 +132,11 @@ export default function PlanCalendar({
     if (!next) return;
     setStatusById((m) => ({ ...m, [piece.id]: next }));
     void setContentStatus(piece.refTable, piece.id, piece.type, next).then((res) => {
-      if (!res.ok) setStatusById((m) => ({ ...m, [piece.id]: current }));
+      if (!res.ok) {
+        setStatusById((m) => ({ ...m, [piece.id]: current }));
+        return;
+      }
+      if (next === PUBLISHED_STATUS) dispatchContentPublished(piece.refTable, piece.id);
     });
   }, [statusById]);
 

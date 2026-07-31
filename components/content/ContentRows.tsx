@@ -7,7 +7,8 @@ import ContentCard from '@/components/content/ContentCard';
 import { setContentStatus, deleteContentPiece, setContentScheduledDate } from '@/app/content-actions';
 import { contentHref, opensBraindumpOverlay, type ContentPiece } from '@/lib/content/contentPiece';
 import { OPEN_BRAINDUMP_IDEA_EVENT } from '@/lib/content/braindumpIdeaEvent';
-import { nextStatus, type ContentStatus } from '@/lib/content/statusSystem';
+import { dispatchContentPublished } from '@/lib/content/postedLinkEvent';
+import { nextStatus, PUBLISHED_STATUS, type ContentStatus } from '@/lib/content/statusSystem';
 import DateSheet from '@/components/content/DateSheet';
 
 /**
@@ -77,7 +78,11 @@ export default function ContentRows({
       if (!res.ok) {
         setStatusById((m) => ({ ...m, [piece.id]: prev })); // roll back
         onHint?.('Не вдалося оновити статус');
+        return;
       }
+      // Tapping the ring is the MOST common way a piece goes live — it must ask
+      // for the link exactly like the editor's status pill does.
+      if (next === PUBLISHED_STATUS) dispatchContentPublished(piece.refTable, piece.id);
     },
     [onHint],
   );
