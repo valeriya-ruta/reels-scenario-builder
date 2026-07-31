@@ -41,6 +41,7 @@ import {
   GripVertical,
   Loader2,
   Move,
+  Pencil,
   Plus,
   Trash2,
   X,
@@ -221,6 +222,8 @@ export default function CarouselEditorLayout({
   /** Export (opens the blur overlay off the editor canvas) */
   isGenerating,
   onExport,
+  projectName,
+  onRenameProject,
   headerMeta,
   validationError,
   validationErrorDetail,
@@ -240,11 +243,22 @@ export default function CarouselEditorLayout({
   brandColorOptions: string[];
   isGenerating: boolean;
   onExport: () => void;
+  /** Project name shown in the mobile top bar (§1) — carousels had none. */
+  projectName: string;
+  onRenameProject: (next: string) => void;
   headerMeta?: ReactNode;
   validationError: string | null;
   validationErrorDetail: string | null;
 }) {
   const [tab, setTab] = useState<EditorTab | null>(null);
+  // Inline title editing in the mobile top bar (§1).
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState('');
+  const commitTitle = () => {
+    setEditingTitle(false);
+    const trimmed = titleDraft.trim();
+    if (trimmed && trimmed !== projectName) onRenameProject(trimmed);
+  };
   // The «Бренд» tab edits the SAME global brand settings as Profile → Branding.
   // refetchBrand() refreshes the shared store after a save, so edited brand
   // colours/fonts re-render the visible slides live (no second store).
@@ -860,22 +874,49 @@ export default function CarouselEditorLayout({
       {/* Mobile top bar: icon-back · [status · date meta] · export icon. The
           status + date pills live here (task 86d3d23nj UI pass) so the header
           reads as an app row, not a crowded webpage bar. */}
-      <header className="flex h-[54px] shrink-0 items-center gap-2 border-b border-[color:var(--border)] bg-[color:var(--background)] pl-1 pr-2 md:hidden">
-        <BackLink fallbackHref="/carousel" ariaLabel="Назад" className="app-icon-btn shrink-0">
-          <ChevronLeft className="h-5 w-5" />
-        </BackLink>
-        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {/* Mobile chrome (§1): chevron + inline-editable TITLE on top — a carousel
+          previously had no title here at all, so it could not be renamed on a
+          phone. Export moved out of the top-right into the bottom thumb bar. */}
+      <header className="shrink-0 border-b border-[color:var(--border)] bg-[color:var(--background)] px-1 pb-1.5 pt-1 md:hidden">
+        <div className="flex items-center gap-1">
+          <BackLink fallbackHref="/carousel" ariaLabel="Назад" className="app-icon-btn shrink-0">
+            <ChevronLeft className="h-5 w-5" />
+          </BackLink>
+          {editingTitle ? (
+            <input
+              autoFocus
+              value={titleDraft}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onBlur={commitTitle}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitTitle();
+                if (e.key === 'Escape') setEditingTitle(false);
+              }}
+              aria-label="Назва каруселі"
+              data-testid="editor-title-input"
+              className="min-w-0 flex-1 rounded-[10px] border border-[color:var(--border-strong)] bg-white px-2.5 py-1 text-[16px] font-bold tracking-tight text-[color:var(--foreground)] outline-none"
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setTitleDraft(projectName ?? '');
+                setEditingTitle(true);
+              }}
+              data-testid="editor-title"
+              title="Перейменувати"
+              className="flex min-w-0 flex-1 items-center gap-1.5 rounded-[10px] px-1.5 py-1 text-left"
+            >
+              <span className="truncate text-[16px] font-bold tracking-tight text-[color:var(--foreground)]">
+                {projectName?.trim() || 'Без назви'}
+              </span>
+              <Pencil className="h-3.5 w-3.5 shrink-0 text-[color:var(--text-muted)]" strokeWidth={2} aria-hidden />
+            </button>
+          )}
+        </div>
+        <div className="mt-1 flex min-w-0 items-center gap-1.5 overflow-x-auto pl-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {headerMeta}
         </div>
-        <button
-          type="button"
-          onClick={onExport}
-          disabled={isGenerating}
-          aria-label="Експортувати"
-          className="inline-flex shrink-0 items-center justify-center rounded-full border border-[color:var(--border)] bg-white p-2.5 text-[color:var(--foreground)] shadow-[var(--elev-1)] disabled:opacity-50"
-        >
-          {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-        </button>
       </header>
 
       <div
@@ -1303,6 +1344,24 @@ export default function CarouselEditorLayout({
             >
               {tabPanelContent}
             </div>
+          </div>
+          {/* Primary action in the thumb zone (§1) — it used to sit in the
+              top-right corner, the hardest place to reach one-handed. */}
+          <div className="px-2 pt-2">
+            <button
+              type="button"
+              onClick={onExport}
+              disabled={isGenerating}
+              data-testid="carousel-export"
+              className="app-btn-primary w-full"
+            >
+              {isGenerating ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" strokeWidth={2.2} />
+              )}
+              Експортувати
+            </button>
           </div>
           <div className="grid grid-cols-5 gap-1 px-2 py-2">
             {(['type', 'text', 'position', 'bg', 'brand'] as const).map((t) => (

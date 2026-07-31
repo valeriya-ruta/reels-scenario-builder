@@ -1,14 +1,22 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import { useState } from 'react';
 import { Project } from '@/lib/domain';
 import { updateProjectName, createSnapshot } from '@/app/actions';
 import ShareModal from './ShareModal';
-import BackLink from '@/components/ui/BackLink';
+import EditorTopBar from '@/components/ui/EditorTopBar';
 import ScheduleChip from './content/ScheduleChip';
 import StatusPill from './content/StatusPill';
 import SourceDumpChip from '@/components/braindump/SourceDumpChip';
+
+/**
+ * Share is switched OFF for now (§4). Ruta works solo — no teams — so the
+ * actor/editor snapshot links have no audience, and the button was sitting in
+ * the top-right corner that §1 clears. Everything behind it (createSnapshot,
+ * ShareModal, the /share routes) is untouched, so turning it back on is this
+ * one flag.
+ */
+const SHARE_ENABLED = false;
 
 interface ProjectHeaderProps {
   project: Project;
@@ -23,41 +31,23 @@ export default function ProjectHeader({
   backHref = '/projects',
   backLabel = 'До всіх сценаріїв',
 }: ProjectHeaderProps) {
-  const [name, setName] = useState(project.name);
-  const [isEditingName, setIsEditingName] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareLinks, setShareLinks] = useState<{ actor: string; editor: string } | null>(null);
   const [isSharing, setIsSharing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    setName(project.name);
-  }, [project.name]);
-
-  const handleNameBlur = async () => {
-    const trimmed = name.trim();
-    if (!trimmed) {
-      setName(project.name);
-      setIsEditingName(false);
-      return;
-    }
-
-    if (trimmed === project.name) {
-      setName(project.name);
-      setIsEditingName(false);
-      return;
-    }
-
+  /** Inline rename from the shared top bar; optimistic, reverts on failure. */
+  const handleRename = async (next: string) => {
     setErrorMessage(null);
-    const result = await updateProjectName(project.id, trimmed);
-    if (result.ok) {
-      onProjectUpdate({ ...project, name: result.data.name });
-      setName(result.data.name);
-    } else {
-      setName(project.name);
+    const previous = project.name;
+    onProjectUpdate({ ...project, name: next });
+    const result = await updateProjectName(project.id, next);
+    if (!result.ok) {
+      onProjectUpdate({ ...project, name: previous });
       setErrorMessage(result.error);
+      return;
     }
-    setIsEditingName(false);
+    onProjectUpdate({ ...project, name: result.data.name });
   };
 
   const handleShare = async () => {
@@ -82,62 +72,29 @@ export default function ProjectHeader({
 
   return (
     <>
-      <div className="mb-6">
-        <div className="-ml-2 mb-1 flex items-center justify-between">
-          <BackLink fallbackHref={backHref} ariaLabel={backLabel} className="app-icon-btn">
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </BackLink>
-        </div>
-        <div className="mb-3 flex items-center justify-between gap-4">
-          <div className="flex min-w-0 flex-1 items-center">
-            {isEditingName ? (
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onBlur={handleNameBlur}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleNameBlur();
-                  }
-                  if (e.key === 'Escape') {
-                    setName(project.name);
-                    setIsEditingName(false);
-                  }
-                }}
-                autoFocus
-                className="w-full rounded border border-zinc-300 bg-white px-3 py-2 text-lg font-semibold text-zinc-900 focus:border-[color:var(--accent)] focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]/25"
-              />
-            ) : (
-              <h1
-                onClick={() => setIsEditingName(true)}
-                className="app-title cursor-pointer truncate"
-                title={project.name}
-              >
-                {project.name}
-              </h1>
-            )}
-          </div>
+      <EditorTopBar
+        backHref={backHref}
+        backLabel={backLabel}
+        title={project.name}
+        onRename={handleRename}
+        meta={
+          <>
+            <StatusPill refTable="projects" id={project.id} type="reel" initialStatus={project.status ?? 'idea'} />
+            <ScheduleChip refTable="projects" id={project.id} initialDate={project.scheduled_date ?? null} />
+            <SourceDumpChip contentId={project.id} />
+          </>
+        }
+      />
+      {errorMessage && <p className="-mt-2 mb-3 text-sm text-red-600">{errorMessage}</p>}
 
-          <button
-            type="button"
-            onClick={handleShare}
-            disabled={isSharing}
-            className="btn-primary shrink-0 rounded-xl bg-[color:var(--accent)] px-4 py-2 text-sm font-medium text-white transition-[background,transform] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            {isSharing ? 'Створюю…' : 'Поділитися'}
-          </button>
-        </div>
-        {/* Meta pill row: status + date (app UI system — Linear/Superlist). */}
-        <div className="mb-1 flex flex-wrap items-center gap-2">
-          <StatusPill refTable="projects" id={project.id} type="reel" initialStatus={project.status ?? 'idea'} />
-          <ScheduleChip refTable="projects" id={project.id} initialDate={project.scheduled_date ?? null} />
-          <SourceDumpChip contentId={project.id} />
-        </div>
-        {errorMessage && <p className="mt-1 text-sm text-red-600">{errorMessage}</p>}
-      </div>
+      {/* Share is HIDDEN (§4): no teams, personal use only, and it occupied the
+          top-right corner §1 reserves for nothing. The whole snapshot flow below
+          is kept intact so re-enabling is a one-line change, not a rebuild. */}
+      {SHARE_ENABLED ? (
+        <button type="button" onClick={handleShare} disabled={isSharing} className="app-btn-primary mb-4">
+          {isSharing ? 'Створюю…' : 'Поділитися'}
+        </button>
+      ) : null}
 
       {showShareModal && shareLinks && (
         <ShareModal

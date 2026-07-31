@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import Link from 'next/link';
 import type {
   StorytellingProject,
   StorytellingColumn,
@@ -18,9 +17,8 @@ import {
   reorderStorytellingStories,
 } from '@/app/storytelling-actions';
 import StoryCard from './StoryCard';
-import BackLink from '@/components/ui/BackLink';
+import EditorTopBar from '@/components/ui/EditorTopBar';
 import SetNav, { type SetSibling } from '@/components/storytelling/SetNav';
-import { Pencil } from 'lucide-react';
 import {
   genClientId,
   nextOrderIndex,
@@ -79,8 +77,6 @@ export default function StorytellingBuilder({ project: initialProject, initialCo
   const [columns, setColumns] = useState<ColumnWithStories[]>(() =>
     buildColumnsWithStories(initialColumns, initialStories),
   );
-  const [editingName, setEditingName] = useState(false);
-  const [nameValue, setNameValue] = useState(project.name);
   const [editingColId, setEditingColId] = useState<string | null>(null);
   const [colNameValue, setColNameValue] = useState('');
   const [copiedColumnId, setCopiedColumnId] = useState<string | null>(null);
@@ -103,16 +99,14 @@ export default function StorytellingBuilder({ project: initialProject, initialCo
 
   // ── Project name ──
 
-  const handleNameSave = useCallback(async () => {
-    setEditingName(false);
-    const trimmed = nameValue.trim();
-    if (trimmed && trimmed !== project.name) {
-      setProject((p) => ({ ...p, name: trimmed }));
-      await updateStorytellingProjectName(project.id, trimmed);
-    } else {
-      setNameValue(project.name);
-    }
-  }, [nameValue, project]);
+  /** Inline rename from the shared top bar (§1). */
+  const handleRename = useCallback(
+    async (next: string) => {
+      setProject((p) => ({ ...p, name: next }));
+      await updateStorytellingProjectName(project.id, next);
+    },
+    [project.id],
+  );
 
   // ── Column operations ──
 
@@ -254,62 +248,30 @@ export default function StorytellingBuilder({ project: initialProject, initialCo
         </div>
       )}
 
-      {/* Header */}
-      <div className="mx-auto max-w-[calc(100vw-2rem)] px-4 pb-4 pt-5">
-        <div className="mb-3">
-          <BackLink
-            fallbackHref="/storytellings"
-            ariaLabel="Назад"
-            className="-ml-1 inline-flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
-          >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            <span>Назад</span>
-          </BackLink>
-        </div>
-
-        <div className="mb-3 flex items-center gap-4">
-          {editingName ? (
-            <input
-              autoFocus
-              value={nameValue}
-              onChange={(e) => setNameValue(e.target.value)}
-              onBlur={handleNameSave}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleNameSave();
-                if (e.key === 'Escape') { setNameValue(project.name); setEditingName(false); }
-              }}
-              className="w-full max-w-md rounded border border-zinc-300 bg-white px-3 py-2 text-lg font-semibold text-zinc-900 focus:border-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-400"
-            />
-          ) : (
-            <button
-              type="button"
-              onClick={() => setEditingName(true)}
-              className="flex min-w-0 items-center gap-2 text-left"
-              title="Перейменувати"
-            >
-              <span className="app-title truncate">{project.name}</span>
-              <Pencil className="h-4 w-4 shrink-0 text-[color:var(--text-muted)]" />
-            </button>
-          )}
-        </div>
+      {/* Header — the shared bar (§1): chevron, inline-editable title, meta. */}
+      <div className="mx-auto max-w-[calc(100vw-2rem)] px-4 pb-2 pt-5">
+        <EditorTopBar
+          backHref="/storytellings"
+          title={project.name}
+          onRename={handleRename}
+          meta={
+            <>
+              <StatusPill
+                refTable="storytelling_projects"
+                id={project.id}
+                type="story"
+                initialStatus={project.status ?? 'idea'}
+              />
+              <ScheduleChip
+                refTable="storytelling_projects"
+                id={project.id}
+                initialDate={project.scheduled_date ?? null}
+              />
+              <SourceDumpChip contentId={project.id} />
+            </>
+          }
+        />
         <SetNav siblings={siblings} currentId={project.id} />
-        {/* Meta pill row: status + date (app UI system — Linear/Superlist). */}
-        <div className="mb-6 flex flex-wrap items-center gap-2">
-          <StatusPill
-            refTable="storytelling_projects"
-            id={project.id}
-            type="story"
-            initialStatus={project.status ?? 'idea'}
-          />
-          <ScheduleChip
-            refTable="storytelling_projects"
-            id={project.id}
-            initialDate={project.scheduled_date ?? null}
-          />
-          <SourceDumpChip contentId={project.id} />
-        </div>
       </div>
 
       {/* Columns */}

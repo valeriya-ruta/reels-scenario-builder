@@ -348,6 +348,17 @@ export default function CarouselBuilder({
     }
   }, [projectNameDraft, projectName, projectId]);
 
+  /** Rename from the mobile top bar's inline title (§1) — carousels had no
+   *  title on mobile at all, so renaming was desktop-only. */
+  const handleRenameProject = useCallback(
+    async (next: string) => {
+      setProjectName(next);
+      setProjectNameDraft(next);
+      await updateCarouselProjectName(projectId, next);
+    },
+    [projectId],
+  );
+
   // Run the actual persist. `keepalive` lets the write complete even while the
   // tab/app is being backgrounded or closed (used by the flush path). On failure
   // we re-mark dirty so the next edit / flush retries instead of silently
@@ -1060,6 +1071,8 @@ export default function CarouselBuilder({
           brandColorOptions={brandColorOptions}
           isGenerating={isGenerating}
           onExport={startExport}
+          projectName={projectName}
+          onRenameProject={handleRenameProject}
           headerMeta={headerMeta}
           validationError={validationError}
           validationErrorDetail={validationErrorDetail}
