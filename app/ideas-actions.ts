@@ -32,9 +32,8 @@ export async function getIdeaText(id: string): Promise<string> {
  * while re-linking the same target stays idempotent.
  *
  * Best-effort by design: a link failure must never break the content creation
- * that already succeeded. Until migration 026 is applied the old narrower
- * constraint is still in force, so siblings past the first are simply not
- * recorded — today's behaviour, not a regression.
+ * that already succeeded. (Migration 026, which widens the unique constraint to
+ * allow the fan-out, is applied to prod as of 2026-07-31.)
  */
 export async function linkIdeaToContent(
   ideaId: string,

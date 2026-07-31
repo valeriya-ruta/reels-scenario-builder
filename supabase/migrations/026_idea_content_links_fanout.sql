@@ -1,7 +1,9 @@
 -- 026_idea_content_links_fanout.sql
 --
--- ⚠️ DB SCHEMA CHANGE — FLAGGED FOR BRANCH + PR. Do NOT apply to prod before
---    sign-off. Built on branch `ux/september-overhaul`.
+-- ✅ APPLIED TO PROD (ohhudfwwdcbpxryxmvmd) on 2026-07-31, on Ruta's sign-off.
+--    Verified after: the old narrow constraint is gone, the wide one is in
+--    place, `idx_idea_content_links_content` exists, and the existing row
+--    survived. Built on branch `ux/september-overhaul`.
 --
 -- WHY
 -- 022 gave a braindump at most ONE child per content type
