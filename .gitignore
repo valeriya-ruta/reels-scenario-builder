@@ -49,3 +49,4 @@ next-env.d.ts
 .env.local
 _proofout/
 _proofout_bold/
+_proofout_ux/
