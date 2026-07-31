@@ -6,6 +6,8 @@ import { Trash2, CalendarDays } from 'lucide-react';
 const DATE_W = 76; // 📅 schedule action width
 const DELETE_W = 76; // 🗑 delete action width
 const OPEN_THRESHOLD = 24; // px pull to snap open (low → not sticky)
+/** Travel past which a gesture is a scroll/swipe rather than a tap. */
+const SLOP = 8;
 
 function vibrate(ms: number) {
   try {
@@ -64,7 +66,16 @@ export default function SwipeRow({
   const actionsW = onSchedule ? DATE_W + DELETE_W : DELETE_W;
   const [dragX, setDragX] = useState(0); // live finger offset while dragging
   const [removing, setRemoving] = useState(false);
-  const start = useRef<{ x: number; base: number; moved: boolean; offset: number } | null>(null);
+  // `axis` locks the gesture the first time it travels past the slop: 'x' is a
+  // swipe, 'y' is the page scrolling and the row must stay out of the way.
+  const start = useRef<{
+    x: number;
+    y: number;
+    base: number;
+    moved: boolean;
+    axis: 'x' | 'y' | null;
+    offset: number;
+  } | null>(null);
   const [dragging, setDragging] = useState(false);
 
   // Negative offset = row slid LEFT to expose the actions pinned to the RIGHT.
@@ -74,31 +85,55 @@ export default function SwipeRow({
   const onPointerDown = (e: ReactPointerEvent) => {
     if (armed || removing) return;
     const base = open ? -actionsW : 0;
-    start.current = { x: e.clientX, base, moved: false, offset: base };
+    start.current = { x: e.clientX, y: e.clientY, base, moved: false, axis: null, offset: base };
     setDragX(base);
     setDragging(true);
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    // Deliberately NOT capturing the pointer: capture would fight the browser's
+    // native vertical pan, and the axis lock below already keeps the swipe from
+    // stealing a scroll.
   };
+
   const onPointerMove = (e: ReactPointerEvent) => {
     const s = start.current;
     if (!s) return;
     const dx = e.clientX - s.x;
-    if (Math.abs(dx) > 6) s.moved = true;
+    const dy = e.clientY - s.y;
+
+    // Decide once, at the first meaningful movement, whether this gesture is a
+    // horizontal swipe or the page scrolling. Previously only `dx` was measured,
+    // so a vertical scroll that started on a row left `moved` false and fired
+    // onTap on release — scrolling opened items (§0).
+    if (!s.axis && (Math.abs(dx) > SLOP || Math.abs(dy) > SLOP)) {
+      s.axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+      s.moved = true;
+    }
+    if (s.axis !== 'x') {
+      // Vertical: let the page scroll, keep the row still.
+      if (s.axis === 'y' && dragX !== s.base) setDragX(s.base);
+      return;
+    }
+
     // Clamp to [-actionsW, 0]: only a LEFT drag exposes the actions; a right drag
     // is pinned closed.
     const next = Math.max(-actionsW, Math.min(0, s.base + dx));
     s.offset = next;
     setDragX(next);
   };
+
   const endDrag = () => {
     const s = start.current;
     start.current = null;
     setDragging(false);
     if (!s) return;
-    if (!s.moved) {
-      // Tap (no real drag): closed → open the item; open → close the row.
+    // A gesture that travelled is never a tap, whichever way it went.
+    if (!s.moved && s.axis === null) {
+      // Tap (no real travel): closed → open the item; open → close the row.
       if (open) onRequestClose();
       else onTap();
+      return;
+    }
+    if (s.axis !== 'x') {
+      // It was a scroll — leave the row exactly as it was.
       return;
     }
     if (Math.abs(s.offset) >= OPEN_THRESHOLD) {
@@ -107,6 +142,18 @@ export default function SwipeRow({
     } else {
       onRequestClose();
     }
+  };
+
+  /**
+   * The browser fires pointercancel when it takes the gesture over to scroll the
+   * page. That is unambiguously a scroll, so it must reset WITHOUT running the
+   * tap branch — routing cancel into endDrag is what made a flick-scroll open
+   * whatever it started on.
+   */
+  const cancelDrag = () => {
+    start.current = null;
+    setDragging(false);
+    setDragX(open ? -actionsW : 0);
   };
 
   // First tap arms (shows «Точно?»), second tap confirms the delete.
@@ -181,7 +228,7 @@ export default function SwipeRow({
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
-        onPointerCancel={endDrag}
+        onPointerCancel={cancelDrag}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();

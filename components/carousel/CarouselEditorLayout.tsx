@@ -12,6 +12,7 @@ import {
 } from 'react';
 import Link from 'next/link';
 import BackLink from '@/components/ui/BackLink';
+import { useTapGuard } from '@/lib/ui/tapGuard';
 import {
   closestCenter,
   DndContext,
@@ -105,6 +106,7 @@ function SortableThumb({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: slide.id,
   });
+  const selectTap = useTapGuard(onSelect);
   const dragTransform = CSS.Transform.toString(transform);
   // Long-press "lift": raise + slightly scale the grabbed thumbnail so it reads
   // as floating. Composed after the dnd-kit translate so reorder still tracks.
@@ -143,7 +145,11 @@ function SortableThumb({
       {...(wholeTileDrag ? { ...attributes, ...listeners } : {})}
       role="button"
       tabIndex={0}
-      onClick={onSelect}
+      // The strip is a horizontal scroller, so a bare onClick fired whenever a
+      // finger lifted after scrolling past a thumb — scrolling the strip kept
+      // selecting slides. The guard only lets a press that DIDN'T travel through
+      // (§0); keyboard activation is unaffected.
+      {...selectTap}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();

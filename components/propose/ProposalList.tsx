@@ -3,6 +3,7 @@
 import { Sparkles } from 'lucide-react';
 import ContentTypeIcon from '@/components/ContentTypeIcon';
 import { CONTENT_TYPES } from '@/lib/contentTypes';
+import { useTapGuard } from '@/lib/ui/tapGuard';
 import type { Proposal } from '@/lib/propose/types';
 
 /**
@@ -43,14 +44,33 @@ export default function ProposalList({
 
   return (
     <ul className="space-y-2" data-testid="proposal-list">
-      {proposals.map((proposal) => {
-        const meta = proposal.suggestedType ? CONTENT_TYPES[proposal.suggestedType] : null;
-        return (
-          <li key={proposal.id}>
+      {proposals.map((proposal) => (
+        <ProposalCard key={proposal.id} proposal={proposal} disabled={disabled} onPick={onPick} />
+      ))}
+    </ul>
+  );
+}
+
+/** One proposal. Split out so each card owns its own tap guard (§0). */
+function ProposalCard({
+  proposal,
+  disabled,
+  onPick,
+}: {
+  proposal: Proposal;
+  disabled?: boolean;
+  onPick: (proposal: Proposal) => void;
+}) {
+  const meta = proposal.suggestedType ? CONTENT_TYPES[proposal.suggestedType] : null;
+  // The deck sits in the braindump's scroll region, so a scroll that starts on a
+  // card must not confirm that angle.
+  const tap = useTapGuard(() => onPick(proposal));
+  return (
+    <li>
             <button
               type="button"
               disabled={disabled}
-              onClick={() => onPick(proposal)}
+              {...tap}
               data-testid="proposal-card"
               data-source={proposal.source}
               className="group w-full rounded-[16px] border border-[color:var(--border)] bg-white/85 px-4 py-3.5 text-left transition-all hover:border-[color:var(--border-strong)] hover:bg-white active:scale-[0.99] disabled:opacity-50"
@@ -78,9 +98,6 @@ export default function ProposalList({
                 </span>
               </div>
             </button>
-          </li>
-        );
-      })}
-    </ul>
+    </li>
   );
 }
