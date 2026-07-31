@@ -4,6 +4,29 @@ import type { ContentStatus, ContentType } from '@/lib/content/statusSystem';
  * Client-safe content-piece shape + routing (no server-only deps), so client
  * components (rows, list, home) can import these without pulling the server read.
  */
+/**
+ * What a piece will LOOK like once posted — enough for its card to preview the
+ * real designed output instead of a database row (task 3.1). Attached by
+ * `attachPreviews` (server) and absent when the piece has no content yet.
+ */
+export type ContentPreview = {
+  /** The piece's own opening words: cover title / hook / first story line. */
+  lead: string;
+  /** Second line, when the format has one (a carousel cover's body). */
+  sub?: string;
+  /** How many slides / scenes / stories. */
+  count: number;
+  /** e.g. «8 слайдів». */
+  countLabel: string;
+  /** Carousel only: the cover's real palette, so the card renders in brand. */
+  cover?: {
+    background: string;
+    titleColor: string;
+    bodyColor: string;
+    hasPhoto: boolean;
+  };
+};
+
 export type ContentPiece = {
   id: string;
   userId: string;
@@ -22,6 +45,8 @@ export type ContentPiece = {
   setIndex?: number | null;
   /** How many pieces were generated together, when part of a set. */
   setSize?: number | null;
+  /** Real designed-output preview for the card (see ContentPreview). */
+  preview?: ContentPreview;
   createdAt: string;
   updatedAt: string;
 };

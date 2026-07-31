@@ -260,7 +260,7 @@ export default function PlanCalendar({
             </div>
             {dayPieces.length > 0 ? (
               <>
-                <div className="app-card overflow-hidden px-1.5 py-0.5">
+                <div>
                   <ContentRows pieces={dayPieces} />
                 </div>
                 {/* Hold a row here and drop it on any day above to reschedule. */}

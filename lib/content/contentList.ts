@@ -3,6 +3,7 @@ import 'server-only';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import type { ContentStatus, ContentType } from '@/lib/content/statusSystem';
 import { contentHref, type ContentPiece } from '@/lib/content/contentPiece';
+import { attachPreviews } from '@/lib/content/contentPreview';
 
 /**
  * Canonical "all content pieces for this user" read (Status system 1/8).
@@ -51,8 +52,9 @@ function rowToPiece(row: ContentPieceRow): ContentPiece {
 /**
  * All of the current user's content pieces, most-recent-first.
  * @param limit optional cap (Home recents passes a small number; the full list omits it).
+ * @param withPreviews attach real designed-output previews for the cards (3.1).
  */
-export async function getAllContent(limit?: number): Promise<ContentPiece[]> {
+export async function getAllContent(limit?: number, withPreviews = true): Promise<ContentPiece[]> {
   const supabase = await createServerSupabaseClient();
   const {
     data: { user },
@@ -94,5 +96,7 @@ export async function getAllContent(limit?: number): Promise<ContentPiece[]> {
     }
   }
 
-  return pieces;
+  // Cards preview the real designed output (cover slide / hook / opening line),
+  // which the unified view can't carry — see attachPreviews.
+  return withPreviews ? attachPreviews(pieces) : pieces;
 }

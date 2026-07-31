@@ -2,18 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronRight, Film, LayoutGrid, Play, CalendarDays, Plus } from 'lucide-react';
-import { dayHeaderLabel } from '@/lib/content/calendar';
+import { Film, LayoutGrid, Play, Plus } from 'lucide-react';
 import DateSheet from '@/components/content/DateSheet';
-import SetChip from '@/components/content/SetChip';
-import StatusRing from '@/components/content/StatusRing';
+import ContentCard from '@/components/content/ContentCard';
 import SwipeRow from '@/components/content/SwipeRow';
 import ProposingEmptyState from '@/components/propose/ProposingEmptyState';
 import { setContentStatus, setContentScheduledDate } from '@/app/content-actions';
 import { contentHref, opensBraindumpOverlay, type ContentPiece } from '@/lib/content/contentPiece';
 import { dispatchOpenBraindumpIdea } from '@/lib/content/braindumpIdeaEvent';
-import { STATUS_COLORS, STATUS_LABELS, nextStatus, type ContentStatus } from '@/lib/content/statusSystem';
-import { formatShortDate } from '@/lib/content/relativeTime';
+import { nextStatus, type ContentStatus } from '@/lib/content/statusSystem';
 
 /**
  * Sleek hairline list for a single content type (carousel / reels / …), matching
@@ -193,7 +190,7 @@ export default function SwipeableContentList({
           <ProposingEmptyState headline={emptyText} />
         </div>
       ) : (
-        <ul className="app-card overflow-hidden px-1.5 py-0.5">
+        <ul className="pt-3">
           {items.map((piece) => {
             const status = statusById[piece.id] ?? piece.status;
             return (
@@ -211,6 +208,7 @@ export default function SwipeableContentList({
                 onArm={() => setArmedId(piece.id)}
                 onDelete={() => removeRow(piece)}
                 onSchedule={() => setDateFor(piece)}
+                variant="card"
                 onTap={() => {
                   closeAll();
                   if (opensBraindumpOverlay(piece)) {
@@ -220,44 +218,7 @@ export default function SwipeableContentList({
                   router.push(contentHref(piece));
                 }}
               >
-                {/* Ring is its own hit target — one tap advances status by a stage
-                    and must NOT open the item; stopping pointer/click propagation
-                    keeps the swipe + tap-to-open handlers from firing. */}
-                <button
-                  type="button"
-                  aria-label="Змінити статус"
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onPointerUp={(e) => e.stopPropagation()}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    advance(piece);
-                  }}
-                  className="shrink-0 rounded-full p-0.5 transition active:scale-95"
-                >
-                  <StatusRing type={piece.type} status={status} size={34} />
-                </button>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center text-[15.5px] font-semibold text-[color:var(--foreground)]">
-                    <span className="truncate">{piece.title}</span>
-                    <SetChip piece={piece} />
-                  </div>
-                  <div className="mt-0.5 text-[12.5px]">
-                    <span className="font-medium" style={{ color: STATUS_COLORS[status] }}>
-                      {STATUS_LABELS[status]}
-                    </span>
-                    <span className="text-zinc-400"> · {formatShortDate(piece.updatedAt)}</span>
-                  </div>
-                </div>
-                {piece.scheduledDate ? (
-                  <span
-                    className="mr-1 inline-flex shrink-0 items-center gap-1 rounded-full bg-[color:var(--surface1)] px-2 py-0.5 text-[11px] font-medium text-zinc-500"
-                    title="Заплановано"
-                  >
-                    <CalendarDays className="h-3 w-3" aria-hidden="true" />
-                    {dayHeaderLabel(piece.scheduledDate)}
-                  </span>
-                ) : null}
-                <ChevronRight size={18} className="shrink-0 text-[#c4c4ce]" />
+                <ContentCard piece={{ ...piece, status }} onAdvance={() => advance(piece)} />
               </SwipeRow>
             );
           })}

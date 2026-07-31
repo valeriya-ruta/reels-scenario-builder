@@ -5,6 +5,7 @@ import NewReelSubmitButton from '@/components/NewReelSubmitButton';
 import ContentRowsSection from '@/components/content/ContentRowsSection';
 import type { ContentPiece } from '@/lib/content/contentPiece';
 import type { ContentStatus } from '@/lib/content/statusSystem';
+import { attachPreviews } from '@/lib/content/contentPreview';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,7 +33,7 @@ export default async function StorytellingsPage() {
   if (error) console.error('Error fetching storytelling projects:', error);
 
   const now = new Date().toISOString();
-  const pieces: ContentPiece[] = ((projects as Row[] | null) ?? []).map((p) => ({
+  const rows: ContentPiece[] = ((projects as Row[] | null) ?? []).map((p) => ({
     id: p.id,
     userId: p.user_id,
     type: 'story',
@@ -43,6 +44,10 @@ export default async function StorytellingsPage() {
     createdAt: p.created_at ?? now,
     updatedAt: p.updated_at ?? now,
   }));
+
+  // Cards preview the real designed output (cover slide / hook / opening
+  // line) — the list row alone can't carry it.
+  const pieces = await attachPreviews(rows);
 
   return (
     <div className="app-canvas">

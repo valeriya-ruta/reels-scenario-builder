@@ -36,7 +36,7 @@ export default function HomeRecents({ pieces }: { pieces: ContentPiece[] }) {
           />
         </div>
       ) : (
-        <div data-testid="recents-list" className="app-card overflow-hidden px-1.5 py-0.5">
+        <div data-testid="recents-list">
           <ContentRows pieces={pieces} />
         </div>
       )}

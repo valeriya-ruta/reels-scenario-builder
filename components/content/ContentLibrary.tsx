@@ -60,7 +60,7 @@ export default function ContentLibrary({ pieces }: { pieces: ContentPiece[] }) {
             </p>
           </div>
         ) : (
-          <div className="app-card mt-4 overflow-hidden px-1.5 py-0.5" data-testid="content-list">
+          <div className="mt-4" data-testid="content-list">
             <ContentRows pieces={visible} onHint={showHint} />
           </div>
         )}

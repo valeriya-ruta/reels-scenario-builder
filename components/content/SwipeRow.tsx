@@ -39,6 +39,7 @@ export default function SwipeRow({
   onDelete,
   onTap,
   onSchedule,
+  variant = 'row',
   children,
 }: {
   open: boolean;
@@ -51,8 +52,15 @@ export default function SwipeRow({
   onTap: () => void;
   /** Asks the parent to open the app's own date sheet; omit to hide the 📅 action. */
   onSchedule?: () => void;
+  /**
+   * 'card' — an editorial content card: rounded, elevated, no hairline divider,
+   * taller. 'row' keeps the original compact hairline list. The GESTURE is
+   * identical in both, so the swipe behaviour stays defined in exactly one place.
+   */
+  variant?: 'row' | 'card';
   children: ReactNode;
 }) {
+  const isCard = variant === 'card';
   const actionsW = onSchedule ? DATE_W + DELETE_W : DELETE_W;
   const [dragX, setDragX] = useState(0); // live finger offset while dragging
   const [removing, setRemoving] = useState(false);
@@ -113,13 +121,21 @@ export default function SwipeRow({
 
   return (
     <li
-      className="relative overflow-hidden transition-[max-height,opacity] duration-300 ease-in"
-      style={{ maxHeight: removing ? 0 : 240, opacity: removing ? 0 : 1 }}
+      className={`relative overflow-hidden transition-[max-height,opacity] duration-300 ease-in ${
+        isCard ? 'rounded-[16px]' : ''
+      }`}
+      style={{
+        maxHeight: removing ? 0 : 260,
+        opacity: removing ? 0 : 1,
+        marginBottom: isCard && !removing ? 10 : 0,
+        boxShadow: isCard ? 'var(--elev-1)' : undefined,
+        border: isCard ? '1px solid var(--border)' : undefined,
+      }}
     >
       {/* Action layer pinned to the RIGHT, revealed as the row slides left. Stops
           1px short of the bottom so it never bleeds through the hairline divider. */}
       <div
-        className="absolute right-0 top-0 bottom-px flex items-stretch"
+        className={`absolute right-0 top-0 flex items-stretch ${isCard ? 'bottom-0' : 'bottom-px'}`}
         style={{ width: armed ? '100%' : actionsW }}
       >
         {!armed && onSchedule && (
@@ -172,7 +188,9 @@ export default function SwipeRow({
             onTap();
           }
         }}
-        className="relative flex touch-pan-y items-center gap-3 bg-[color:var(--background)] px-2 py-3"
+        className={`relative flex touch-pan-y gap-3 bg-[color:var(--background)] ${
+          isCard ? 'items-start px-3.5 py-3.5' : 'items-center px-2 py-3'
+        }`}
         style={{
           transform: `translateX(${armed ? -9999 : x}px)`,
           transition: dragging ? 'none' : 'transform 220ms cubic-bezier(0.22,1,0.36,1)',
@@ -180,8 +198,8 @@ export default function SwipeRow({
       >
         {children}
       </div>
-      {/* hairline divider, inset */}
-      <div className="ml-[52px] mr-5 h-px bg-[color:var(--border)]" />
+      {/* hairline divider, inset — cards separate by their own gap instead. */}
+      {isCard ? null : <div className="ml-[52px] mr-5 h-px bg-[color:var(--border)]" />}
     </li>
   );
 }

@@ -2,28 +2,21 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { CalendarDays } from 'lucide-react';
-import StatusRing from '@/components/content/StatusRing';
 import SwipeRow from '@/components/content/SwipeRow';
+import ContentCard from '@/components/content/ContentCard';
 import { setContentStatus, deleteContentPiece, setContentScheduledDate } from '@/app/content-actions';
 import { contentHref, opensBraindumpOverlay, type ContentPiece } from '@/lib/content/contentPiece';
 import { OPEN_BRAINDUMP_IDEA_EVENT } from '@/lib/content/braindumpIdeaEvent';
-import {
-  STATUS_COLORS,
-  STATUS_LABELS,
-  TYPE_CHIP_COLORS,
-  TYPE_LABELS,
-  nextStatus,
-  type ContentStatus,
-} from '@/lib/content/statusSystem';
-import { formatRelativeTime } from '@/lib/content/relativeTime';
-import { dayHeaderLabel } from '@/lib/content/calendar';
+import { nextStatus, type ContentStatus } from '@/lib/content/statusSystem';
 import DateSheet from '@/components/content/DateSheet';
-import SetChip from '@/components/content/SetChip';
 
 /**
  * Interactive list of content rows (Status system 4/8). Shared by the Home
  * recents and the full «Твій контент» list.
+ *
+ * Each piece renders as an editorial <ContentCard> — the content previewing what
+ * it will become, not a title-and-status row. The swipe gesture itself still
+ * lives in the shared <SwipeRow>, so behaviour is identical to every other list.
  *
  * Interactions:
  * - Tap the ring → advance ONE stage (idea rows reopen the braindump overlay).
@@ -35,18 +28,6 @@ import SetChip from '@/components/content/SetChip';
  * Status changes + deletes are optimistic; on failure we roll back / surface a hint.
  */
 const UNDO_MS = 4000;
-
-function TypeChip({ type }: { type: ContentPiece['type'] }) {
-  const color = TYPE_CHIP_COLORS[type];
-  return (
-    <span
-      className="inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
-      style={{ color, backgroundColor: `${color}1F` }}
-    >
-      {TYPE_LABELS[type]}
-    </span>
-  );
-}
 
 export default function ContentRows({
   pieces: initialPieces,
@@ -195,51 +176,13 @@ export default function ContentRows({
             onArm={() => setArmedId(piece.id)}
             onDelete={() => removeRow(piece)}
             onSchedule={() => setDateFor(piece)}
+            variant="card"
             onTap={() => {
               closeAll();
               open(piece);
             }}
           >
-            {/* Ring is its own hit target — one tap advances status (idea rows
-                reopen the braindump); stopPropagation keeps the swipe/tap from
-                firing. */}
-            <button
-              type="button"
-              aria-label="Змінити статус"
-              onPointerDown={(e) => e.stopPropagation()}
-              onPointerUp={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                advance(piece);
-              }}
-              className="shrink-0 rounded-full p-0.5 transition active:scale-95"
-            >
-              <StatusRing type={piece.type} status={piece.status} size={30} />
-            </button>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center text-[15px] font-semibold text-[color:var(--foreground)]">
-                <span className="truncate">{piece.title || 'Без назви'}</span>
-                <SetChip piece={piece} />
-              </div>
-              <div className="mt-0.5 flex items-center gap-1.5 text-[12px] text-zinc-500">
-                <span className="shrink-0 font-medium" style={{ color: STATUS_COLORS[piece.status] }}>
-                  {STATUS_LABELS[piece.status]}
-                </span>
-                <span aria-hidden="true">·</span>
-                <TypeChip type={piece.type} />
-                <span aria-hidden="true">·</span>
-                <span className="shrink-0 whitespace-nowrap">{formatRelativeTime(piece.updatedAt)}</span>
-              </div>
-            </div>
-            {piece.scheduledDate ? (
-              <span
-                className="ml-1 inline-flex shrink-0 items-center gap-1 rounded-full bg-[color:var(--surface1)] px-2 py-0.5 text-[11px] font-medium text-zinc-500"
-                title="Заплановано"
-              >
-                <CalendarDays className="h-3 w-3" aria-hidden="true" />
-                {dayHeaderLabel(piece.scheduledDate)}
-              </span>
-            ) : null}
+            <ContentCard piece={piece} onAdvance={() => advance(piece)} />
           </SwipeRow>
         ))}
       </ul>
