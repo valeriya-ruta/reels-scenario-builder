@@ -7,6 +7,8 @@ import { readPendingReelProjectIdFromStorage, useRantResults } from '@/component
 import ProjectHeader from './ProjectHeader';
 import SceneList from './SceneList';
 import CopyReferencePanel from './CopyReferencePanel';
+import ReelModeSwitch, { type ReelMode } from '@/components/reels/ReelModeSwitch';
+import Teleprompter from '@/components/reels/Teleprompter';
 
 interface ProjectBuilderProps {
   project: Project;
@@ -32,6 +34,7 @@ export default function ProjectBuilder({
   const [scenes, setScenes] = useState(initialScenes);
   const [locations, setLocations] = useState(initialLocations);
   const [focusSceneId, setFocusSceneId] = useState<string | null>(null);
+  const [mode, setMode] = useState<ReelMode>('scenario');
 
   useEffect(() => {
     const pending =
@@ -75,33 +78,43 @@ export default function ProjectBuilder({
             ) : null}
           </div>
         ) : null}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-10">
-          <div className="lg:col-span-7">
-            <SceneList
-              project={project}
-              scenes={scenes}
-              onScenesUpdate={setScenes}
-              locations={locations}
-              onLocationsChange={setLocations}
-              focusSceneId={focusSceneId}
-              onFocusHandled={() => setFocusSceneId(null)}
-            />
-          </div>
-          {/* Reference sits FIRST on mobile: when you're writing from a reference
-              you keep going back to it, and having it under the whole scenario
-              meant scrolling past every scene to reach it. On desktop it stays
-              in the sticky right column. */}
-          <div className="order-first lg:order-none lg:col-span-3">
-            <div className="lg:sticky lg:top-6">
-              <CopyReferencePanel
+        {/* The two modes are declared up front, not buried in a settings menu:
+            Сценарій is what you WORK from, Суфлер is what you READ from. */}
+        <div className="mb-5">
+          <ReelModeSwitch mode={mode} onChange={setMode} />
+        </div>
+
+        {mode === 'teleprompter' ? (
+          <Teleprompter scenes={scenes} />
+        ) : (
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-10">
+            <div className="lg:col-span-7">
+              <SceneList
                 project={project}
-                existingScenes={scenes}
+                scenes={scenes}
                 onScenesUpdate={setScenes}
-                onSceneAdded={setFocusSceneId}
+                locations={locations}
+                onLocationsChange={setLocations}
+                focusSceneId={focusSceneId}
+                onFocusHandled={() => setFocusSceneId(null)}
               />
             </div>
+            {/* Reference sits FIRST on mobile: when you're writing from a reference
+                you keep going back to it, and having it under the whole scenario
+                meant scrolling past every scene to reach it. On desktop it stays
+                in the sticky right column. */}
+            <div className="order-first lg:order-none lg:col-span-3">
+              <div className="lg:sticky lg:top-6">
+                <CopyReferencePanel
+                  project={project}
+                  existingScenes={scenes}
+                  onScenesUpdate={setScenes}
+                  onSceneAdded={setFocusSceneId}
+                />
+              </div>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
