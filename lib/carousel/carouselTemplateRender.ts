@@ -56,10 +56,26 @@ function isDarkColor(hex: string): boolean {
 
 /**
  * Alphabetic-baseline Y for the FIRST line of a CSS-style text block whose line
- * box top sits at `topY`, given a CSS `line-height` (in px). Mirrors how the
- * editor (DOM) positions glyphs: the baseline sits half the leading below the
- * line-box top, plus the font ascent. Keeps export glyph positions aligned with
- * the editor's flex/line-height layout instead of guessing 0.8·fontSize.
+ * box top sits at `topY`, given a CSS `line-height` (in px).
+ *
+ * This has to reproduce CSS inline layout exactly, or export drifts from the
+ * editor. CSS puts the baseline at:
+ *
+ *     topY + (lineHeight − (fontAscent + fontDescent)) / 2 + fontAscent
+ *
+ * Two details are easy to get wrong and were both wrong here, in the same
+ * direction (proof: the refined cover's text block sat 14px higher in export
+ * than in the editor):
+ *
+ *  1. The ascent is the FONT ascent (`fontBoundingBoxAscent`, ~0.92em for
+ *     Inter), not the INK ascent of a sample string (`actualBoundingBoxAscent`
+ *     of "Mg", ~0.69em). The old code used the ink ascent, which lifts every
+ *     block by ~0.23em — about 22px at a 96px title.
+ *  2. Half-leading is computed against the font's CONTENT height
+ *     (ascent+descent), not against `fontSize`, and CSS does NOT clamp it at
+ *     zero. A tight `leading-[1.0]` legitimately yields negative half-leading
+ *     and the glyphs overflow their line box; clamping pushed the block down
+ *     again, partially masking (1) and leaving a residual offset.
  */
 function firstBaseline(
   ctx: SKRSContext2D,
@@ -69,18 +85,25 @@ function firstBaseline(
   font: string,
 ): number {
   ctx.font = `${fontSize}px ${font}`;
-  // actualBoundingBoxAscent is measured relative to the CURRENT textBaseline, so
-  // a stale 'middle'/'bottom' left over from a prior draw (e.g. the label pill in
-  // renderContent) would halve it and pull the line up. Pin it to 'alphabetic'
-  // before measuring so the ascent is the true baseline-to-cap distance.
+  // Metrics are reported relative to the CURRENT textBaseline, so a stale
+  // 'middle'/'bottom' left over from a prior draw (e.g. the label pill in
+  // renderContent) would skew them. Pin it before measuring.
   ctx.textBaseline = 'alphabetic';
   const m = ctx.measureText('Mg');
-  const ascent =
-    typeof m.actualBoundingBoxAscent === 'number' && m.actualBoundingBoxAscent > 0
-      ? m.actualBoundingBoxAscent
-      : fontSize * 0.8;
-  const halfLeading = Math.max(0, (lineHeight - fontSize) / 2);
-  return topY + halfLeading + ascent;
+
+  const fontAscent =
+    typeof m.fontBoundingBoxAscent === 'number' && m.fontBoundingBoxAscent > 0
+      ? m.fontBoundingBoxAscent
+      : typeof m.actualBoundingBoxAscent === 'number' && m.actualBoundingBoxAscent > 0
+        ? m.actualBoundingBoxAscent
+        : fontSize * 0.8;
+  const fontDescent =
+    typeof m.fontBoundingBoxDescent === 'number' && m.fontBoundingBoxDescent > 0
+      ? m.fontBoundingBoxDescent
+      : fontSize * 0.2;
+
+  const halfLeading = (lineHeight - (fontAscent + fontDescent)) / 2;
+  return topY + halfLeading + fontAscent;
 }
 
 /** Top Y of a text block of height `blockH` for a given vertical placement,
@@ -937,7 +960,11 @@ async function renderCta(
   const boxBodySize = scaleBodyPx(36); // CTA body follows the shared BODY scale
   const boxPadY = 24; // py-6
   const boxPadX = 32; // px-8
-  const boxBodyLineH = Math.round(boxBodySize * 1.2);
+  // The editor's CTA `<p>` carries NO leading class, so it inherits Tailwind's
+  // default 1.5 — not the 1.2 assumed here. At a 40px body that is 12px per
+  // line, which made the exported accent box 96px tall against the editor's 108
+  // (proof: `diff-5-cta.png`, the pill outlined solid red top and bottom).
+  const boxBodyLineH = Math.round(boxBodySize * 1.5);
   // CTA body uses the BODY sans face (not the title face) like every other slide
   // type — for a titles-only brand (e.g. Cormorant) `fonts.sansBold` is the serif
   // title face, which is the bug. Keep a bold WEIGHT but on the body sans face
@@ -947,8 +974,12 @@ async function renderCta(
   const boxH = boxPadY * 2 + boxBodyH;
 
   const gap = titleBlockH ? 40 : 0; // mt-10
-  const blockH = titleBlockH + gap + boxH;
-  let y = placementTopY('center', blockH);
+  // The editor's CTA title carries `mt-6`, and it is the first flex child so the
+  // margin is NOT collapsed away. Leaving it out of the measured block height
+  // left the whole centred block 12px (half the margin) high in export.
+  const titleMt = titleBlockH ? 24 : 0; // mt-6
+  const blockH = titleMt + titleBlockH + gap + boxH;
+  let y = placementTopY('center', blockH) + titleMt;
 
   let baseline = firstBaseline(ctx, titleSizePx, titleLineH, y, fonts.sansBold);
   for (let i = 0; i < titleLines.length; i++) {

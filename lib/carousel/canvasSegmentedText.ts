@@ -159,7 +159,7 @@ export function layoutWords(
  */
 export function drawSegmentedLine(
   ctx: SKRSContext2D,
-  line: WordToken[],
+  rawLine: WordToken[],
   x: number,
   y: number,
   fontSize: number,
@@ -173,6 +173,18 @@ export function drawSegmentedLine(
   fonts: CarouselFonts,
   plainBaseIsBold = false,
 ) {
+  // CSS drops the whitespace a line was broken on, so a wrapped line is centered
+  // on its VISIBLE width. `segmentsToWords` glues trailing whitespace onto the
+  // preceding token, so measuring the raw line here included that space and
+  // pushed every centered wrapped line left by half a space — ~14px at a 96px
+  // cover title (proof: `diff-1-cover.png`, line 1 offset, line 2 exact because
+  // the last line has no trailing space). Trim it before measuring or drawing.
+  const last = rawLine[rawLine.length - 1];
+  const line: WordToken[] =
+    last && /\s$/.test(last.text)
+      ? [...rawLine.slice(0, -1), { ...last, text: last.text.replace(/\s+$/, '') }]
+      : rawLine;
+
   const measure = (txt: string, bold: boolean, italic: boolean) => {
     ctx.font = bold
       ? `${italic ? 'italic ' : ''}bold ${fontSize}px ${fonts.sansBold}`
