@@ -44,9 +44,12 @@ const leftTabs: DestinationTab[] = [
 
 const rightTabs: DestinationTab[] = [
   {
-    label: 'Аналіз',
-    href: '/competitor-analysis',
-    matchPrefixes: ['/competitor-analysis'],
+    // Prompt 5: the tab is YOUR performance, not competitors'. Competitor
+    // analysis moves inside it as a secondary action — your own numbers matter
+    // more than theirs, and they had no nav home at all.
+    label: 'Інсайти',
+    href: '/insights',
+    matchPrefixes: ['/insights', '/competitor-analysis'],
     Icon: BarChart3,
   },
   { label: 'Профіль', href: '/profile', matchPrefixes: ['/profile'], Icon: User },

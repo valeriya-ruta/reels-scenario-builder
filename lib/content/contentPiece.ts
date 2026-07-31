@@ -1,4 +1,5 @@
 import type { ContentStatus, ContentType } from '@/lib/content/statusSystem';
+import type { InsightsPayload } from '@/lib/insights/postedLink';
 
 /**
  * Client-safe content-piece shape + routing (no server-only deps), so client
@@ -52,6 +53,12 @@ export type ContentPiece = {
   setSize?: number | null;
   /** Real designed-output preview for the card (see ContentPreview). */
   preview?: ContentPreview;
+  /** Where this went live, once logged (migration 027). Null = not posted. */
+  postedUrl?: string | null;
+  postedAt?: string | null;
+  /** Pulled metrics, when a pull has run. */
+  insights?: InsightsPayload | null;
+  insightsFetchedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 };

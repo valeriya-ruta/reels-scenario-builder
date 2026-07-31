@@ -38,9 +38,10 @@ const navItems: NavItem[] = [
   // empty it, not a view you stumble into.
   { label: 'Розбір', href: '/staging', matchPrefixes: ['/staging'], active: true },
   {
-    label: 'Аналіз профілю',
-    href: '/competitor-analysis',
-    matchPrefixes: ['/competitor-analysis'],
+    // Prompt 5 — competitor analysis lives inside Інсайти now.
+    label: 'Інсайти',
+    href: '/insights',
+    matchPrefixes: ['/insights', '/competitor-analysis'],
     active: true,
   },
   { label: 'Статистика', href: null, matchPrefixes: [], active: false },
