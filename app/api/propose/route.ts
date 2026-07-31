@@ -3,7 +3,7 @@ import { requireAuth } from '@/lib/auth';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import { buildSignals, type SignalInputs } from '@/lib/propose/signals';
 import { fallbackProposals } from '@/lib/propose/fallback';
-import { proposeAngles, tagWithSourceKinds } from '@/lib/propose/proposeAngles';
+import { proposeAngles, tagWithSourceKinds, dropSeen } from '@/lib/propose/proposeAngles';
 import { PROPOSAL_COUNT, type ProposeResponse } from '@/lib/propose/types';
 import type { ContentType } from '@/lib/contentTypes';
 
@@ -27,11 +27,19 @@ const VIEW_TYPE_TO_CONTENT_TYPE: Record<string, ContentType | null> = {
   idea: null,
 };
 
-export async function GET() {
+export async function GET(req: Request) {
   const user = await requireAuth();
   if (!user) {
     return NextResponse.json({ error: 'Потрібен вхід.' }, { status: 401 });
   }
+
+  // Titles the user has already been shown this session. «Ще раз» must not
+  // return the same angle twice (§2).
+  const exclude = (new URL(req.url).searchParams.get('exclude') ?? '')
+    .split('|')
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .slice(0, 12);
 
   const supabase = await createServerSupabaseClient();
   const [piecesRes, ideasRes, linksRes] = await Promise.all([
@@ -87,12 +95,16 @@ export async function GET() {
   };
 
   const signals = buildSignals(inputs, new Date().toISOString());
-  const fallback = fallbackProposals(signals, PROPOSAL_COUNT);
+  // Rotate the deterministic set too, so a repeated «Ще раз» with a dead model
+  // leg still moves rather than serving the same three cold-start cards.
+  const fallback = fallbackProposals(signals, PROPOSAL_COUNT, exclude);
 
   let proposals = fallback;
   let source: ProposeResponse['source'] = 'fallback';
   try {
-    const ai = tagWithSourceKinds(await proposeAngles(signals), signals);
+    // dropSeen is the belt to the prompt's braces: the instruction not to repeat
+    // is advisory, this is enforced.
+    const ai = dropSeen(tagWithSourceKinds(await proposeAngles(signals, exclude), signals), exclude);
     if (ai.length > 0) {
       // Top up from the fallback so the user always sees the full set even when
       // the model returns fewer than asked.

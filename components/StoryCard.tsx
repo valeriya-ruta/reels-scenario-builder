@@ -1,20 +1,22 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { Check, Copy, Sliders, X } from 'lucide-react';
+import { Check, Copy, X } from 'lucide-react';
 import type { StorytellingStory, VisualType, EngagementType } from '@/lib/domain';
 import { VISUAL_OPTIONS, ENGAGEMENT_OPTIONS } from '@/lib/domain';
 import { updateStorytellingStory } from '@/app/storytelling-actions';
+import { useTapGuard } from '@/lib/ui/tapGuard';
 
 /**
  * One story card — a READING surface first, a form second.
  *
  * A story is narrative text the user will read aloud to camera, so the text is
- * the hero: editorial size, generous leading, nothing competing with it. The
- * visual/interactive choices are production machinery; they are FELT as a quiet
- * meta line showing what is set, and only unfold into the full option chips when
- * the user asks. Previously both option groups were permanently open under every
- * card, so eight chips of machinery outweighed the writing on every screen.
+ * the hero: editorial size, generous leading, nothing competing with it.
+ *
+ * Візуал + Інтерактив sit directly under it as a PRIMARY surface. Round 1 hid
+ * them behind a «Змінити» toggle on the theory that they were machinery; they
+ * are not — how a story looks and how it invites a reply is half the craft, and
+ * hiding them made every card a decision you had to reopen (§3).
  */
 
 function formatStoryAsText(story: StorytellingStory, index: number): string {
@@ -34,7 +36,6 @@ interface StoryCardProps {
 export default function StoryCard({ story, index, onUpdate, onDelete }: StoryCardProps) {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [copied, setCopied] = useState(false);
-  const [showOptions, setShowOptions] = useState(false);
 
   const copyStoryText = async () => {
     try {
@@ -65,8 +66,6 @@ export default function StoryCard({ story, index, onUpdate, onDelete }: StoryCar
     onUpdate(story.id, { engagement: value });
     updateStorytellingStory(story.id, { engagement: value });
   };
-
-  const setChips = [story.visual, story.engagement].filter(Boolean) as string[];
 
   return (
     <div className="app-card flex flex-col p-5 transition-shadow hover:shadow-[var(--elev-2)]">
@@ -108,71 +107,66 @@ export default function StoryCard({ story, index, onUpdate, onDelete }: StoryCar
         rows={4}
       />
 
-      {/* Machinery, felt not shown: what's set, and a way in. */}
-      <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-[color:var(--border)] pt-3">
-        {setChips.map((chip) => (
-          <span
-            key={chip}
-            className="rounded-full bg-[color:var(--surface1)] px-2.5 py-1 text-[11.5px] font-medium text-[color:var(--text-secondary)]"
-          >
-            {chip}
-          </span>
-        ))}
-        <button
-          type="button"
-          onClick={() => setShowOptions((v) => !v)}
-          data-testid="story-options-toggle"
-          aria-expanded={showOptions}
-          className="ml-auto inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11.5px] font-medium text-[color:var(--text-muted)] transition-colors hover:bg-[color:var(--surface1)] hover:text-[color:var(--foreground)]"
-        >
-          <Sliders className="h-3.5 w-3.5" strokeWidth={2} />
-          {setChips.length === 0 ? 'Візуал та інтерактив' : 'Змінити'}
-        </button>
-      </div>
-
-      {showOptions ? (
-        <div className="mt-3 flex flex-col gap-3" data-testid="story-options">
-          <div className="flex flex-col gap-1.5">
-            <span className="app-section-label">Візуал</span>
-            <div className="flex flex-wrap gap-1.5">
-              {VISUAL_OPTIONS.map((opt) => (
-                <button
-                  key={opt}
-                  type="button"
-                  onClick={() => toggleVisual(opt)}
-                  className={`cursor-pointer rounded-full px-2.5 py-1 text-[12px] font-medium transition-colors ${
-                    story.visual === opt
-                      ? 'bg-[color:var(--accent-soft)] text-[color:var(--accent)]'
-                      : 'bg-[color:var(--surface1)] text-zinc-500 hover:bg-[color:var(--surface2)]'
-                  }`}
-                >
-                  {opt}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <span className="app-section-label">Інтерактив</span>
-            <div className="flex flex-wrap gap-1.5">
-              {ENGAGEMENT_OPTIONS.map((opt) => (
-                <button
-                  key={opt}
-                  type="button"
-                  onClick={() => toggleEngagement(opt)}
-                  className={`cursor-pointer rounded-full px-2.5 py-1 text-[12px] font-medium transition-colors ${
-                    story.engagement === opt
-                      ? 'bg-[color:var(--accent-soft)] text-[color:var(--accent)]'
-                      : 'bg-[color:var(--surface1)] text-zinc-500 hover:bg-[color:var(--surface2)]'
-                  }`}
-                >
-                  {opt}
-                </button>
-              ))}
-            </div>
+      {/* Візуал + Інтерактив are a PRIMARY surface, not machinery hidden behind
+          a toggle (§3). Round 1 collapsed them and that was wrong: how a story
+          looks and how it invites a reply are half the craft, and burying them
+          behind «Змінити» made every card a decision the user had to reopen. */}
+      <div className="mt-3 flex flex-col gap-3 border-t border-[color:var(--border)] pt-3">
+        <div className="flex flex-col gap-1.5">
+          <span className="app-section-label">Візуал</span>
+          <div className="flex flex-wrap gap-1.5">
+            {VISUAL_OPTIONS.map((opt) => (
+              <OptionChip
+                key={opt}
+                label={opt}
+                selected={story.visual === opt}
+                onToggle={() => toggleVisual(opt)}
+              />
+            ))}
           </div>
         </div>
-      ) : null}
+
+        <div className="flex flex-col gap-1.5">
+          <span className="app-section-label">Інтерактив</span>
+          <div className="flex flex-wrap gap-1.5">
+            {ENGAGEMENT_OPTIONS.map((opt) => (
+              <OptionChip
+                key={opt}
+                label={opt}
+                selected={story.engagement === opt}
+                onToggle={() => toggleEngagement(opt)}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
+  );
+}
+
+/** One visual/interaction choice. Tap-guarded: these live in a scrolling list. */
+function OptionChip({
+  label,
+  selected,
+  onToggle,
+}: {
+  label: string;
+  selected: boolean;
+  onToggle: () => void;
+}) {
+  const tap = useTapGuard(onToggle);
+  return (
+    <button
+      type="button"
+      {...tap}
+      aria-pressed={selected}
+      className={`cursor-pointer rounded-full px-3 py-1.5 text-[12.5px] font-medium transition-colors ${
+        selected
+          ? 'bg-[color:var(--accent)] text-white'
+          : 'bg-[color:var(--surface1)] text-zinc-600 hover:bg-[color:var(--surface2)]'
+      }`}
+    >
+      {label}
+    </button>
   );
 }

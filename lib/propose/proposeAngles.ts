@@ -4,7 +4,7 @@ import type { ContentType } from '@/lib/contentTypes';
 import { CONTENT_TYPE_ORDER } from '@/lib/contentTypes';
 import type { Proposal, ProposalSignal } from '@/lib/propose/types';
 import { PROPOSAL_COUNT } from '@/lib/propose/types';
-import { daysUk } from '@/lib/propose/fallback';
+import { daysUk, normalizeTitle } from '@/lib/propose/fallback';
 
 /**
  * AI leg of the proposal system: signals → named angles with one-line rationale.
@@ -48,11 +48,23 @@ function describeSignal(signal: ProposalSignal): string {
   }
 }
 
-export function buildUserContent(signals: ProposalSignal[]): string {
-  if (signals.length === 0) {
-    return 'Сигналів немає — акаунт новий. Запропонуй три сильні стартові кути для експертки, яка тільки починає вести контент.';
-  }
-  return ['Сигнали:', ...signals.map((s) => `- ${describeSignal(s)}`)].join('\n');
+export function buildUserContent(
+  signals: ProposalSignal[],
+  exclude: ReadonlyArray<string> = [],
+): string {
+  const base =
+    signals.length === 0
+      ? 'Сигналів немає — акаунт новий. Запропонуй три сильні стартові кути для експертки, яка тільки починає вести контент.'
+      : ['Сигнали:', ...signals.map((s) => `- ${describeSignal(s)}`)].join('\n');
+  if (exclude.length === 0) return base;
+  // «Ще раз» — she has seen these and asked for something else. Say so
+  // explicitly, or the model happily returns the same angle reworded.
+  return [
+    base,
+    '',
+    'Ці кути вона вже бачила. Запропонуй ІНШІ — не переформульовуй ці, а зайди з іншого боку:',
+    ...exclude.map((t) => `- ${t}`),
+  ].join('\n');
 }
 
 type RawProposal = {
@@ -97,7 +109,10 @@ export function normalizeProposals(raw: unknown): Proposal[] {
   return out.slice(0, PROPOSAL_COUNT);
 }
 
-export async function proposeAngles(signals: ProposalSignal[]): Promise<Proposal[]> {
+export async function proposeAngles(
+  signals: ProposalSignal[],
+  exclude: ReadonlyArray<string> = [],
+): Promise<Proposal[]> {
   const apiKey = requireServerEnv('GROQ_API_KEY');
 
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -109,7 +124,7 @@ export async function proposeAngles(signals: ProposalSignal[]): Promise<Proposal
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: buildUserContent(signals) },
+        { role: 'user', content: buildUserContent(signals, exclude) },
       ],
     }),
   });
@@ -134,4 +149,11 @@ export async function proposeAngles(signals: ProposalSignal[]): Promise<Proposal
 /** Carry the evidence kind from the signals onto AI-worded proposals. */
 export function tagWithSourceKinds(proposals: Proposal[], signals: ProposalSignal[]): Proposal[] {
   return proposals.map((p, i) => ({ ...p, source: signals[i]?.kind ?? 'cold-start' }));
+}
+
+/** Drop anything the user has already been shown, whatever the model returned. */
+export function dropSeen(proposals: Proposal[], exclude: ReadonlyArray<string>): Proposal[] {
+  if (exclude.length === 0) return proposals;
+  const seen = new Set(exclude.map(normalizeTitle));
+  return proposals.filter((p) => !seen.has(normalizeTitle(p.title)));
 }

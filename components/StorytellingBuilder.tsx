@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
+import { Check, Copy, Plus } from 'lucide-react';
 import type {
   StorytellingProject,
   StorytellingColumn,
@@ -8,10 +9,6 @@ import type {
 } from '@/lib/domain';
 import {
   updateStorytellingProjectName,
-  createStorytellingColumn,
-  updateStorytellingColumnName,
-  deleteStorytellingColumn,
-  reorderStorytellingColumns,
   createStorytellingStory,
   deleteStorytellingStory,
   reorderStorytellingStories,
@@ -19,15 +16,28 @@ import {
 import StoryCard from './StoryCard';
 import EditorTopBar from '@/components/ui/EditorTopBar';
 import SetNav, { type SetSibling } from '@/components/storytelling/SetNav';
-import {
-  genClientId,
-  nextOrderIndex,
-  makeOptimisticColumn,
-  makeOptimisticStory,
-} from '@/lib/storytelling/optimistic';
+import { genClientId, nextOrderIndex, makeOptimisticStory } from '@/lib/storytelling/optimistic';
+import { flattenStories, primaryColumnId } from '@/lib/storytelling/single';
 import ScheduleChip from '@/components/content/ScheduleChip';
 import StatusPill from '@/components/content/StatusPill';
 import SourceDumpChip from '@/components/braindump/SourceDumpChip';
+
+/**
+ * ONE storytelling = ONE dated, self-contained piece (§3, de-projectify).
+ *
+ * The board used to render N side-by-side columns with an «Додати сторітел»
+ * button — several storytellings nested inside one object, which was never the
+ * agreed model and breaks dating (a single `scheduled_date` cannot stand for
+ * several days of posting). A multi-day generation is already N SIBLING
+ * projects, one per day (see `createStorytellingProjectFromRant` + migration
+ * 025), so the nesting was pure legacy.
+ *
+ * This is now a single vertical run of story cards. `storytelling_columns` stays
+ * in the schema — no migration — but the app treats it as an implementation
+ * detail: legacy rows spread across several columns are FLATTENED into one list
+ * in column order so nothing is lost or hidden, and new cards always append to
+ * the first column.
+ */
 
 interface Props {
   project: StorytellingProject;
@@ -37,69 +47,40 @@ interface Props {
   siblings?: SetSibling[];
 }
 
-type ColumnWithStories = StorytellingColumn & { stories: StorytellingStory[] };
-
-function formatColumnStoriesAsText(col: ColumnWithStories): string {
-  const cardBlocks = col.stories.map((s, i) => {
-    const body = (s.text || '').trim() || '—';
-    const visual = s.visual ?? '—';
-    const engagement = s.engagement ?? '—';
-    return [
+function formatStoriesAsText(name: string, stories: StorytellingStory[]): string {
+  const blocks = stories.map((s, i) =>
+    [
       `Сторіс ${i + 1}`,
-      body,
-      `Візуал: ${visual}`,
-      `Інтерактив: ${engagement}`,
-    ].join('\n');
-  });
-  return `${col.name}\n\n${cardBlocks.join('\n\n')}`;
-}
-
-function buildColumnsWithStories(
-  columns: StorytellingColumn[],
-  stories: StorytellingStory[],
-): ColumnWithStories[] {
-  const storyMap = new Map<string, StorytellingStory[]>();
-  for (const s of stories) {
-    const arr = storyMap.get(s.column_id) || [];
-    arr.push(s);
-    storyMap.set(s.column_id, arr);
-  }
-  return columns
-    .sort((a, b) => a.order_index - b.order_index)
-    .map((col) => ({
-      ...col,
-      stories: (storyMap.get(col.id) || []).sort((a, b) => a.order_index - b.order_index),
-    }));
-}
-
-export default function StorytellingBuilder({ project: initialProject, initialColumns, initialStories, siblings = [] }: Props) {
-  const [project, setProject] = useState(initialProject);
-  const [columns, setColumns] = useState<ColumnWithStories[]>(() =>
-    buildColumnsWithStories(initialColumns, initialStories),
+      (s.text || '').trim() || '—',
+      `Візуал: ${s.visual ?? '—'}`,
+      `Інтерактив: ${s.engagement ?? '—'}`,
+    ].join('\n'),
   );
-  const [editingColId, setEditingColId] = useState<string | null>(null);
-  const [colNameValue, setColNameValue] = useState('');
-  const [copiedColumnId, setCopiedColumnId] = useState<string | null>(null);
+  return `${name}\n\n${blocks.join('\n\n')}`;
+}
+
+export default function StorytellingBuilder({
+  project: initialProject,
+  initialColumns,
+  initialStories,
+  siblings = [],
+}: Props) {
+  const [project, setProject] = useState(initialProject);
+  const [stories, setStories] = useState<StorytellingStory[]>(() =>
+    flattenStories(initialColumns, initialStories),
+  );
+  const [copied, setCopied] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+
+  // Where new cards go. Legacy projects may carry several columns; the first in
+  // order is the canonical one and the rest are only read from.
+  const columnId = useMemo(() => primaryColumnId(initialColumns), [initialColumns]);
 
   const showError = useCallback((message: string) => {
     setToast(message);
     window.setTimeout(() => setToast((t) => (t === message ? null : t)), 3500);
   }, []);
 
-  const copyColumnText = async (col: ColumnWithStories) => {
-    try {
-      await navigator.clipboard.writeText(formatColumnStoriesAsText(col));
-      setCopiedColumnId(col.id);
-      window.setTimeout(() => setCopiedColumnId((id) => (id === col.id ? null : id)), 2000);
-    } catch {
-      // Clipboard may be denied (e.g. non-secure context); ignore
-    }
-  };
-
-  // ── Project name ──
-
-  /** Inline rename from the shared top bar (§1). */
   const handleRename = useCallback(
     async (next: string) => {
       setProject((p) => ({ ...p, name: next }));
@@ -108,136 +89,69 @@ export default function StorytellingBuilder({ project: initialProject, initialCo
     [project.id],
   );
 
-  // ── Column operations ──
+  const copyAll = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(formatStoriesAsText(project.name, stories));
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard may be denied (non-secure context) */
+    }
+  }, [project.name, stories]);
 
-  // Optimistic: render the new column (with its first empty story) instantly
-  // from local state, then persist in the background under client-generated ids.
-  // No await-before-render (that was the 1–3s lag) and no full-tree refetch.
-  const handleAddColumn = () => {
-    const columnId = genClientId();
+  // Optimistic: render the card instantly under a client-generated id, persist
+  // in the background. StoryCard autosaves to that same id (a real row), so
+  // edits made before the insert resolves are never lost.
+  const handleAddStory = useCallback(() => {
+    if (!columnId) {
+      showError('Не вдалося додати сторіс — онови сторінку.');
+      return;
+    }
     const storyId = genClientId();
-    const orderIndex = nextOrderIndex(columns);
-    const name = `Storytelling ${columns.length + 1}`;
-    const optimisticCol: ColumnWithStories = {
-      ...makeOptimisticColumn(project.id, name, orderIndex, columnId),
-      stories: [makeOptimisticStory(columnId, 0, storyId)],
-    };
-    setColumns((prev) => [...prev, optimisticCol]);
+    const orderIndex = nextOrderIndex(stories);
+    setStories((prev) => [...prev, makeOptimisticStory(columnId, orderIndex, storyId)]);
 
-    void createStorytellingColumn(project.id, name, orderIndex, { columnId, storyId })
-      .then((result) => {
-        if (!result) throw new Error('insert failed');
-      })
-      .catch(() => {
-        setColumns((prev) => prev.filter((c) => c.id !== columnId));
-        showError('Не вдалося створити сторітел. Спробуй ще раз.');
-      });
-  };
-
-  const handleDeleteColumn = async (colId: string) => {
-    if (columns.length <= 1) return;
-    setColumns((prev) => prev.filter((c) => c.id !== colId));
-    await deleteStorytellingColumn(colId);
-  };
-
-  const handleColumnNameSave = async (colId: string) => {
-    setEditingColId(null);
-    const trimmed = colNameValue.trim();
-    if (!trimmed) return;
-    setColumns((prev) =>
-      prev.map((c) => (c.id === colId ? { ...c, name: trimmed } : c)),
-    );
-    await updateStorytellingColumnName(colId, trimmed);
-  };
-
-  const moveColumn = async (colId: string, direction: 'left' | 'right') => {
-    const idx = columns.findIndex((c) => c.id === colId);
-    const targetIdx = direction === 'left' ? idx - 1 : idx + 1;
-    if (targetIdx < 0 || targetIdx >= columns.length) return;
-
-    const newCols = [...columns];
-    [newCols[idx], newCols[targetIdx]] = [newCols[targetIdx], newCols[idx]];
-    setColumns(newCols);
-    await reorderStorytellingColumns(
-      project.id,
-      newCols.map((c) => c.id),
-    );
-  };
-
-  // ── Story operations ──
-
-  // Optimistic: append the new story card instantly under a client-generated id,
-  // persist in the background. StoryCard autosaves to this same id (a real row),
-  // so edits made before the insert resolves are never lost.
-  const handleAddStory = (colId: string) => {
-    const col = columns.find((c) => c.id === colId);
-    if (!col) return;
-    const storyId = genClientId();
-    const orderIndex = nextOrderIndex(col.stories);
-    const optimisticStory = makeOptimisticStory(colId, orderIndex, storyId);
-    setColumns((prev) =>
-      prev.map((c) => (c.id === colId ? { ...c, stories: [...c.stories, optimisticStory] } : c)),
-    );
-
-    void createStorytellingStory(colId, orderIndex, storyId)
+    void createStorytellingStory(columnId, orderIndex, storyId)
       .then((story) => {
         if (!story) throw new Error('insert failed');
       })
       .catch(() => {
-        setColumns((prev) =>
-          prev.map((c) =>
-            c.id === colId ? { ...c, stories: c.stories.filter((s) => s.id !== storyId) } : c,
-          ),
-        );
+        setStories((prev) => prev.filter((s) => s.id !== storyId));
         showError('Не вдалося додати сторіс. Спробуй ще раз.');
       });
-  };
+  }, [columnId, stories, showError]);
 
-  const handleDeleteStory = async (colId: string, storyId: string) => {
-    setColumns((prev) =>
-      prev.map((c) => {
-        if (c.id !== colId) return c;
-        const filtered = c.stories.filter((s) => s.id !== storyId);
-        return { ...c, stories: filtered };
-      }),
-    );
-    await deleteStorytellingStory(storyId);
-  };
+  const handleDeleteStory = useCallback((storyId: string) => {
+    setStories((prev) => prev.filter((s) => s.id !== storyId));
+    void deleteStorytellingStory(storyId);
+  }, []);
 
-  const handleUpdateStory = (colId: string, storyId: string, updates: Partial<StorytellingStory>) => {
-    setColumns((prev) =>
-      prev.map((c) => {
-        if (c.id !== colId) return c;
-        return {
-          ...c,
-          stories: c.stories.map((s) =>
-            s.id === storyId ? { ...s, ...updates } : s,
-          ),
-        };
-      }),
-    );
-  };
+  const handleUpdateStory = useCallback((storyId: string, updates: Partial<StorytellingStory>) => {
+    setStories((prev) => prev.map((s) => (s.id === storyId ? { ...s, ...updates } : s)));
+  }, []);
 
-  const moveStory = async (colId: string, fromIndex: number, toIndex: number) => {
-    const col = columns.find((c) => c.id === colId);
-    if (!col || toIndex < 0 || toIndex >= col.stories.length) return;
-
-    const newStories = [...col.stories];
-    const [moved] = newStories.splice(fromIndex, 1);
-    newStories.splice(toIndex, 0, moved);
-
-    setColumns((prev) =>
-      prev.map((c) => (c.id === colId ? { ...c, stories: newStories } : c)),
-    );
-    await reorderStorytellingStories(
-      colId,
-      newStories.map((s) => s.id),
-    );
-  };
+  const moveStory = useCallback(
+    (fromIndex: number, toIndex: number) => {
+      if (toIndex < 0 || toIndex >= stories.length) return;
+      const next = [...stories];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      setStories(next);
+      // Flattened legacy cards keep their own column_id, so persist the new
+      // order per owning column rather than assuming a single one.
+      const byColumn = new Map<string, string[]>();
+      for (const s of next) {
+        const arr = byColumn.get(s.column_id) ?? [];
+        arr.push(s.id);
+        byColumn.set(s.column_id, arr);
+      }
+      for (const [col, ids] of byColumn) void reorderStorytellingStories(col, ids);
+    },
+    [stories],
+  );
 
   return (
     <div className="app-canvas min-h-screen">
-      {/* Optimistic-create failure toast (rollback already happened in state). */}
       {toast && (
         <div
           role="status"
@@ -248,8 +162,7 @@ export default function StorytellingBuilder({ project: initialProject, initialCo
         </div>
       )}
 
-      {/* Header — the shared bar (§1): chevron, inline-editable title, meta. */}
-      <div className="mx-auto max-w-[calc(100vw-2rem)] px-4 pb-2 pt-5">
+      <div className="app-page pb-28">
         <EditorTopBar
           backHref="/storytellings"
           title={project.name}
@@ -271,173 +184,82 @@ export default function StorytellingBuilder({ project: initialProject, initialCo
             </>
           }
         />
-        <SetNav siblings={siblings} currentId={project.id} />
-      </div>
 
-      {/* Columns */}
-      <div className="flex gap-6 overflow-x-auto px-4 pb-12" style={{ scrollbarWidth: 'thin', scrollbarColor: '#d4d4d8 transparent' }}>
-        {columns.map((col, colIndex) => (
-          <div key={col.id} data-testid="story-column" className="w-80 shrink-0 md:w-[min(380px,calc(33.333vw-32px))]">
-            {/* Column header */}
-            <div className="mb-4 px-1">
-              <div className="group flex items-center justify-between gap-2">
-                {editingColId === col.id ? (
-                  <div className="flex flex-1 items-center gap-2">
-                    <input
-                      autoFocus
-                      value={colNameValue}
-                      onChange={(e) => setColNameValue(e.target.value)}
-                      onBlur={() => handleColumnNameSave(col.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleColumnNameSave(col.id);
-                        if (e.key === 'Escape') setEditingColId(null);
-                      }}
-                      className="flex-1 border-b-2 border-zinc-300 bg-transparent px-1 py-0.5 text-sm font-semibold text-zinc-900 focus:border-zinc-900 focus:outline-none"
-                    />
-                  </div>
-                ) : (
-                  <div className="flex flex-1 flex-col gap-1">
-                    {columns.length > 1 && (
-                      <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                        <button
-                          type="button"
-                          onClick={() => moveColumn(col.id, 'left')}
-                          disabled={colIndex === 0}
-                          className="cursor-pointer p-0.5 text-zinc-400 transition-colors hover:text-zinc-600 disabled:cursor-not-allowed disabled:opacity-30"
-                        >
-                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></svg>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => moveColumn(col.id, 'right')}
-                          disabled={colIndex === columns.length - 1}
-                          className="cursor-pointer p-0.5 text-zinc-400 transition-colors hover:text-zinc-600 disabled:cursor-not-allowed disabled:opacity-30"
-                        >
-                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></svg>
-                        </button>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-2">
-                      <span className="inline-flex h-[22px] shrink-0 items-center justify-center rounded-[7px] bg-[color:var(--accent-soft)] px-2 text-[11px] font-bold tabular-nums text-[color:var(--accent)]">
-                        {colIndex + 1}
-                      </span>
-                      <h2 className="truncate text-[15px] font-bold tracking-tight text-[color:var(--foreground)]">{col.name}</h2>
-                      <button
-                        type="button"
-                        onClick={() => { setEditingColId(col.id); setColNameValue(col.name); }}
-                        className="cursor-pointer text-zinc-400 opacity-0 transition-opacity group-hover:opacity-100"
-                        title="Редагувати назву"
-                      >
-                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                )}
-                <div className="flex shrink-0 items-center gap-0.5">
+        <SetNav siblings={siblings} currentId={project.id} />
+
+        <p className="mb-4 mt-1 px-1 text-[12.5px] font-medium text-[color:var(--text-muted)]">
+          {stories.length} сторіс · одна історія на день
+        </p>
+
+        {/* One vertical run of story cards — no columns, no nesting. */}
+        <div className="flex flex-col gap-4" data-testid="story-list">
+          {stories.map((story, index) => (
+            <div key={story.id} className="group/wrapper relative">
+              <div className="absolute -left-4 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-1 opacity-0 transition-opacity group-hover/wrapper:opacity-100">
+                {index > 0 && (
                   <button
                     type="button"
-                    onClick={() => copyColumnText(col)}
-                    className={`cursor-pointer rounded-md p-1.5 transition-colors ${
-                      copiedColumnId === col.id
-                        ? 'text-emerald-600'
-                        : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800'
-                    }`}
-                    title={
-                      copiedColumnId === col.id
-                        ? 'Скопійовано'
-                        : 'Копіювати текст усіх сторіс (картка за карточкою)'
-                    }
+                    aria-label="Вище"
+                    onClick={() => moveStory(index, index - 1)}
+                    className="cursor-pointer rounded-full border border-zinc-200 bg-white p-1 shadow-sm transition-colors hover:bg-zinc-50"
                   >
-                    {copiedColumnId === col.id ? (
-                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                    ) : (
-                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                      </svg>
-                    )}
+                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <polyline points="18 15 12 9 6 15" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
                   </button>
-                  {columns.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteColumn(col.id)}
-                      className="cursor-pointer rounded-md p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-red-500"
-                      title="Видалити колонку"
-                    >
-                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
-                  )}
-                </div>
+                )}
+                {index < stories.length - 1 && (
+                  <button
+                    type="button"
+                    aria-label="Нижче"
+                    onClick={() => moveStory(index, index + 1)}
+                    className="cursor-pointer rounded-full border border-zinc-200 bg-white p-1 shadow-sm transition-colors hover:bg-zinc-50"
+                  >
+                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <polyline points="6 9 12 15 18 9" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                )}
               </div>
-              <p className="mt-1 text-[12px] font-medium text-[color:var(--text-muted)]">{col.stories.length} сторіс</p>
+              <StoryCard
+                story={story}
+                index={index}
+                onUpdate={(storyId, updates) => handleUpdateStory(storyId, updates)}
+                onDelete={handleDeleteStory}
+              />
             </div>
+          ))}
+        </div>
+      </div>
 
-            {/* Stories */}
-            <div className="flex flex-col gap-4">
-              {col.stories.map((story, storyIndex) => (
-                <div key={story.id} className="group/wrapper relative">
-                  <div className="absolute -left-5 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-1 opacity-0 transition-opacity group-hover/wrapper:opacity-100">
-                    {storyIndex > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => moveStory(col.id, storyIndex, storyIndex - 1)}
-                        className="cursor-pointer rounded-full border border-zinc-200 bg-white p-1 shadow-sm transition-colors hover:bg-zinc-50"
-                      >
-                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><polyline points="18 15 12 9 6 15" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></svg>
-                      </button>
-                    )}
-                    {storyIndex < col.stories.length - 1 && (
-                      <button
-                        type="button"
-                        onClick={() => moveStory(col.id, storyIndex, storyIndex + 1)}
-                        className="cursor-pointer rounded-full border border-zinc-200 bg-white p-1 shadow-sm transition-colors hover:bg-zinc-50"
-                      >
-                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></svg>
-                      </button>
-                    )}
-                  </div>
-                  <StoryCard
-                    story={story}
-                    index={storyIndex}
-                    onUpdate={(storyId, updates) => handleUpdateStory(col.id, storyId, updates)}
-                    onDelete={(storyId) => handleDeleteStory(col.id, storyId)}
-                  />
-                </div>
-              ))}
-
-              <button
-                type="button"
-                onClick={() => handleAddStory(col.id)}
-                data-testid="add-story"
-                className="flex cursor-pointer flex-col items-center justify-center gap-3 rounded-[16px] border-2 border-dashed border-[color:var(--border)] bg-[color:var(--surface1)]/60 p-6 transition-colors hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface1)]"
-              >
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-zinc-400 shadow-sm">
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19" strokeWidth={2} strokeLinecap="round" /><line x1="5" y1="12" x2="19" y2="12" strokeWidth={2} strokeLinecap="round" /></svg>
-                </div>
-                <span className="text-sm font-medium text-zinc-500">Додати сторіс</span>
-              </button>
-            </div>
-          </div>
-        ))}
-
-        {/* Add column button */}
-        <div className="w-80 shrink-0 md:w-[min(380px,calc(33.333vw-32px))]">
-          <div className="px-1">
-            <button
-              type="button"
-              onClick={handleAddColumn}
-              data-testid="add-column"
-              className="app-pill w-full justify-center py-3"
-            >
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19" strokeWidth={2} strokeLinecap="round" /><line x1="5" y1="12" x2="19" y2="12" strokeWidth={2} strokeLinecap="round" /></svg>
-              <span>Додати сторітел</span>
-            </button>
-          </div>
+      {/* Repeated actions in the thumb zone (§1), not the top corners. */}
+      <div
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-[color:var(--border)] bg-[color:var(--background)]/95 px-4 pb-[calc(12px+env(safe-area-inset-bottom))] pt-3 backdrop-blur"
+        style={{ boxShadow: '0 -2px 20px rgba(0,0,0,0.06)' }}
+      >
+        <div className="mx-auto flex max-w-2xl items-center gap-2">
+          <button
+            type="button"
+            onClick={handleAddStory}
+            data-testid="add-story"
+            className="app-btn-primary flex-1"
+          >
+            <Plus className="h-4 w-4" strokeWidth={2.4} />
+            Додати сторіс
+          </button>
+          <button
+            type="button"
+            onClick={copyAll}
+            aria-label="Копіювати всі сторіс"
+            title={copied ? 'Скопійовано' : 'Копіювати всі сторіс'}
+            className="app-icon-btn"
+          >
+            {copied ? (
+              <Check className="h-4 w-4 text-emerald-600" strokeWidth={2.4} />
+            ) : (
+              <Copy className="h-4 w-4" strokeWidth={1.8} />
+            )}
+          </button>
         </div>
       </div>
     </div>

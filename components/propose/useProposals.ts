@@ -16,15 +16,33 @@ export function useProposals(enabled: boolean) {
   const [loading, setLoading] = useState(false);
   // Guards against a slow in-flight response overwriting a newer refresh.
   const requestId = useRef(0);
+  // Every title shown this session. «Ще раз» must return genuinely NEW angles —
+  // Round 1 sometimes repeated, because identical signals plus a fixed prompt
+  // give the model every reason to land on the same phrasing twice. Sending the
+  // seen set lets the server exclude them, and dropping any repeat that slips
+  // through means a repeat can never reach the screen.
+  const seen = useRef<Set<string>>(new Set());
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (fresh = false) => {
     const id = ++requestId.current;
     setLoading(true);
     try {
-      const res = await fetch('/api/propose', { cache: 'no-store' });
+      const params = new URLSearchParams();
+      if (fresh && seen.current.size > 0) {
+        params.set('exclude', [...seen.current].slice(-12).join('|'));
+      }
+      const query = params.toString();
+      const res = await fetch(`/api/propose${query ? `?${query}` : ''}`, { cache: 'no-store' });
       const data = (await res.json()) as { proposals?: Proposal[] };
       if (id !== requestId.current) return;
-      setProposals(data.proposals?.length ? data.proposals : fallbackProposals([]));
+
+      const incoming = data.proposals?.length ? data.proposals : fallbackProposals([]);
+      const unseen = fresh ? incoming.filter((p) => !seen.current.has(norm(p.title))) : incoming;
+      // If the model returned nothing new at all, show what came back rather
+      // than an empty deck — a stale angle still beats a blank box.
+      const next = unseen.length > 0 ? unseen : incoming;
+      for (const p of next) seen.current.add(norm(p.title));
+      setProposals(next);
     } catch {
       if (id !== requestId.current) return;
       setProposals(fallbackProposals([]));
@@ -38,5 +56,13 @@ export function useProposals(enabled: boolean) {
     void load();
   }, [enabled, load]);
 
-  return { proposals, loading, refresh: load };
+  /** «Ще раз» — always asks for angles the user has not already been shown. */
+  const refresh = useCallback(() => load(true), [load]);
+
+  return { proposals, loading, refresh };
+}
+
+/** Compare titles case- and whitespace-insensitively so near-repeats are caught. */
+function norm(title: string): string {
+  return title.toLowerCase().replace(/\s+/g, ' ').trim();
 }

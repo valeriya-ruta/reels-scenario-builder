@@ -571,34 +571,15 @@ export default function BraindumpOverlay({
 
         {/* Top bar: × close (+ saved confirmation in State B). Stays pinned at the
             top — only the content+controls below rise from the bottom. */}
-        <div className="relative z-10 flex shrink-0 items-center justify-between px-5 pt-6">
-          <div className="min-h-[20px]">
-            {phase === 'A' && (
-              <button
-                type="button"
-                onClick={backToProposals}
-                data-testid="braindump-back-to-proposals"
-                className="-ml-1.5 inline-flex items-center gap-1 rounded-full px-1.5 py-1 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-200/60 hover:text-zinc-800"
-              >
-                <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2.2} />
-                Інші напрямки
-              </button>
-            )}
-            {phase === 'B' && saveStatus === 'saved' && (
-              <span data-testid="braindump-saved" className="text-xs font-medium text-zinc-400">
-                ✓ Збережено в ідеї
-              </span>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={close}
-            aria-label="Закрити"
-            data-testid="braindump-close"
-            className="rounded-full p-1.5 text-zinc-500 transition-colors hover:bg-zinc-200/60 hover:text-zinc-800"
-          >
-            <X className="h-5 w-5" strokeWidth={2} />
-          </button>
+        {/* Top strip carries STATUS only. Exit and «інші напрямки» are repeated
+            controls, so they live in the bottom thumb zone (§2) — top corners on
+            a phone are the hardest place to reach one-handed. */}
+        <div className="relative z-10 flex h-7 shrink-0 items-center px-5 pt-6">
+          {phase === 'B' && saveStatus === 'saved' && (
+            <span data-testid="braindump-saved" className="text-xs font-medium text-zinc-400">
+              ✓ Збережено в ідеї
+            </span>
+          )}
         </div>
 
         {/* The rising block fills the space under the pinned top bar and splits
@@ -690,13 +671,38 @@ export default function BraindumpOverlay({
             </div>
           </div>
 
-          {/* Pinned controls footer — never scrolls away, never covered. */}
+          {/* Pinned controls footer — never scrolls away, never covered. Also
+              carries the exit and the back-to-proposals affordance, both of
+              which used to sit in the top corners (§2). */}
           <div className="shrink-0 pt-3">
             {error && (
               <p data-testid="braindump-error" className="mb-3 text-sm font-medium text-zinc-500">
                 {error}
               </p>
             )}
+
+            <div className="mb-3 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={close}
+                data-testid="braindump-close"
+                aria-label="Закрити"
+                className="app-icon-btn"
+              >
+                <X className="h-4 w-4" strokeWidth={2.2} />
+              </button>
+              {phase === 'A' && (
+                <button
+                  type="button"
+                  onClick={backToProposals}
+                  data-testid="braindump-back-to-proposals"
+                  className="app-pill py-2 text-[12.5px]"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2.2} />
+                  Інші напрямки
+                </button>
+              )}
+            </div>
 
             {/* State P controls: capture is deliberately SECONDARY here — a quiet
                 outlined row under the proposals, never the primary action. */}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { CalendarDays, ArrowRight } from 'lucide-react';
+import { CalendarDays, ArrowRight, Inbox } from 'lucide-react';
 import DateSheet from '@/components/content/DateSheet';
 import ContentTypeIcon from '@/components/ContentTypeIcon';
 import ProposalActions from '@/components/propose/ProposalActions';
@@ -87,6 +87,20 @@ export default function ResultReview({
 
         <p className="mt-1.5 text-[11.5px] text-[color:var(--text-muted)]">{preview.countLabel}</p>
 
+        {/* Routing by type (§2): a story is a DAY, so it lands dated. A reel or
+            carousel has no inherent day — it lands in Розбір, where it waits for
+            a real decision instead of pretending to be scheduled. Say so, rather
+            than leaving the user to infer it from an empty date chip. */}
+        {!date ? (
+          <p
+            data-testid="result-routing"
+            className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-[color:var(--surface1)] px-2.5 py-1 text-[11.5px] font-medium text-[color:var(--text-secondary)]"
+          >
+            <Inbox className="h-3.5 w-3.5" strokeWidth={2} />
+            Піде в Розбір
+          </p>
+        ) : null}
+
         <div className="mt-3 flex items-center gap-2">
           <button
             type="button"
@@ -95,7 +109,7 @@ export default function ResultReview({
             className="app-pill flex-1 justify-center py-2 text-[12.5px]"
           >
             <CalendarDays className="h-3.5 w-3.5" strokeWidth={2} />
-            {date ? dayHeaderLabel(date) : 'Поставити дату'}
+            {date ? dayHeaderLabel(date) : 'Одразу дату'}
           </button>
           <a
             href={meta.itemHref(preview.id)}

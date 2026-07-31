@@ -94,19 +94,35 @@ function proposalFromSignal(signal: ProposalSignal, index: number): Proposal {
 export function fallbackProposals(
   signals: ProposalSignal[],
   count: number = PROPOSAL_COUNT,
+  /** Titles already shown this session — «Ще раз» must move on (§2). */
+  exclude: ReadonlyArray<string> = [],
 ): Proposal[] {
+  const seen = new Set(exclude.map(normalizeTitle));
+  const fresh = (p: Proposal) => !seen.has(normalizeTitle(p.title));
   const out: Proposal[] = [];
   // At most one proposal per kind, so three signals of the same shape don't
   // produce three near-identical cards.
   const usedKinds = new Set<string>();
   signals.forEach((signal, i) => {
     if (out.length >= count || usedKinds.has(signal.kind)) return;
+    const candidate = proposalFromSignal(signal, i);
+    if (!fresh(candidate)) return;
     usedKinds.add(signal.kind);
-    out.push(proposalFromSignal(signal, i));
+    out.push(candidate);
   });
 
   for (let i = 0; out.length < count && i < COLD_START_PROPOSALS.length; i++) {
-    out.push({ id: `cold-${i}`, ...COLD_START_PROPOSALS[i] });
+    const candidate = { id: `cold-${i}`, ...COLD_START_PROPOSALS[i] };
+    if (fresh(candidate)) out.push(candidate);
+  }
+  // Exhausted every distinct angle: better to repeat than to show a blank deck.
+  for (let i = 0; out.length < count && i < COLD_START_PROPOSALS.length; i++) {
+    out.push({ id: `cold-repeat-${i}`, ...COLD_START_PROPOSALS[i] });
   }
   return out.slice(0, count);
+}
+
+/** Case/whitespace-insensitive title key, so near-repeats are caught too. */
+export function normalizeTitle(title: string): string {
+  return title.toLowerCase().replace(/\s+/g, ' ').trim();
 }
