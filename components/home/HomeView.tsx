@@ -3,10 +3,11 @@ import WelcomeModal from '@/components/WelcomeModal';
 import Greeting from './Greeting';
 import Agenda from './Agenda';
 import HomeRecents from './HomeRecents';
-import InsightsSkeleton from './InsightsSkeleton';
+import Insights from './Insights';
 import WorkshopLessons from './WorkshopLessons';
 import StagingPressureCard from '@/components/staging/StagingPressureCard';
 import type { ContentPiece } from '@/lib/content/contentPiece';
+import type { ProducerInsights } from '@/lib/insights/producerInsights';
 
 /**
  * Home (Головна). The app opens as an assistant, not a menu: greeting → the
@@ -24,6 +25,7 @@ export default function HomeView({
   recents,
   stagedCount,
   stagedOverdue,
+  insights,
 }: {
   userName?: string | null;
   /** Everything scheduled today or later, any type. */
@@ -33,6 +35,8 @@ export default function HomeView({
   /** Kept-but-undated work awaiting a decision (Розбір). */
   stagedCount: number;
   stagedOverdue: number;
+  /** Real output insights (§7) — ambient on the main page, not a nav tab. */
+  insights: ProducerInsights;
 }) {
   return (
     <div className="app-page space-y-7">
@@ -45,7 +49,7 @@ export default function HomeView({
       <StagingPressureCard count={stagedCount} overdue={stagedOverdue} />
       <Agenda pieces={upcoming} todayKey={todayKey} />
       <HomeRecents pieces={recents} />
-      <InsightsSkeleton />
+      <Insights insights={insights} />
       <WorkshopLessons />
     </div>
   );

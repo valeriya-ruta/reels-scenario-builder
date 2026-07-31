@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/auth';
 import { getAllContent } from '@/lib/content/contentList';
 import { dateKey } from '@/lib/content/calendar';
 import { stagedPieces, countNeedingDecision } from '@/lib/content/staging';
+import { buildProducerInsights } from '@/lib/insights/producerInsights';
 import HomeView from '@/components/home/HomeView';
 
 export const dynamic = 'force-dynamic';
@@ -42,6 +43,7 @@ export default async function DashboardPage() {
       recents={recents}
       stagedCount={staged.length}
       stagedOverdue={countNeedingDecision(staged, nowIso)}
+      insights={buildProducerInsights(all, todayKey)}
     />
   );
 }

@@ -1,12 +1,13 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, GripVertical } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import {
   DndContext,
   DragOverlay,
   TouchSensor,
-  PointerSensor,
+  MouseSensor,
   useDraggable,
   useDroppable,
   useSensor,
@@ -14,9 +15,10 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core';
-import ContentRows from '@/components/content/ContentRows';
-import { setContentScheduledDate } from '@/app/content-actions';
-import { STATUS_COLORS } from '@/lib/content/statusSystem';
+import ContentCard from '@/components/content/ContentCard';
+import { setContentScheduledDate, setContentStatus } from '@/app/content-actions';
+import { nextStatus, STATUS_COLORS } from '@/lib/content/statusSystem';
+import { contentHref } from '@/lib/content/contentPiece';
 import PlanCreateMenu from '@/components/plan/PlanCreateMenu';
 import StagingPressureCard from '@/components/staging/StagingPressureCard';
 import type { ContentPiece } from '@/lib/content/contentPiece';
@@ -51,25 +53,50 @@ function DroppableDay({ dayKey, children }: { dayKey: string; children: React.Re
   );
 }
 
-/** A scheduled piece in the day panel — press and hold to lift, then drop on a day. */
-function DraggablePiece({ piece }: { piece: ContentPiece }) {
+/**
+ * A scheduled piece in the day panel (§6).
+ *
+ * The whole CARD is the drag handle — long-press lifts it, a tap opens it. The
+ * old six-dot grip was a second, smaller target for something the card itself
+ * should do, and it forced a duplicate list underneath just to host the handles.
+ *
+ * Tap vs. lift is unambiguous by construction: TouchSensor only arms after a
+ * hold, so a scroll or a tap never starts a drag, and dnd-kit lets the click
+ * through when no drag began.
+ */
+function DraggableContentCard({
+  piece,
+  onOpen,
+  onAdvance,
+}: {
+  piece: ContentPiece;
+  onOpen: () => void;
+  onAdvance: () => void;
+}) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `piece:${piece.id}` });
   return (
     <div
       ref={setNodeRef}
       {...attributes}
       {...listeners}
-      className="flex cursor-grab items-center gap-2 rounded-[10px] px-2 py-2 active:cursor-grabbing"
-      style={{ opacity: isDragging ? 0.4 : 1, touchAction: 'none' }}
+      data-testid="cal-day-card"
+      data-dragging={isDragging ? 'true' : 'false'}
+      onClick={onOpen}
+      className="mb-2.5 cursor-grab rounded-[16px] border border-[color:var(--border)] bg-[color:var(--background)] p-3.5 active:cursor-grabbing"
+      style={{
+        // Lift: shrink under the thumb + a deeper shadow so it reads as held
+        // and OFF the page, rather than merely highlighted.
+        transform: isDragging ? 'scale(0.96)' : undefined,
+        boxShadow: isDragging ? '0 18px 36px rgba(16,17,33,0.24)' : 'var(--elev-1)',
+        opacity: isDragging ? 0.92 : 1,
+        transition: 'transform 160ms cubic-bezier(0.22,1,0.36,1), box-shadow 160ms ease',
+        touchAction: 'pan-y',
+        WebkitUserSelect: 'none',
+        userSelect: 'none',
+        WebkitTouchCallout: 'none',
+      }}
     >
-      <GripVertical className="h-4 w-4 shrink-0 text-[color:var(--text-muted)]" />
-      <span
-        className="h-2 w-2 shrink-0 rounded-full"
-        style={{ backgroundColor: STATUS_COLORS[piece.status] }}
-      />
-      <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[color:var(--foreground)]">
-        {piece.title}
-      </span>
+      <ContentCard piece={piece} onAdvance={onAdvance} />
     </div>
   );
 }
@@ -93,22 +120,50 @@ export default function PlanCalendar({
   // DB write in the background and a rollback if it fails.
   const [dateById, setDateById] = useState<Record<string, string>>({});
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  // Optimistic status overrides for the ring tap inside a day card.
+  const [statusById, setStatusById] = useState<Record<string, ContentPiece['status']>>({});
+  const router = useRouter();
+
+  /** Ring tap on a day card — advance one stage, optimistic with rollback. */
+  const advance = useCallback((piece: ContentPiece) => {
+    const current = statusById[piece.id] ?? piece.status;
+    const next = nextStatus(piece.type, current);
+    if (!next) return;
+    setStatusById((m) => ({ ...m, [piece.id]: next }));
+    void setContentStatus(piece.refTable, piece.id, piece.type, next).then((res) => {
+      if (!res.ok) setStatusById((m) => ({ ...m, [piece.id]: current }));
+    });
+  }, [statusById]);
 
   const effective = useMemo(
-    () => pieces.map((p) => (dateById[p.id] ? { ...p, scheduledDate: dateById[p.id] } : p)),
-    [pieces, dateById],
+    () =>
+      pieces.map((p) => ({
+        ...p,
+        ...(dateById[p.id] ? { scheduledDate: dateById[p.id] } : {}),
+        ...(statusById[p.id] ? { status: statusById[p.id] } : {}),
+      })),
+    [pieces, dateById, statusById],
   );
   const byDay = useMemo(() => groupByScheduledDate(effective), [effective]);
 
   const sensors = useSensors(
-    // Press-and-hold to lift on touch (so vertical scrolling still works),
-    // small-distance drag on pointer devices.
-    useSensor(TouchSensor, { activationConstraint: { delay: 220, tolerance: 8 } }),
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    // TOUCH: only a hold arms a drag, so scrolling the day list and tapping a
+    // card are both safe. MOUSE is separate on purpose — PointerSensor also
+    // fires for touch, and its 6px distance meant a 6px scroll could start a
+    // drag on a phone (§0/§6).
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
   );
 
   const onDragStart = useCallback((e: DragStartEvent) => {
     setDraggingId(String(e.active.id).replace('piece:', ''));
+    // A short tap confirms the card is HELD — without it a long-press feels
+    // like nothing happened until the card moves.
+    try {
+      (navigator as Navigator & { vibrate?: (p: number) => boolean }).vibrate?.(12);
+    } catch {
+      /* no-op */
+    }
   }, []);
 
   const onDragEnd = useCallback(
@@ -259,20 +314,22 @@ export default function PlanCalendar({
               <PlanCreateMenu />
             </div>
             {dayPieces.length > 0 ? (
-              <>
-                <div>
-                  <ContentRows pieces={dayPieces} />
-                </div>
-                {/* Hold a row here and drop it on any day above to reschedule. */}
-                <div className="mt-2 rounded-[14px] border border-dashed border-[color:var(--border)] p-1">
-                  <p className="px-2 pb-1 pt-1.5 text-[11px] font-medium text-[color:var(--text-muted)]">
-                    Перетягни на інший день, щоб перенести
-                  </p>
-                  {dayPieces.map((p) => (
-                    <DraggablePiece key={p.id} piece={p} />
-                  ))}
-                </div>
-              </>
+              /* ONE card set (§6). There used to be a second, dimmer list below
+                 holding the drag handles — the same pieces twice, which read as
+                 a bug. The cards themselves now carry the gesture. */
+              <div>
+                <p className="px-1 pb-2 text-[11px] font-medium text-[color:var(--text-muted)]">
+                  Затисни картку і перетягни на інший день
+                </p>
+                {dayPieces.map((p) => (
+                  <DraggableContentCard
+                    key={p.id}
+                    piece={p}
+                    onOpen={() => router.push(contentHref(p))}
+                    onAdvance={() => advance(p)}
+                  />
+                ))}
+              </div>
             ) : (
               <div className="app-card px-6 py-9 text-center">
                 <p className="text-[14px] font-semibold text-[color:var(--foreground)]">
@@ -288,9 +345,14 @@ export default function PlanCalendar({
       </div>
     </div>
 
+    {/* The floating proxy that follows the thumb. `dropAnimation` stays null —
+        the card settles by the day cell re-rendering, not by flying back. */}
     <DragOverlay dropAnimation={null}>
       {draggingPiece ? (
-        <div className="flex items-center gap-2 rounded-[12px] border border-[color:var(--border)] bg-white px-3 py-2 shadow-[var(--elev-3)]">
+        <div
+          className="flex items-center gap-2 rounded-[12px] border border-[color:var(--border)] bg-white px-3 py-2 shadow-[var(--elev-3)]"
+          style={{ animation: 'cal-drag-float 1.6s ease-in-out infinite' }}
+        >
           <span
             className="h-2 w-2 shrink-0 rounded-full"
             style={{ backgroundColor: STATUS_COLORS[draggingPiece.status] }}

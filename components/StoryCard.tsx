@@ -5,7 +5,7 @@ import { Check, Copy, X } from 'lucide-react';
 import type { StorytellingStory, VisualType, EngagementType } from '@/lib/domain';
 import { VISUAL_OPTIONS, ENGAGEMENT_OPTIONS } from '@/lib/domain';
 import { updateStorytellingStory } from '@/app/storytelling-actions';
-import { useTapGuard } from '@/lib/ui/tapGuard';
+import TapButton from '@/components/ui/TapButton';
 
 /**
  * One story card — a READING surface first, a form second.
@@ -154,11 +154,9 @@ function OptionChip({
   selected: boolean;
   onToggle: () => void;
 }) {
-  const tap = useTapGuard(onToggle);
   return (
-    <button
-      type="button"
-      {...tap}
+    <TapButton
+      onTap={onToggle}
       aria-pressed={selected}
       className={`cursor-pointer rounded-full px-3 py-1.5 text-[12.5px] font-medium transition-colors ${
         selected
@@ -167,6 +165,6 @@ function OptionChip({
       }`}
     >
       {label}
-    </button>
+    </TapButton>
   );
 }

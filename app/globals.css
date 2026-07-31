@@ -470,3 +470,10 @@ button:disabled,
 .accent2-refresh-spin {
   animation: accent2-refresh-spin 300ms ease-out;
 }
+
+/* Held card in the План calendar: a gentle float so it reads as lifted OFF the
+   page rather than merely selected (§6). */
+@keyframes cal-drag-float {
+  0%, 100% { transform: translateY(0) rotate(-0.6deg); }
+  50% { transform: translateY(-3px) rotate(0.6deg); }
+}

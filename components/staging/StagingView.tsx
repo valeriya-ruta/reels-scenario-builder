@@ -2,10 +2,11 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { CalendarDays, PenLine, Trash2, Check } from 'lucide-react';
+import { CalendarDays, PenLine, Trash2, Check, ChevronDown } from 'lucide-react';
 import DateSheet from '@/components/content/DateSheet';
 import ContentTypeIcon from '@/components/ContentTypeIcon';
 import ProposingEmptyState from '@/components/propose/ProposingEmptyState';
+import TapButton from '@/components/ui/TapButton';
 import { setContentScheduledDate, deleteContentPiece } from '@/app/content-actions';
 import { contentHref, type ContentPiece } from '@/lib/content/contentPiece';
 import { TYPE_LABELS, STATUS_LABELS, STATUS_COLORS } from '@/lib/content/statusSystem';
@@ -55,6 +56,9 @@ export default function StagingView({
   const [items, setItems] = useState<ContentPiece[]>(() => sortByPressure(initial));
   const [dateFor, setDateFor] = useState<ContentPiece | null>(null);
   const [killing, setKilling] = useState<string | null>(null);
+  // Which item is expanded for reading. One at a time: the pile is worked top
+  // down, and two open cards make the count harder to read.
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const needingDecision = useMemo(
     () => items.filter((p) => stagedAgeDays(p, nowIso) >= NUDGE_AFTER_DAYS).length,
@@ -147,6 +151,7 @@ export default function StagingView({
               const level = staleness(age);
               const style = STALENESS_STYLE[level];
               const armed = killing === piece.id;
+              const isOpen = openId === piece.id;
               return (
                 <li
                   key={piece.id}
@@ -159,71 +164,114 @@ export default function StagingView({
                     boxShadow: 'var(--elev-1)',
                   }}
                 >
-                  <div className="flex items-center gap-2">
+                  {/* COLLAPSED: clean. Reading must not require committing, so
+                      a tap only EXPANDS — it never opens the editor (§5). The
+                      old row carried all three exits at all times, which read as
+                      busy and forced "work on it" just to see what a thing was. */}
+                  <TapButton
+                    onTap={() => setOpenId((cur) => (cur === piece.id ? null : piece.id))}
+                    data-testid="staging-expand"
+                    aria-expanded={isOpen}
+                    className="flex w-full items-start gap-2 text-left"
+                  >
                     <ContentTypeIcon type={TYPE_TO_ICON[piece.type] ?? 'reels'} size={16} />
-                    <span className="min-w-0 flex-1 truncate text-[15px] font-semibold tracking-tight text-[color:var(--foreground)]">
-                      {piece.title}
+                    <span className="min-w-0 flex-1">
+                      <span
+                        className={`block text-[15px] font-semibold tracking-tight text-[color:var(--foreground)] ${
+                          isOpen ? '' : 'truncate'
+                        }`}
+                      >
+                        {piece.title}
+                      </span>
+                      <span className="mt-1 flex flex-wrap items-center gap-1.5 text-[12px]">
+                        <span className="font-medium" style={{ color: STATUS_COLORS[piece.status] }}>
+                          {STATUS_LABELS[piece.status]}
+                        </span>
+                        <span aria-hidden>·</span>
+                        <span className="text-[color:var(--text-muted)]">
+                          {TYPE_LABELS[piece.type]}
+                        </span>
+                        <span aria-hidden>·</span>
+                        {/* Aging is always shown — there is no neutral "stored". */}
+                        <span
+                          data-testid="staging-pressure"
+                          className="font-medium"
+                          style={{ color: level === 'fresh' ? 'var(--text-muted)' : '#b45309' }}
+                        >
+                          {stagingPressure(age)}
+                        </span>
+                      </span>
                     </span>
-                  </div>
+                    <ChevronDown
+                      className="mt-0.5 h-4 w-4 shrink-0 text-[color:var(--text-muted)] transition-transform"
+                      style={{ transform: isOpen ? 'rotate(180deg)' : undefined }}
+                      aria-hidden
+                    />
+                  </TapButton>
 
-                  <div className="mt-1 flex items-center gap-1.5 text-[12px]">
-                    <span className="font-medium" style={{ color: STATUS_COLORS[piece.status] }}>
-                      {STATUS_LABELS[piece.status]}
-                    </span>
-                    <span aria-hidden>·</span>
-                    <span className="text-[color:var(--text-muted)]">{TYPE_LABELS[piece.type]}</span>
-                    <span aria-hidden>·</span>
-                    {/* Aging is always shown — there is no neutral "stored". */}
-                    <span
-                      data-testid="staging-pressure"
-                      className="font-medium"
-                      style={{ color: level === 'fresh' ? 'var(--text-muted)' : '#b45309' }}
-                    >
-                      {stagingPressure(age)}
-                    </span>
-                  </div>
-
-                  {/* The three exits — always visible, never behind a gesture. */}
-                  <div className="mt-3 flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setDateFor(piece)}
-                      data-testid="staging-schedule"
-                      className="app-pill flex-1 justify-center py-2 text-[12.5px]"
-                    >
-                      <CalendarDays className="h-3.5 w-3.5" strokeWidth={2} />
-                      Запланувати
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => finish(piece)}
-                      data-testid="staging-finish"
-                      className="app-pill flex-1 justify-center py-2 text-[12.5px]"
-                    >
-                      <PenLine className="h-3.5 w-3.5" strokeWidth={2} />
-                      Доробити
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => kill(piece)}
-                      data-testid="staging-kill"
-                      data-armed={armed ? 'true' : 'false'}
-                      aria-label={armed ? 'Точно відпустити?' : 'Відпустити'}
-                      title={armed ? 'Точно?' : 'Відпустити'}
-                      className="app-icon-btn shrink-0"
-                      style={
-                        armed
-                          ? { color: '#fff', backgroundColor: '#dc2626', borderColor: '#dc2626' }
-                          : { color: '#dc2626' }
-                      }
-                    >
-                      {armed ? (
-                        <Check className="h-4 w-4" strokeWidth={2.4} />
+                  {/* EXPANDED: enough to recognise and decide — the piece's own
+                      opening words, then the three exits. Fully non-committal:
+                      nothing here changes the piece until one is tapped. */}
+                  {isOpen ? (
+                    <div data-testid="staging-detail">
+                      {piece.preview?.lead ? (
+                        <p className="mt-3 text-[15px] leading-relaxed text-[color:var(--foreground)]">
+                          {piece.preview.lead}
+                        </p>
                       ) : (
-                        <Trash2 className="h-4 w-4" strokeWidth={2} />
+                        <p className="mt-3 text-[13px] italic leading-relaxed text-[color:var(--text-muted)]">
+                          Тут ще нічого не написано.
+                        </p>
                       )}
-                    </button>
-                  </div>
+                      {piece.preview?.countLabel ? (
+                        <p className="mt-1.5 text-[11.5px] text-[color:var(--text-muted)]">
+                          {piece.preview.countLabel}
+                        </p>
+                      ) : null}
+
+                      {/* The three exits live HERE, not on every collapsed row. */}
+                      <div className="mt-3 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setDateFor(piece)}
+                          data-testid="staging-schedule"
+                          className="app-pill flex-1 justify-center py-2 text-[12.5px]"
+                        >
+                          <CalendarDays className="h-3.5 w-3.5" strokeWidth={2} />
+                          Запланувати
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => finish(piece)}
+                          data-testid="staging-finish"
+                          className="app-pill flex-1 justify-center py-2 text-[12.5px]"
+                        >
+                          <PenLine className="h-3.5 w-3.5" strokeWidth={2} />
+                          Доробити
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => kill(piece)}
+                          data-testid="staging-kill"
+                          data-armed={armed ? 'true' : 'false'}
+                          aria-label={armed ? 'Точно відпустити?' : 'Відпустити'}
+                          title={armed ? 'Точно?' : 'Відпустити'}
+                          className="app-icon-btn shrink-0"
+                          style={
+                            armed
+                              ? { color: '#fff', backgroundColor: '#dc2626', borderColor: '#dc2626' }
+                              : { color: '#dc2626' }
+                          }
+                        >
+                          {armed ? (
+                            <Check className="h-4 w-4" strokeWidth={2.4} />
+                          ) : (
+                            <Trash2 className="h-4 w-4" strokeWidth={2} />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                 </li>
               );
             })}

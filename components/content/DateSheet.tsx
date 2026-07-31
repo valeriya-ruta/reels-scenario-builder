@@ -47,6 +47,41 @@ export default function DateSheet({
 
   return (
     <BottomSheet open={open} onClose={onClose} title="Запланувати">
+      {/* Сьогодні / Завтра pinned to the TOP (§8) — they are the overwhelming
+          majority of picks, and having to scan past a month grid to reach them
+          made the fastest choice the slowest. Right-aligned so they fall under
+          the thumb on a phone. */}
+      <div className="mb-3 flex items-center justify-end gap-2">
+        {value ? (
+          <button
+            type="button"
+            onClick={() => {
+              onPick(null);
+              onClose();
+            }}
+            className="mr-auto rounded-full px-3 py-2 text-[13px] font-medium text-zinc-500 hover:bg-zinc-100"
+          >
+            Прибрати
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => pick(todayKey)}
+          data-testid="datesheet-today"
+          className="rounded-full bg-[color:var(--accent-soft)] px-4 py-2 text-[13.5px] font-semibold text-[color:var(--accent)]"
+        >
+          Сьогодні
+        </button>
+        <button
+          type="button"
+          onClick={tomorrow}
+          data-testid="datesheet-tomorrow"
+          className="rounded-full bg-[color:var(--accent-soft)] px-4 py-2 text-[13.5px] font-semibold text-[color:var(--accent)]"
+        >
+          Завтра
+        </button>
+      </div>
+
       <div className="mb-2 flex items-center justify-between px-1">
         <span className="text-[15px] font-semibold text-[color:var(--foreground)]">
           {monthLabel(view.year, view.month0)}
@@ -112,34 +147,6 @@ export default function DateSheet({
         })}
       </div>
 
-      <div className="mt-3 flex items-center gap-2 border-t border-[color:var(--border)] pt-3">
-        <button
-          type="button"
-          onClick={() => pick(todayKey)}
-          className="rounded-full border border-[color:var(--border)] px-3 py-1.5 text-[13px] font-medium text-zinc-700 hover:bg-zinc-100"
-        >
-          Сьогодні
-        </button>
-        <button
-          type="button"
-          onClick={tomorrow}
-          className="rounded-full border border-[color:var(--border)] px-3 py-1.5 text-[13px] font-medium text-zinc-700 hover:bg-zinc-100"
-        >
-          Завтра
-        </button>
-        {value ? (
-          <button
-            type="button"
-            onClick={() => {
-              onPick(null);
-              onClose();
-            }}
-            className="ml-auto rounded-full px-3 py-1.5 text-[13px] font-medium text-zinc-500 hover:bg-zinc-100"
-          >
-            Прибрати
-          </button>
-        ) : null}
-      </div>
     </BottomSheet>
   );
 }
