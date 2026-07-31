@@ -367,8 +367,12 @@ export default function CarouselSlidePreview({
               <div className={`${textAlignClass} font-bold leading-[1.0] whitespace-pre-wrap`} style={{ fontFamily: titleFont, color: resolvedTitleColor, fontSize: (slide.titleSize ?? 'L') === 'M' ? 78 : 96 }}>
                 <AccentRuns text={slide.title} accentStyle={brand.accentStyle} accentColor={accent} />
               </div>
+              {/* The subline carries textAlignClass too. Without it the cover
+                  title was force-centered while the subline inherited `left`, so
+                  the editor disagreed with ITSELF — and with the export, which
+                  centers both. Proof: diff-1-cover.png. */}
               {showCoverSubline ? (
-                <p className="mt-6 leading-snug" style={{ fontFamily: bodyFont, color: resolvedBodyColor, fontSize: scaleBodyPx(32) }}>
+                <p className={`mt-6 leading-snug ${textAlignClass}`} style={{ fontFamily: bodyFont, color: resolvedBodyColor, fontSize: scaleBodyPx(32) }}>
                   {bodyLine ? (
                     <AccentRuns text={slide.body} accentStyle={brand.accentStyle} accentColor={accent} />
                   ) : (

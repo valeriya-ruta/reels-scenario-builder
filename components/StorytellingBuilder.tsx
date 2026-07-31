@@ -29,6 +29,7 @@ import {
 } from '@/lib/storytelling/optimistic';
 import ScheduleChip from '@/components/content/ScheduleChip';
 import StatusPill from '@/components/content/StatusPill';
+import SourceDumpChip from '@/components/braindump/SourceDumpChip';
 
 interface Props {
   project: StorytellingProject;
@@ -307,6 +308,7 @@ export default function StorytellingBuilder({ project: initialProject, initialCo
             id={project.id}
             initialDate={project.scheduled_date ?? null}
           />
+          <SourceDumpChip contentId={project.id} />
         </div>
       </div>
 

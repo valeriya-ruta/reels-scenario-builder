@@ -18,6 +18,7 @@ import ContentRows from '@/components/content/ContentRows';
 import { setContentScheduledDate } from '@/app/content-actions';
 import { STATUS_COLORS } from '@/lib/content/statusSystem';
 import PlanCreateMenu from '@/components/plan/PlanCreateMenu';
+import StagingPressureCard from '@/components/staging/StagingPressureCard';
 import type { ContentPiece } from '@/lib/content/contentPiece';
 import {
   monthGrid,
@@ -73,7 +74,15 @@ function DraggablePiece({ piece }: { piece: ContentPiece }) {
   );
 }
 
-export default function PlanCalendar({ pieces }: { pieces: ContentPiece[] }) {
+export default function PlanCalendar({
+  pieces,
+  stagedCount,
+  stagedOverdue,
+}: {
+  pieces: ContentPiece[];
+  stagedCount: number;
+  stagedOverdue: number;
+}) {
   const now = new Date();
   const todayKey = dateKey(now.getFullYear(), now.getMonth(), now.getDate());
 
@@ -164,6 +173,13 @@ export default function PlanCalendar({ pieces }: { pieces: ContentPiece[] }) {
         </div>
       </div>
 
+      {/* The calendar shows ONLY committed, dated pieces. The undecided live in
+          Розбір — surfaced here as a count so they stay visible without
+          polluting the plan with maybes. */}
+      <div className="mb-3">
+        <StagingPressureCard count={stagedCount} overdue={stagedOverdue} />
+      </div>
+
       {/* Calendar card */}
       <div className="app-card px-2 pb-2 pt-3">
       {/* Weekday header */}
@@ -244,7 +260,7 @@ export default function PlanCalendar({ pieces }: { pieces: ContentPiece[] }) {
             </div>
             {dayPieces.length > 0 ? (
               <>
-                <div className="app-card overflow-hidden px-1.5 py-0.5">
+                <div>
                   <ContentRows pieces={dayPieces} />
                 </div>
                 {/* Hold a row here and drop it on any day above to reschedule. */}

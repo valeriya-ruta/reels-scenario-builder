@@ -103,7 +103,7 @@ export default function Agenda({
                 {done}/{group.items.length}
               </span>
             </div>
-            <div className="app-card overflow-hidden px-1.5 py-0.5">
+            <div>
               <ContentRows pieces={group.items} />
             </div>
           </div>

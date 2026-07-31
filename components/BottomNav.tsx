@@ -15,6 +15,7 @@ import {
 } from '@/lib/content/braindumpIdeaEvent';
 import { CONTENT_TYPES } from '@/lib/contentTypes';
 import { isImmersiveEditorRoute } from '@/lib/immersiveEditorRoute';
+import type { Proposal } from '@/lib/propose/types';
 
 /**
  * Floating bottom navigation: 4 destination tabs + a center Create FAB.
@@ -86,6 +87,9 @@ export default function BottomNav() {
   const [braindumpOpen, setBraindumpOpen] = useState(false);
   // Set when an idea row reopens the braindump pre-loaded; null = fresh capture.
   const [braindumpIdea, setBraindumpIdea] = useState<{ id: string; text: string } | null>(null);
+  // Set when the caller already confirmed an angle (proposing empty states), so
+  // the overlay opens on capture instead of re-asking which direction to take.
+  const [braindumpAngle, setBraindumpAngle] = useState<Proposal | null>(null);
 
   const fabRef = useRef<HTMLButtonElement>(null);
   const bubbleEls = useRef<Map<RadialOptionId, HTMLButtonElement>>(new Map());
@@ -127,6 +131,7 @@ export default function BottomNav() {
     const onOpenIdea = (e: Event) => {
       const detail = (e as CustomEvent<OpenBraindumpIdeaDetail>).detail;
       if (!detail) return;
+      setBraindumpAngle(null);
       setBraindumpIdea({ id: detail.id, text: detail.text });
       setBraindumpOpen(true);
     };
@@ -137,8 +142,10 @@ export default function BottomNav() {
   // The desktop sidebar's "Наговорити" option asks to open the braindump fresh
   // (no pre-loaded idea) — same overlay the FAB opens. The FAB itself is untouched.
   useEffect(() => {
-    const onOpenFresh = () => {
+    const onOpenFresh = (e: Event) => {
+      const angle = (e as CustomEvent<{ angle?: Proposal }>).detail?.angle ?? null;
       setBraindumpIdea(null);
+      setBraindumpAngle(angle);
       setBraindumpOpen(true);
     };
     window.addEventListener(OPEN_BRAINDUMP_FRESH_EVENT, onOpenFresh);
@@ -150,6 +157,7 @@ export default function BottomNav() {
       closeMenu();
       if (id === 'ideas') {
         setBraindumpIdea(null); // fresh capture from the FAB
+        setBraindumpAngle(null); // …and no pre-confirmed angle: show the deck
         setBraindumpOpen(true);
         return;
       }
@@ -350,9 +358,11 @@ export default function BottomNav() {
       <BraindumpOverlay
         open={braindumpOpen}
         initialIdea={braindumpIdea}
+        initialAngle={braindumpAngle}
         onClose={() => {
           setBraindumpOpen(false);
           setBraindumpIdea(null);
+          setBraindumpAngle(null);
         }}
       />
     </>

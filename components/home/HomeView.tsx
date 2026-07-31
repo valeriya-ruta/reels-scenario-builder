@@ -5,6 +5,7 @@ import Agenda from './Agenda';
 import HomeRecents from './HomeRecents';
 import InsightsSkeleton from './InsightsSkeleton';
 import WorkshopLessons from './WorkshopLessons';
+import StagingPressureCard from '@/components/staging/StagingPressureCard';
 import type { ContentPiece } from '@/lib/content/contentPiece';
 
 /**
@@ -21,12 +22,17 @@ export default function HomeView({
   upcoming,
   todayKey,
   recents,
+  stagedCount,
+  stagedOverdue,
 }: {
   userName?: string | null;
   /** Everything scheduled today or later, any type. */
   upcoming: ContentPiece[];
   todayKey: string;
   recents: ContentPiece[];
+  /** Kept-but-undated work awaiting a decision (Розбір). */
+  stagedCount: number;
+  stagedOverdue: number;
 }) {
   return (
     <div className="app-page space-y-7">
@@ -34,6 +40,9 @@ export default function HomeView({
         <WelcomeModal />
       </Suspense>
       <Greeting name={userName} />
+      {/* The staging count sits directly under the plan: what's committed, then
+          what's still undecided. It disappears entirely at zero. */}
+      <StagingPressureCard count={stagedCount} overdue={stagedOverdue} />
       <Agenda pieces={upcoming} todayKey={todayKey} />
       <HomeRecents pieces={recents} />
       <InsightsSkeleton />

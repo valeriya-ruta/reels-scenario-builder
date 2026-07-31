@@ -21,6 +21,7 @@ import {
 import Link from 'next/link';
 import BackLink from '@/components/ui/BackLink';
 import ScheduleChip from '@/components/content/ScheduleChip';
+import SourceDumpChip from '@/components/braindump/SourceDumpChip';
 import StatusPill from '@/components/content/StatusPill';
 import type { ContentStatus } from '@/lib/content/statusSystem';
 import { resolveBrandFont } from '@/lib/brandFonts';
@@ -959,6 +960,7 @@ export default function CarouselBuilder({
     <>
       <StatusPill refTable="carousel_projects" id={projectId} type="carousel" initialStatus={initialStatus} />
       <ScheduleChip refTable="carousel_projects" id={projectId} initialDate={initialScheduledDate} />
+      <SourceDumpChip contentId={projectId} />
     </>
   );
 

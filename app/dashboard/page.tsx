@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { requireAuth } from '@/lib/auth';
 import { getAllContent } from '@/lib/content/contentList';
 import { dateKey } from '@/lib/content/calendar';
+import { stagedPieces, countNeedingDecision } from '@/lib/content/staging';
 import HomeView from '@/components/home/HomeView';
 
 export const dynamic = 'force-dynamic';
@@ -22,6 +23,9 @@ export default async function DashboardPage() {
     .filter((p) => (p.scheduledDate?.slice(0, 10) ?? '') >= todayKey)
     .sort((a, b) => (a.scheduledDate ?? '').localeCompare(b.scheduledDate ?? ''));
   const recents = all.slice(0, 6);
+  // Kept-but-undecided work — the Розбір count, shown as pressure on Home.
+  const staged = stagedPieces(all);
+  const nowIso = now.toISOString();
 
   const fullName =
     (user.user_metadata?.full_name as string | undefined) ??
@@ -30,5 +34,14 @@ export default async function DashboardPage() {
   // First name only keeps the greeting compact.
   const firstName = fullName?.trim().split(/\s+/)[0] ?? null;
 
-  return <HomeView userName={firstName} upcoming={upcoming} todayKey={todayKey} recents={recents} />;
+  return (
+    <HomeView
+      userName={firstName}
+      upcoming={upcoming}
+      todayKey={todayKey}
+      recents={recents}
+      stagedCount={staged.length}
+      stagedOverdue={countNeedingDecision(staged, nowIso)}
+    />
+  );
 }

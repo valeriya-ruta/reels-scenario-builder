@@ -5,6 +5,7 @@ import { createCarouselProject, deleteCarouselProject } from '@/app/carousel-act
 import SwipeableContentList from '@/components/content/SwipeableContentList';
 import type { ContentPiece } from '@/lib/content/contentPiece';
 import type { ContentStatus } from '@/lib/content/statusSystem';
+import { attachPreviews } from '@/lib/content/contentPreview';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,7 +34,7 @@ export default async function CarouselListPage() {
     console.warn('[carousel] list query failed:', { message: error.message, code: error.code });
   }
 
-  const pieces: ContentPiece[] = ((projects as Row[] | null) ?? []).map((p) => ({
+  const rows: ContentPiece[] = ((projects as Row[] | null) ?? []).map((p) => ({
     id: p.id,
     userId: p.user_id,
     type: 'carousel',
@@ -44,6 +45,10 @@ export default async function CarouselListPage() {
     createdAt: p.created_at,
     updatedAt: p.updated_at,
   }));
+
+  // Cards preview the real designed output (cover slide / hook / opening
+  // line) — the list row alone can't carry it.
+  const pieces = await attachPreviews(rows);
 
   return (
     <div className="app-canvas">
@@ -56,7 +61,7 @@ export default async function CarouselListPage() {
           accentTint="#eef1ff"
           onCreate={createCarouselProject}
           onDelete={deleteCarouselProject}
-          emptyText="Тут поки що нічого немає. Створи першу карусель, щоб відкрити студію."
+          emptyText="Каруселей ще немає — ось із чого я б зробила першу"
         />
       </div>
     </div>

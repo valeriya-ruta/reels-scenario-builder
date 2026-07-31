@@ -101,7 +101,16 @@ export async function createCarouselProjectFromRant(output: CarouselRantOutput, 
     return { ok: false as const, error: 'DB' as const };
   }
 
-  return { ok: true as const, projectId: row.id };
+  return {
+    ok: true as const,
+    projectId: row.id,
+    name,
+    // The cover slide's own words, so the proposal card previews the actual
+    // carousel rather than a database row.
+    coverTitle: (slides[0]?.title ?? '').trim(),
+    coverBody: (slides[0]?.body ?? '').trim(),
+    slideCount: slides.length,
+  };
 }
 
 export async function updateCarouselProjectName(projectId: string, name: string) {

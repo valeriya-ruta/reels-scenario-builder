@@ -6,6 +6,7 @@ import type { StorytellingColumn, StorytellingStory, VisualType, EngagementType 
 import { ENGAGEMENT_OPTIONS, VISUAL_OPTIONS } from '@/lib/domain';
 import { generateStoriesFromRant } from '@/lib/ai/rantToStories';
 import { aiLimit } from '@/lib/ratelimit';
+import { proposeSpread, isConsecutive } from '@/lib/content/proposeSpread';
 import type { Slide } from '@/lib/ai/rantToStories';
 
 // ── Project actions ──
@@ -190,16 +191,28 @@ function mapSlideInteractiveToDb(interactive: Slide['interactive']): EngagementT
   return null;
 }
 
-/** One generated storytelling day, for the braindump's inline receipt. */
+/** One generated storytelling day, for the braindump's fan-out review. */
 export type CreatedStorytellingDay = {
   id: string;
   name: string;
   scheduledDate: string;
   storyCount: number;
+  /** The day's opening line — what the story actually sounds like. */
+  opening: string;
+  /** Which прогрів barrier this day carries (saga only). */
+  goal?: string | null;
 };
 
 export type CreateStorytellingFromRantResult =
-  | { ok: true; projectId: string; days: CreatedStorytellingDay[] }
+  | {
+      ok: true;
+      projectId: string;
+      days: CreatedStorytellingDay[];
+      /** The engine's first-person one-liner: why single vs saga, why this shape. */
+      reason: string;
+      /** True when the proposed dates are simply consecutive from today. */
+      consecutive: boolean;
+    }
   | { ok: false; error: string };
 
 /**
@@ -248,6 +261,22 @@ export async function createStorytellingProjectFromRant(
     output.days.length > 0 ? output.days : [{ day_number: 1, title: baseName, slides: output.slides }];
 
   const today = new Date();
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(
+    today.getDate(),
+  ).padStart(2, '0')}`;
+
+  // Propose dates on the next OPEN days rather than blindly consecutive ones: a
+  // saga that lands on top of three already-booked days isn't a plan, it's a
+  // pile-up. The user confirms or moves them in the fan-out review.
+  const { data: booked } = await supabase
+    .from('content_pieces')
+    .select('scheduled_date')
+    .eq('user_id', user.id)
+    .not('scheduled_date', 'is', null)
+    .gte('scheduled_date', todayKey);
+  const occupied = ((booked ?? []) as { scheduled_date: string }[]).map((r) => r.scheduled_date);
+  const proposedDates = proposeSpread(todayKey, days.length, occupied);
+
   const created: CreatedStorytellingDay[] = [];
   // Sibling tag for a multi-day generation: no parent object (that would break
   // dating) — just a shared id so the UI can render 1/3, 2/3, 3/3 anywhere.
@@ -258,13 +287,7 @@ export async function createStorytellingProjectFromRant(
     const dayName = (
       days.length > 1 ? day.title?.trim() || `${baseName} — день ${d + 1}` : baseName
     ).slice(0, 120);
-
-    // Consecutive days from today, so a saga lands on the calendar already paced.
-    const when = new Date(today);
-    when.setDate(today.getDate() + d);
-    const scheduledDate = `${when.getFullYear()}-${String(when.getMonth() + 1).padStart(2, '0')}-${String(
-      when.getDate(),
-    ).padStart(2, '0')}`;
+    const scheduledDate = proposedDates[d];
 
     const { data: project, error: projectError } = await supabase
       .from('storytelling_projects')
@@ -317,6 +340,10 @@ export async function createStorytellingProjectFromRant(
       name: dayName,
       scheduledDate,
       storyCount: rows.length,
+      // The first slide's on-screen text IS the story's opening line — the card
+      // shows what the story actually sounds like, not a database row.
+      opening: day.slides[0]?.screen_text?.trim() ?? '',
+      goal: day.goal ?? null,
     });
   }
 
@@ -324,6 +351,12 @@ export async function createStorytellingProjectFromRant(
     return { ok: false, error: 'Не вдалося зберегти сторіс. Спробуй ще раз.' };
   }
 
-  // The braindump shows these inline as a receipt; nothing is created silently.
-  return { ok: true, projectId: created[0].id, days: created };
+  // The braindump reviews these as a fan-out; nothing is created silently.
+  return {
+    ok: true,
+    projectId: created[0].id,
+    days: created,
+    reason: output.reason,
+    consecutive: isConsecutive(created.map((c) => c.scheduledDate)),
+  };
 }

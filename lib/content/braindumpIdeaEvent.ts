@@ -21,3 +21,11 @@ export function dispatchOpenBraindumpIdea(id: string, text: string): void {
  * untouched; this is just an additional trigger for the existing overlay.
  */
 export const OPEN_BRAINDUMP_FRESH_EVENT = 'ruta:open-braindump-fresh';
+
+/**
+ * Optional payload on the fresh-capture event: a proposal the user already
+ * confirmed somewhere else (a proposing empty state, a calendar day). When it is
+ * present the overlay skips its own proposal deck and opens straight on capture
+ * with that angle pinned — confirming an angle twice would be a step backwards.
+ */
+export type OpenBraindumpFreshDetail = { angle?: unknown } | undefined;

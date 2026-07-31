@@ -34,6 +34,9 @@ type NavItem =
 
 const navItems: NavItem[] = [
   { label: 'Головна', href: '/dashboard', matchPrefixes: ['/dashboard'], active: true },
+  // Розбір is a destination, not a filter: staging must be somewhere you go to
+  // empty it, not a view you stumble into.
+  { label: 'Розбір', href: '/staging', matchPrefixes: ['/staging'], active: true },
   {
     label: 'Аналіз профілю',
     href: '/competitor-analysis',

@@ -24,7 +24,18 @@ function probe(base) {
   return null;
 }
 
+// Bare Next specifiers that have no resolvable file outside a Next runtime.
+// Stubbed with visually-identical plain elements so components that use them can
+// still be snapshotted.
+const STUBS = {
+  'next/link': 'scripts/proof/_stubs/next-link.tsx',
+};
+
 export async function resolve(specifier, context, nextResolve) {
+  const stub = STUBS[specifier];
+  if (stub) {
+    return { url: pathToFileURL(pathResolve(ROOT, stub)).href, shortCircuit: true };
+  }
   let target = null;
   if (specifier.startsWith('@/')) {
     target = pathResolve(ROOT, specifier.slice(2));
