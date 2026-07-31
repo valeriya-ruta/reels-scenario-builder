@@ -29,6 +29,7 @@ function probe(base) {
 // still be snapshotted.
 const STUBS = {
   'next/link': 'scripts/proof/_stubs/next-link.tsx',
+  'next/navigation': 'scripts/proof/_stubs/next-navigation.ts',
 };
 
 export async function resolve(specifier, context, nextResolve) {

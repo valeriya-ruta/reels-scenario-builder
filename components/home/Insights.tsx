@@ -47,19 +47,22 @@ export default function Insights({ insights }: { insights: ProducerInsights }) {
             </p>
             <p className="mt-1.5 text-[12.5px] leading-snug text-[color:var(--text-muted)]">
               опубліковано цього тижня
-              {wow ? (
-                <span
-                  className="ml-1 font-semibold"
-                  style={{
-                    color: insights.publishedThisWeek >= insights.publishedLastWeek
+            </p>
+            {/* Its own line: inline, this wrapped under the streak chip and the
+                two collided at narrow widths. */}
+            {wow ? (
+              <p
+                className="mt-0.5 text-[12.5px] font-semibold leading-snug"
+                style={{
+                  color:
+                    insights.publishedThisWeek >= insights.publishedLastWeek
                       ? 'var(--success)'
                       : '#b45309',
-                  }}
-                >
-                  {wow}
-                </span>
-              ) : null}
-            </p>
+                }}
+              >
+                {wow}
+              </p>
+            ) : null}
           </div>
 
           {insights.streakWeeks > 1 ? (

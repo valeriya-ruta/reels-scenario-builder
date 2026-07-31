@@ -18,6 +18,9 @@ import ProposalActions from '@/components/propose/ProposalActions';
 import ReelModeSwitch from '@/components/reels/ReelModeSwitch';
 import Teleprompter from '@/components/reels/Teleprompter';
 import StagingPressureCard from '@/components/staging/StagingPressureCard';
+import Insights from '@/components/home/Insights';
+import EditorTopBar from '@/components/ui/EditorTopBar';
+import { buildProducerInsights } from '@/lib/insights/producerInsights';
 import type { ContentPiece } from '@/lib/content/contentPiece';
 import type { Proposal } from '@/lib/propose/types';
 import type { Scene } from '@/lib/domain';
@@ -165,6 +168,19 @@ function panel(label: string, node: React.ReactNode, width = 430) {
   );
 }
 
+// Real insights from the demo pieces, plus a few published ones so the streak
+// and the weekly bars have something to show.
+const demoInsights = buildProducerInsights(
+  [
+    ...pieces,
+    { ...base, id: 'p1', type: 'reel', status: 'published', title: 'Опубліковано 1', refTable: 'projects', scheduledDate: null, updatedAt: iso(1) },
+    { ...base, id: 'p2', type: 'carousel', status: 'published', title: 'Опубліковано 2', refTable: 'carousel_projects', scheduledDate: null, updatedAt: iso(3) },
+    { ...base, id: 'p3', type: 'story', status: 'published', title: 'Опубліковано 3', refTable: 'storytelling_projects', scheduledDate: null, updatedAt: iso(9) },
+    { ...base, id: 'p4', type: 'reel', status: 'published', title: 'Опубліковано 4', refTable: 'projects', scheduledDate: null, updatedAt: iso(16) },
+  ] as ContentPiece[],
+  new Date(now).toISOString().slice(0, 10),
+);
+
 const sheet = React.createElement(
   'div',
   { style: { padding: 28, background: '#f7f7f5' } },
@@ -211,6 +227,18 @@ const sheet = React.createElement(
   panel(
     'Розбір — лічильник як тиск',
     React.createElement(StagingPressureCard, { count: 4, overdue: 2 }),
+  ),
+  panel(
+    'Єдина шапка редактора (§1)',
+    React.createElement(EditorTopBar, {
+      backHref: '/carousel',
+      title: 'Як ми втратили 700 клієнтів',
+      onRename: () => {},
+    }),
+  ),
+  panel(
+    'Твій ритм — реальний випуск, не охоплення (§7)',
+    React.createElement(Insights, { insights: demoInsights }),
   ),
   panel('Два режими рілсу', React.createElement(ReelModeSwitch, { mode: 'teleprompter', onChange: () => {} })),
   panel('Суфлер — поверхня для читання', React.createElement(Teleprompter, { scenes })),
