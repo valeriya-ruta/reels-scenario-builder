@@ -8,6 +8,7 @@ import ShareModal from './ShareModal';
 import BackLink from '@/components/ui/BackLink';
 import ScheduleChip from './content/ScheduleChip';
 import StatusPill from './content/StatusPill';
+import SourceDumpChip from '@/components/braindump/SourceDumpChip';
 
 interface ProjectHeaderProps {
   project: Project;
@@ -133,6 +134,7 @@ export default function ProjectHeader({
         <div className="mb-1 flex flex-wrap items-center gap-2">
           <StatusPill refTable="projects" id={project.id} type="reel" initialStatus={project.status ?? 'idea'} />
           <ScheduleChip refTable="projects" id={project.id} initialDate={project.scheduled_date ?? null} />
+          <SourceDumpChip contentId={project.id} />
         </div>
         {errorMessage && <p className="mt-1 text-sm text-red-600">{errorMessage}</p>}
       </div>

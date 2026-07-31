@@ -100,7 +100,15 @@ function reportCopyrefImportFailureWebhook(payload: {
 }
 
 export type GenerateReelFromRantResult =
-  | { ok: true; projectId: string }
+  | {
+      ok: true;
+      projectId: string;
+      /** Project name, for the in-place proposal card. */
+      name: string;
+      /** The hook — the first thing the reel says, shown in real type. */
+      hook: string;
+      sceneCount: number;
+    }
   | { ok: false; error: string };
 
 async function assertProjectOwner(projectId: string, userId: string): Promise<boolean> {
@@ -696,7 +704,14 @@ export async function generateReelFromRant(
       };
     }
 
-    return { ok: true, projectId: project.id };
+    return {
+      ok: true,
+      projectId: project.id,
+      name: title,
+      // flattenToSceneDrafts guarantees the hook is scene 0 (86d3dcn4d).
+      hook: scenes[0]?.text ?? '',
+      sceneCount: scenes.length,
+    };
   } catch (error) {
     const message =
       error instanceof Error && error.message.trim().length > 0

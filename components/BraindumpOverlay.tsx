@@ -11,10 +11,20 @@ import BlurScrim from '@/components/BlurScrim';
 import ProposalList from '@/components/propose/ProposalList';
 import { useProposals } from '@/components/propose/useProposals';
 import type { Proposal } from '@/lib/propose/types';
+import FanOutReview from '@/components/braindump/FanOutReview';
+import ResultReview, { type ResultPreview } from '@/components/braindump/ResultReview';
 import { generateReelFromRant } from '@/app/actions';
-import { createStorytellingProjectFromRant } from '@/app/storytelling-actions';
+import {
+  createStorytellingProjectFromRant,
+  type CreatedStorytellingDay,
+} from '@/app/storytelling-actions';
 import { createCarouselProjectFromRant } from '@/app/carousel-actions';
-import { linkIdeaToContent, getIdeaContentLinks } from '@/app/ideas-actions';
+import {
+  linkIdeaToMany,
+  getIdeaContentLinks,
+  getIdeaChildren,
+  type IdeaChild,
+} from '@/app/ideas-actions';
 import type { CarouselRantOutput } from '@/lib/carouselTypes';
 
 /**
@@ -58,6 +68,25 @@ type ReceiptEntry = {
   indexInSet?: number;
   setSize?: number;
 };
+
+/**
+ * The result currently being reviewed in place. `fanout` is the multi-day case
+ * (one dump → 2–3 dated stories); `single` covers a reel or a carousel.
+ */
+type ReviewState =
+  | null
+  | { kind: 'single'; preview: ResultPreview }
+  | { kind: 'fanout'; days: CreatedStorytellingDay[]; reason: string; consecutive: boolean };
+
+/** «Звідси: 3 сторіс · 1 карусель» — the dump's fan-out in one line. */
+function fanOutSummary(children: IdeaChild[]): string {
+  const counts = new Map<ContentType, number>();
+  for (const c of children) counts.set(c.contentType, (counts.get(c.contentType) ?? 0) + 1);
+  const parts = CONTENT_TYPE_ORDER.filter((t) => counts.has(t)).map(
+    (t) => `${counts.get(t)} ${CONTENT_TYPES[t].label.toLowerCase()}`,
+  );
+  return `Звідси: ${parts.join(' · ')}`;
+}
 
 function pickRecorderMime(): string | undefined {
   if (typeof MediaRecorder === 'undefined') return undefined;
@@ -109,6 +138,11 @@ export default function BraindumpOverlay({
   // accumulates because you can fire several types off one braindump, so there
   // is no single "done" moment to interrupt with a screen.
   const [receipt, setReceipt] = useState<ReceiptEntry[]>([]);
+  // The result currently under review. Nothing generated is final-on-arrival:
+  // it is a proposal the user Keeps / Regenerates / Tweaks in place.
+  const [review, setReview] = useState<ReviewState>(null);
+  // Everything this dump already produced, when reopening a saved one.
+  const [children, setChildren] = useState<IdeaChild[]>([]);
 
   const prevPromptRef = useRef<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -120,6 +154,8 @@ export default function BraindumpOverlay({
   // The transcript lives in a fixed-height scroll region; keep the newest text
   // in view as it grows so a long transcript never hides behind the fold.
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Types whose generation is in flight (see runType — a ref, not state).
+  const inFlight = useRef<Set<ContentType>>(new Set());
 
   useEffect(() => {
     textRef.current = text;
@@ -137,6 +173,8 @@ export default function BraindumpOverlay({
     setError(null);
     setTypeStatus({ reels: 'idle', carousel: 'idle', stories: 'idle' });
     setReceipt([]);
+    setReview(null);
+    setChildren([]);
     setAngle(initialAngle);
     if (initialIdea) {
       setPhase('B');
@@ -153,6 +191,10 @@ export default function BraindumpOverlay({
           return next;
         });
       });
+      // A braindump is not consumed on generation — it OWNS what it produced.
+      // Reopening it shows the fan-out, so the dump compounds instead of
+      // vanishing into whatever it made first.
+      void getIdeaChildren(initialIdea.id).then(setChildren);
     } else {
       // Proposals are the front door — unless an angle was already confirmed
       // upstream, in which case re-asking would be a step backwards.
@@ -349,10 +391,18 @@ export default function BraindumpOverlay({
 
   // --- Content-type creation (independent, non-exclusive, no navigation) ---
   const runType = useCallback(
-    async (type: ContentType) => {
-      if (typeStatus[type] === 'loading' || typeStatus[type] === 'done') return;
+    async (type: ContentType, force = false) => {
+      // In-flight is tracked in a ref, not in state: «Ще раз» must be able to
+      // re-run a type the same tick it clears the previous result, and a state
+      // read would still see the stale 'done'.
+      if (inFlight.current.has(type)) return;
+      if (!force && typeStatus[type] === 'done') return;
+      inFlight.current.add(type);
       const spoken = textRef.current.trim();
-      if (!spoken) return;
+      if (!spoken) {
+        inFlight.current.delete(type);
+        return;
+      }
       // Carry the confirmed angle into generation as a plain directive line, so
       // the output follows the direction the user actually agreed to rather than
       // whatever the model infers from raw speech.
@@ -360,20 +410,34 @@ export default function BraindumpOverlay({
       setTypeStatus((s) => ({ ...s, [type]: 'loading' }));
       try {
         let ok = false;
-        let createdId: string | null = null;
+        // Every id this run produced — a saga is several, and the dump owns them
+        // all (which is what migration 026 widens the link table for).
+        let createdIds: string[] = [];
         if (type === 'reels') {
           const r = await generateReelFromRant(snapshot);
           ok = r.ok;
           if (r.ok) {
-            createdId = r.projectId;
-            setReceipt((cur) => [...cur, { type, id: r.projectId, label: CONTENT_TYPES[type].label }]);
+            createdIds = [r.projectId];
+            setReceipt((cur) => [...cur, { type, id: r.projectId, label: r.name }]);
+            setReview({
+              kind: 'single',
+              preview: {
+                type: 'reels',
+                id: r.projectId,
+                name: r.name,
+                lead: r.hook,
+                countLabel: `${r.sceneCount} сцен`,
+                rationale: 'Хук окремою сценою, один CTA у кінці — як ти знімаєш.',
+                scheduledDate: null,
+              },
+            });
           }
         } else if (type === 'stories') {
           // The angle doubles as the storytelling's emotional-goal name.
           const r = await createStorytellingProjectFromRant(snapshot, angle?.title ?? '');
           ok = r.ok;
           if (r.ok) {
-            createdId = r.projectId;
+            createdIds = r.days.map((d) => d.id);
             setReceipt((cur) => [
               ...cur,
               ...r.days.map((d, i) => ({
@@ -386,6 +450,7 @@ export default function BraindumpOverlay({
                 setSize: r.days.length,
               })),
             ]);
+            setReview({ kind: 'fanout', days: r.days, reason: r.reason, consecutive: r.consecutive });
           }
         } else {
           const res = await fetch('/api/carousel/rant-to-slides', {
@@ -398,26 +463,59 @@ export default function BraindumpOverlay({
             const created = await createCarouselProjectFromRant(data, snapshot);
             ok = created.ok;
             if (created.ok) {
-              createdId = created.projectId;
+              createdIds = [created.projectId];
               setReceipt((cur) => [
                 ...cur,
-                { type, id: created.projectId, label: CONTENT_TYPES[type].label },
+                { type, id: created.projectId, label: created.name },
               ]);
+              setReview({
+                kind: 'single',
+                preview: {
+                  type: 'carousel',
+                  id: created.projectId,
+                  name: created.name,
+                  lead: created.coverTitle,
+                  sub: created.coverBody,
+                  countLabel: `${created.slideCount} слайдів`,
+                  rationale: 'Одна думка — один слайд, обкладинка тримає гачок.',
+                  scheduledDate: null,
+                },
+              });
             }
           }
         }
         setTypeStatus((s) => ({ ...s, [type]: ok ? 'done' : 'error' }));
-        // Persist the idea → content link so reopening this idea shows the
-        // already-created type and never offers a duplicate (task 86d3czf1e).
-        if (ok && createdId && savedId) {
-          void linkIdeaToContent(savedId, type, createdId);
+        // Persist the idea → content link so the dump OWNS what it produced:
+        // reopening it shows the fan-out, and every piece can name its source.
+        if (ok && createdIds.length > 0 && savedId) {
+          void linkIdeaToMany(savedId, type, createdIds);
         }
       } catch {
         setTypeStatus((s) => ({ ...s, [type]: 'error' }));
+      } finally {
+        inFlight.current.delete(type);
       }
     },
     [typeStatus, savedId, angle]
   );
+
+  /**
+   * «Ще раз» — re-propose the same type. The previous attempt is NOT deleted:
+   * it stays a real linked child of the dump, so regenerating never silently
+   * destroys work the user might still want.
+   */
+  const regenerate = useCallback(
+    (type: ContentType) => {
+      setReview(null);
+      void runType(type, true);
+    },
+    [runType],
+  );
+
+  /** «Підкрутити» — back to the thought itself, the only text box in the flow. */
+  const tweak = useCallback(() => {
+    setReview(null);
+  }, []);
 
   // Keep the transcript scrolled to its newest content (State A) so appended
   // speech stays visible without the user having to scroll down each time.
@@ -706,14 +804,86 @@ export default function BraindumpOverlay({
             </div>
           )}
 
+            {/* State B — review first. A result that just arrived is a PROPOSAL:
+                the user Keeps / Regenerates / Tweaks it in place before the
+                type buttons come back for the next format. */}
+            {phase === 'B' && review !== null && (
+              <div data-testid="braindump-review">
+                {review.kind === 'fanout' ? (
+                  <FanOutReview
+                    days={review.days}
+                    reason={review.reason}
+                    consecutive={review.consecutive}
+                    onDone={() => setReview(null)}
+                    onRegenerate={() => regenerate('stories')}
+                    onTweak={tweak}
+                    regenerating={typeStatus.stories === 'loading'}
+                  />
+                ) : (
+                  <ResultReview
+                    preview={review.preview}
+                    onKeep={() => setReview(null)}
+                    onRegenerate={() => regenerate(review.preview.type)}
+                    onTweak={tweak}
+                    regenerating={typeStatus[review.preview.type] === 'loading'}
+                  />
+                )}
+              </div>
+            )}
+
             {/* State B controls: three independent content-type buttons. */}
-            {phase === 'B' && (
+            {phase === 'B' && review === null && (
               <div>
               {saveStatus === 'error' && (
                 <p className="mb-3 text-sm font-medium text-zinc-500">
                   Не вдалося зберегти — текст збережено локально, спробуй ще раз.
                 </p>
               )}
+              {/* What this dump already produced — the fan-out, traceable both
+                  ways. A dump is a compounding object, not a one-shot input. */}
+              {children.length > 0 && (
+                <div className="mb-3" data-testid="braindump-fanout">
+                  <p className="mb-1.5 text-[12px] font-semibold text-[color:var(--text-secondary)]">
+                    {fanOutSummary(children)}
+                  </p>
+                  <div className="rounded-[14px] border border-[color:var(--border)] bg-white/80 p-1.5">
+                    {children.map((child) => (
+                      <a
+                        key={child.contentId}
+                        href={CONTENT_TYPES[child.contentType].itemHref(child.contentId)}
+                        data-testid="braindump-child"
+                        className="flex items-center gap-2.5 rounded-[10px] px-2.5 py-2 transition-colors hover:bg-[color:var(--surface1)]"
+                      >
+                        <ContentTypeIcon type={child.contentType} size={16} />
+                        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[color:var(--foreground)]">
+                          {child.title}
+                        </span>
+                        {child.scheduledDate ? (
+                          <span className="shrink-0 text-[11px] text-[color:var(--text-muted)]">
+                            {dayHeaderLabel(child.scheduledDate)}
+                          </span>
+                        ) : (
+                          <span className="shrink-0 text-[11px] text-[color:var(--text-muted)]">
+                            без дати
+                          </span>
+                        )}
+                      </a>
+                    ))}
+                  </div>
+                  {/* 2.3 — a dump that produced a published piece is a proven
+                      seed. Going deeper starts WITH its context, not cold. */}
+                  {children.some((c) => c.status === 'published') && (
+                    <p
+                      data-testid="braindump-proven"
+                      className="mt-2 rounded-[12px] border border-[color:var(--border)] bg-[color:var(--accent-soft)] px-3 py-2 text-[12.5px] leading-snug text-[color:var(--foreground)]"
+                    >
+                      ✻ Звідси вже вийшло опубліковане. Тут явно є що копнути глибше — додай
+                      думку і зроби ще один формат.
+                    </p>
+                  )}
+                </div>
+              )}
+
               <p className="mb-3 text-sm font-medium text-zinc-500">Що зробимо з цієї ідеї?</p>
               <div className="grid grid-cols-3 gap-3">
                 {CONTENT_TYPE_ORDER.map((type) => {
