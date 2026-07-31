@@ -64,6 +64,8 @@ function createInMemoryWindowLimitClient(prefix: string, max: number, windowMs: 
 /** Groq: rant-to-reel, scenario builder, rant-to-stories, carousel text gen, template/scene AI steps. */
 const AI_LIMIT_PER_HOUR = readPositiveIntEnv('AI_LIMIT_PER_HOUR', 60);
 const TRANSCRIBE_LIMIT_PER_HOUR = readPositiveIntEnv('TRANSCRIBE_LIMIT_PER_HOUR', 40);
+/** Live word counter: many small polls per braindump, so its own larger budget. */
+const LIVE_COUNT_LIMIT_PER_HOUR = readPositiveIntEnv('LIVE_COUNT_LIMIT_PER_HOUR', 400);
 const SCAN_LIMIT_FREE_PER_DAY = readPositiveIntEnv('SCAN_LIMIT_FREE_PER_DAY', 5);
 const SCAN_LIMIT_PAID_PER_DAY = readPositiveIntEnv('SCAN_LIMIT_PAID_PER_DAY', 50);
 
@@ -85,6 +87,18 @@ export const scanLimitPaid = createInMemoryWindowLimitClient(
   'ratelimit:scan:paid',
   SCAN_LIMIT_PAID_PER_DAY,
   24 * 60 * 60 * 1000
+);
+
+/**
+ * Braindump live word counter (§4 / task 86d3wadg3). Deliberately SEPARATE from
+ * `transcribeLimit`: it fires every few seconds while recording, so sharing the
+ * transcription budget would starve the real save-the-transcript call — the one
+ * that must never fail.
+ */
+export const liveCountLimit = createInMemoryWindowLimitClient(
+  'ratelimit:livecount',
+  LIVE_COUNT_LIMIT_PER_HOUR,
+  60 * 60 * 1000,
 );
 
 /** Audio transcription (Groq STT on reuse / reference flows). */

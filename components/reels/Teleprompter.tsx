@@ -22,8 +22,11 @@ import {
  * back exactly the "one screen with a toggle" this mode replaces.
  */
 
-const SIZES = [26, 30, 36, 44, 54] as const;
-const DEFAULT_SIZE_INDEX = 2;
+// Smaller across the board (§4). Most users copy the text into their own
+// teleprompter app rather than reading from this screen, so the job here is to
+// be legible and scannable — not to fill the phone with three words.
+const SIZES = [17, 20, 24, 30, 38] as const;
+const DEFAULT_SIZE_INDEX = 1;
 
 export default function Teleprompter({ scenes }: { scenes: Scene[] }) {
   const beats = useMemo(() => toTeleprompterBeats(scenes), [scenes]);
@@ -99,18 +102,18 @@ export default function Teleprompter({ scenes }: { scenes: Scene[] }) {
       </div>
 
       <div
-        className="max-h-[68vh] overflow-y-auto px-6 py-10 sm:px-10"
+        className="max-h-[46vh] overflow-y-auto px-5 py-6 sm:px-8"
         style={{ overscrollBehavior: 'contain' }}
       >
         {beats.map((beat) => (
           <p
             key={beat.index}
             data-testid="teleprompter-beat"
-            className="mx-auto max-w-[30ch] text-balance font-semibold tracking-[-0.015em] text-white sm:max-w-[34ch]"
+            className="mx-auto max-w-[42ch] text-balance font-semibold tracking-[-0.01em] text-white sm:max-w-[48ch]"
             style={{
               fontSize: SIZES[sizeIndex],
-              lineHeight: 1.35,
-              marginTop: beat.index === 1 ? 0 : SIZES[sizeIndex] * 1.1,
+              lineHeight: 1.4,
+              marginTop: beat.index === 1 ? 0 : SIZES[sizeIndex] * 1.2,
             }}
           >
             {/* Structural beats are marked, never mixed into what's spoken. */}
@@ -123,6 +126,14 @@ export default function Teleprompter({ scenes }: { scenes: Scene[] }) {
           </p>
         ))}
       </div>
+
+      {/* Light-touch explainer (§4): most people paste this into the Instagram
+          camera's own teleprompter rather than reading from here, and that path
+          isn't discoverable unless someone says it. */}
+      <p className="border-t border-white/10 px-5 py-3 text-[11.5px] leading-relaxed text-white/45 sm:px-8">
+        Скопіюй текст і встав у суфлер в Instagram: камера → «Створити» → Рілс → значок суфлера
+        (≡) праворуч. Текст їхатиме перед очима, поки знімаєш.
+      </p>
     </div>
   );
 }

@@ -9,6 +9,7 @@ import SceneList from './SceneList';
 import CopyReferencePanel from './CopyReferencePanel';
 import ReelModeSwitch, { type ReelMode } from '@/components/reels/ReelModeSwitch';
 import Teleprompter from '@/components/reels/Teleprompter';
+import { reelHasWriting } from '@/lib/content/reelStructure';
 
 interface ProjectBuilderProps {
   project: Project;
@@ -102,7 +103,11 @@ export default function ProjectBuilder({
             {/* Reference sits FIRST on mobile: when you're writing from a reference
                 you keep going back to it, and having it under the whole scenario
                 meant scrolling past every scene to reach it. On desktop it stays
-                in the sticky right column. */}
+                in the sticky right column.
+
+                It opens only while the reel is EMPTY (§4). Once there is writing
+                on the page the reference has done its job and the panel is just
+                eating the screen, so it collapses to a chip you can reopen. */}
             <div className="order-first lg:order-none lg:col-span-3">
               <div className="lg:sticky lg:top-6">
                 <CopyReferencePanel
@@ -110,6 +115,7 @@ export default function ProjectBuilder({
                   existingScenes={scenes}
                   onScenesUpdate={setScenes}
                   onSceneAdded={setFocusSceneId}
+                  defaultCollapsed={reelHasWriting(scenes)}
                 />
               </div>
             </div>

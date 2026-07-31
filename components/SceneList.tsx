@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useRouter } from 'next/navigation';
 import { LayoutTemplate, X, Clock, Layers } from 'lucide-react';
 import {
   DndContext,
@@ -19,7 +20,15 @@ import {
 } from '@dnd-kit/sortable';
 import { Location, Project, Scene } from '@/lib/domain';
 import SceneCard from './SceneCard';
-import { reorderScenes, createScene, updateScene } from '@/app/actions';
+import {
+  reorderScenes,
+  createScene,
+  updateScene,
+  replaceScenesWithStructure,
+  createReelFromStructure,
+} from '@/app/actions';
+import { structureAction } from '@/lib/content/reelStructure';
+import StructureConflictSheet from '@/components/reels/StructureConflictSheet';
 import { estimateDialogueSeconds } from '@/lib/dialogueDuration';
 import {
   buildOptimisticScene,
@@ -93,6 +102,12 @@ export default function SceneList({
   const [glowSceneId, setGlowSceneId] = useState<string | null>(null);
   const [localFocusSceneId, setLocalFocusSceneId] = useState<string | null>(null);
   const [isFormulaPickerOpen, setIsFormulaPickerOpen] = useState(false);
+  // Structure re-selection (§4): the template awaiting a replace-or-spin-off
+  // decision, plus in-flight + error state for that decision.
+  const [pendingTemplate, setPendingTemplate] = useState<ReelFormulaTemplate | null>(null);
+  const [structureBusy, setStructureBusy] = useState(false);
+  const [structureError, setStructureError] = useState<string | null>(null);
+  const router = useRouter();
   const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const effectiveFocusSceneId = focusSceneId ?? localFocusSceneId;
 
@@ -208,73 +223,65 @@ export default function SceneList({
     })();
   };
 
+  /**
+   * Picking a structure never APPENDS (§4, task 86d3wadne). With nothing
+   * written we replace silently; with writing on the page we ask, because the
+   * only two honest options are "rewrite this" and "make a second reel".
+   */
+  const applyStructure = (template: ReelFormulaTemplate) => {
+    setStructureBusy(true);
+    void replaceScenesWithStructure(project.id, template.scenes)
+      .then((res) => {
+        if (!res.ok) {
+          setStructureError(res.error);
+          return;
+        }
+        onScenesUpdate(() => normalizeSceneOrder(res.scenes));
+        const first = res.scenes[0]?.id ?? null;
+        if (first) {
+          setExpandedSceneId(first);
+          setAnimateInSceneId(first);
+          setLocalFocusSceneId(first);
+          window.setTimeout(
+            () => setAnimateInSceneId((current) => (current === first ? null : current)),
+            950,
+          );
+        }
+      })
+      .finally(() => {
+        setStructureBusy(false);
+        setPendingTemplate(null);
+      });
+  };
+
   const handleFormulaSelect = (template: ReelFormulaTemplate) => {
     if (hasOptimisticScene) return;
-
-    const newScenesStartIndex = scenes.length;
-    const optimisticScenes = template.scenes.map((sceneName, index) => ({
-      ...buildOptimisticScene(project.id, newScenesStartIndex + index),
-      name: sceneName,
-      lines: '',
-    }));
-
-    const firstAddedSceneId = optimisticScenes[0]?.id ?? null;
-    if (!firstAddedSceneId) {
-      setIsFormulaPickerOpen(false);
+    setIsFormulaPickerOpen(false);
+    setStructureError(null);
+    if (structureAction(scenes) === 'ask') {
+      setPendingTemplate(template);
       return;
     }
+    applyStructure(template);
+  };
 
-    onScenesUpdate((prev) =>
-      normalizeSceneOrder([...prev, ...optimisticScenes])
-    );
-    setExpandedSceneId(firstAddedSceneId);
-    setAnimateInSceneId(firstAddedSceneId);
-    setLocalFocusSceneId(firstAddedSceneId);
-    setIsFormulaPickerOpen(false);
-    window.setTimeout(
-      () =>
-        setAnimateInSceneId((current) =>
-          current === firstAddedSceneId ? null : current
-        ),
-      950
-    );
-
-    void (async () => {
-      for (let idx = 0; idx < optimisticScenes.length; idx += 1) {
-        const optimisticScene = optimisticScenes[idx];
-        const nextOrderIndex = newScenesStartIndex + idx;
-        const newScene = await createScene(project.id, nextOrderIndex);
-
-        if (!newScene) {
-          onScenesUpdate((prev) =>
-            normalizeSceneOrder(
-              prev.filter((scene) => scene.id !== optimisticScene.id)
-            )
-          );
-          continue;
+  /** Spin the structure off into a SECOND reel and go there. */
+  const handleSpinOff = () => {
+    const template = pendingTemplate;
+    if (!template) return;
+    setStructureBusy(true);
+    void createReelFromStructure(template.name, template.scenes)
+      .then((res) => {
+        if (!res.ok) {
+          setStructureError(res.error);
+          return;
         }
-
-        const sceneDraft = {
-          name: optimisticScene.name,
-          lines: optimisticScene.lines,
-        };
-        onScenesUpdate((prev) =>
-          normalizeSceneOrder(
-            prev.map((scene) =>
-              scene.id === optimisticScene.id
-                ? { ...newScene, ...sceneDraft }
-                : scene
-            )
-          )
-        );
-        await updateScene(newScene.id, sceneDraft);
-
-        if (optimisticScene.id === firstAddedSceneId) {
-          setExpandedSceneId(newScene.id);
-          setLocalFocusSceneId(newScene.id);
-        }
-      }
-    })();
+        router.push(`/project/${res.projectId}`);
+      })
+      .finally(() => {
+        setStructureBusy(false);
+        setPendingTemplate(null);
+      });
   };
 
   if (scenes.length === 0) {
@@ -314,6 +321,19 @@ export default function SceneList({
           onClose={() => setIsFormulaPickerOpen(false)}
           onSelect={handleFormulaSelect}
         />
+        <StructureConflictSheet
+          open={pendingTemplate !== null}
+          structureName={pendingTemplate?.name ?? ''}
+          busy={structureBusy}
+          onClose={() => setPendingTemplate(null)}
+          onReplace={() => pendingTemplate && applyStructure(pendingTemplate)}
+          onSpinOff={handleSpinOff}
+        />
+        {structureError ? (
+          <p role="alert" className="mt-2 text-sm text-zinc-600">
+            {structureError}
+          </p>
+        ) : null}
       </>
     );
   }
@@ -519,6 +539,19 @@ export default function SceneList({
         onClose={() => setIsFormulaPickerOpen(false)}
         onSelect={handleFormulaSelect}
       />
+      <StructureConflictSheet
+        open={pendingTemplate !== null}
+        structureName={pendingTemplate?.name ?? ''}
+        busy={structureBusy}
+        onClose={() => setPendingTemplate(null)}
+        onReplace={() => pendingTemplate && applyStructure(pendingTemplate)}
+        onSpinOff={handleSpinOff}
+      />
+      {structureError ? (
+        <p role="alert" className="mt-2 text-sm text-zinc-600">
+          {structureError}
+        </p>
+      ) : null}
     </div>
   );
 }

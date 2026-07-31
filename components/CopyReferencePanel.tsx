@@ -8,6 +8,7 @@ import {
   importReferenceScenes,
 } from '@/app/actions';
 import ImportModeDialog from './ImportModeDialog';
+import { ChevronUp, Link as LinkIcon } from 'lucide-react';
 
 interface CopyReferencePanelProps {
   project: Project;
@@ -15,6 +16,9 @@ interface CopyReferencePanelProps {
   existingScenes: Scene[];
   onScenesUpdate: Dispatch<SetStateAction<Scene[]>>;
   onSceneAdded?: (sceneId: string) => void;
+  /** Start collapsed once the reel has writing — the panel has done its job
+   *  by then and was eating a third of the screen (§4). */
+  defaultCollapsed?: boolean;
 }
 
 interface ReferenceResult {
@@ -54,7 +58,9 @@ export default function CopyReferencePanel({
   existingScenes,
   onScenesUpdate,
   onSceneAdded,
+  defaultCollapsed = false,
 }: CopyReferencePanelProps) {
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const [reelUrl, setReelUrl] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
@@ -150,9 +156,39 @@ export default function CopyReferencePanel({
     }
   };
 
+  // Collapsed → a compact chip. Open on an empty reel (that is when a reference
+  // is actually useful), collapsed once there is writing, and reopenable either
+  // way — the state is the user's from the first tap.
+  if (collapsed) {
+    return (
+      <aside className="min-w-0">
+        <button
+          type="button"
+          onClick={() => setCollapsed(false)}
+          data-testid="copyref-chip"
+          className="app-pill w-full justify-center py-2.5 text-[13px]"
+        >
+          <LinkIcon className="h-3.5 w-3.5" strokeWidth={2} />
+          Скопіювати референс
+        </button>
+      </aside>
+    );
+  }
+
   return (
     <aside className="min-w-0 rounded-xl border border-[color:var(--border)] bg-white p-5 card-shadow">
-      <h2 className="font-display text-base font-semibold text-zinc-900">Скопіюй референс</h2>
+      <div className="flex items-start justify-between gap-2">
+        <h2 className="font-display text-base font-semibold text-zinc-900">Скопіюй референс</h2>
+        <button
+          type="button"
+          onClick={() => setCollapsed(true)}
+          aria-label="Згорнути"
+          title="Згорнути"
+          className="-mr-1 -mt-1 shrink-0 rounded-md p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
+        >
+          <ChevronUp className="h-4 w-4" strokeWidth={2} />
+        </button>
+      </div>
       <p className="mt-1 text-sm leading-normal text-zinc-600">
         Встав публічний Instagram Reel або TikTok, отримай транскрипт і заготовку сцен.
       </p>

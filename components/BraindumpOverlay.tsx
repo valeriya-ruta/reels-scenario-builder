@@ -48,6 +48,10 @@ import type { CarouselRantOutput } from '@/lib/carouselTypes';
  */
 
 const SOFT_WORD_TARGET = BRAINDUMP_WORD_TARGET;
+/** MediaRecorder timeslice — how often audio chunks become available. */
+const LIVE_COUNT_CHUNK_MS = 1000;
+/** How often the live counter asks for an interim read while recording. */
+const LIVE_COUNT_POLL_MS = 6000;
 const ACCENT = '#004BA8';
 
 type Phase = 'P' | 'A' | 'B';
@@ -115,6 +119,8 @@ export default function BraindumpOverlay({
   const [text, setText] = useState('');
   const [inputMode, setInputMode] = useState<InputMode>('voice');
   const [recording, setRecording] = useState(false);
+  // Words heard so far, updated while recording (§4). Reset on each take.
+  const [liveWords, setLiveWords] = useState(0);
   const [transcribing, setTranscribing] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -156,6 +162,12 @@ export default function BraindumpOverlay({
   const scrollRef = useRef<HTMLDivElement>(null);
   // Types whose generation is in flight (see runType — a ref, not state).
   const inFlight = useRef<Set<ContentType>>(new Set());
+  // Live word counter plumbing (§4).
+  const liveTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const liveInFlight = useRef(false);
+  // Set when «готово» is pressed mid-recording; consumed once the transcript
+  // arrives (see the effect under handleDone).
+  const pendingDone = useRef(false);
 
   useEffect(() => {
     textRef.current = text;
@@ -174,6 +186,8 @@ export default function BraindumpOverlay({
     setTypeStatus({ reels: 'idle', carousel: 'idle', stories: 'idle' });
     setReceipt([]);
     setReview(null);
+    pendingDone.current = false;
+    setLiveWords(0);
     setChildren([]);
     setAngle(initialAngle);
     if (initialIdea) {
@@ -206,6 +220,14 @@ export default function BraindumpOverlay({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  const stopLiveCount = useCallback(() => {
+    if (liveTimer.current) {
+      clearInterval(liveTimer.current);
+      liveTimer.current = null;
+    }
+    liveInFlight.current = false;
+  }, []);
 
   const stopStream = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -250,6 +272,44 @@ export default function BraindumpOverlay({
     [appendTranscript]
   );
 
+  /**
+   * Live word counter while speaking (§4, task 86d3wadg3).
+   *
+   * Every few seconds the audio captured SO FAR is sent for an interim pass and
+   * the count is updated. It kills the speak → stop → check → speak loop: the
+   * number moves while she is still talking, so she knows when she has enough.
+   *
+   * The interim result is deliberately a NUMBER only — the saved transcript
+   * still comes from the single Whisper pass on stop, so a lossy interim read
+   * can never corrupt what gets stored.
+   */
+  const startLiveCount = useCallback((mimeType: string) => {
+    stopLiveCount();
+    liveTimer.current = setInterval(() => {
+      if (liveInFlight.current || chunksRef.current.length === 0) return;
+      liveInFlight.current = true;
+      const blob = new Blob(chunksRef.current, { type: mimeType });
+      const fd = new FormData();
+      fd.append('audio', blob, 'live.webm');
+      fetch('/api/ideas/live-count', { method: 'POST', body: fd })
+        .then((r) => r.json())
+        .then((data: { words?: number | null }) => {
+          // Never let the counter go backwards: a truncated interim pass can
+          // read fewer words than the previous one, and a number that dips
+          // mid-sentence reads as the app losing what you just said.
+          if (typeof data.words === 'number') {
+            setLiveWords((prev) => Math.max(prev, data.words as number));
+          }
+        })
+        .catch(() => {
+          /* interim passes are allowed to fail silently */
+        })
+        .finally(() => {
+          liveInFlight.current = false;
+        });
+    }, LIVE_COUNT_POLL_MS);
+  }, [stopLiveCount]);
+
   const startRecording = useCallback(async () => {
     setError(null);
     try {
@@ -264,22 +324,28 @@ export default function BraindumpOverlay({
       recorder.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: mime || 'audio/webm' });
         stopStream();
+        stopLiveCount();
         if (blob.size > 0) void transcribe(blob);
       };
       mediaRecorderRef.current = recorder;
-      recorder.start();
+      // Timeslice so chunks land continuously — the live counter needs audio
+      // available WHILE recording, not only on stop.
+      recorder.start(LIVE_COUNT_CHUNK_MS);
       setRecording(true);
+      setLiveWords(0);
+      startLiveCount(mime || 'audio/webm');
     } catch {
       setError('Немає доступу до мікрофона. Дозволь доступ або введи текст.');
       setInputMode('type');
     }
-  }, [stopStream, transcribe]);
+  }, [stopStream, transcribe, startLiveCount, stopLiveCount]);
 
   const stopRecording = useCallback(() => {
     const recorder = mediaRecorderRef.current;
     if (recorder && recorder.state !== 'inactive') recorder.stop();
     setRecording(false);
-  }, []);
+    stopLiveCount();
+  }, [stopLiveCount]);
 
   const toggleRecording = useCallback(() => {
     if (recording) stopRecording();
@@ -331,9 +397,21 @@ export default function BraindumpOverlay({
     [angle]
   );
 
-  // Done → transition to State B and auto-save.
+  /**
+   * Done → State B + auto-save.
+   *
+   * The live counter (§4) can satisfy the 50-word gate while recording is still
+   * running, at which point `text` is still EMPTY — the real transcript only
+   * arrives from the Whisper pass on stop. So pressing done mid-take stops the
+   * recorder and defers the transition until that transcript lands, instead of
+   * refusing with "спочатку запиши" over words she has just said.
+   */
   const handleDone = useCallback(() => {
-    if (recording) stopRecording();
+    if (recording) {
+      stopRecording();
+      pendingDone.current = true;
+      return;
+    }
     if (!text.trim()) {
       setError('Спочатку запиши або введи ідею.');
       return;
@@ -341,6 +419,16 @@ export default function BraindumpOverlay({
     setPhase('B');
     void saveIdea(text, null);
   }, [recording, stopRecording, text, saveIdea]);
+
+  // The deferred half of handleDone: fires once the post-stop transcript exists.
+  useEffect(() => {
+    if (!pendingDone.current || transcribing) return;
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    pendingDone.current = false;
+    setPhase('B');
+    void saveIdea(trimmed, null);
+  }, [text, transcribing, saveIdea]);
 
   // Re-save edits made in State B (debounced), persisting the edited version.
   const handleEditInB = useCallback(
@@ -538,10 +626,14 @@ export default function BraindumpOverlay({
   if (!open) return null;
 
   const words = countWords(text);
+  // While recording, the transcript is still empty (it arrives on stop), so the
+  // counter reads from the live interim count instead. Whichever is larger wins,
+  // which also covers re-recording on top of an existing transcript.
+  const displayWords = recording ? Math.max(words, liveWords) : words;
   // 50-word gate (task 86d3dcwyy): a braindump must reach the target before the
   // user can turn it into content. The green "done/create" arrow is inactive
   // below the threshold and flips active at ≥50 as the count ticks up.
-  const reachedWordGate = words >= SOFT_WORD_TARGET;
+  const reachedWordGate = displayWords >= SOFT_WORD_TARGET;
 
   return (
     // One shared full-screen scrim for EVERY page braindump can open from (it is
@@ -784,13 +876,28 @@ export default function BraindumpOverlay({
               </div>
 
               <div className="flex items-center justify-between">
+                {/* While recording, this shows the LIVE count (§4) — the number
+                    moves as she talks, so she knows when she has enough without
+                    the speak → stop → check → speak loop. On stop it becomes the
+                    real transcript's count. */}
                 <span
                   data-testid="braindump-counter"
                   data-reached={reachedWordGate ? 'true' : 'false'}
-                  className="text-xs font-medium tabular-nums transition-colors"
+                  data-live={recording ? 'true' : 'false'}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium tabular-nums transition-colors"
                   style={{ color: reachedWordGate ? 'var(--success)' : '#a1a1aa' }}
                 >
-                  {words}/{SOFT_WORD_TARGET}
+                  {recording ? (
+                    <span
+                      aria-hidden
+                      className="h-1.5 w-1.5 rounded-full"
+                      style={{
+                        backgroundColor: reachedWordGate ? 'var(--success)' : ACCENT,
+                        animation: 'reels-planner-scene-glow 1.4s ease-in-out infinite',
+                      }}
+                    />
+                  ) : null}
+                  {displayWords}/{SOFT_WORD_TARGET}
                 </span>
 
                 <button

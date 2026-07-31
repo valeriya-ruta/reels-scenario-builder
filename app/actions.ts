@@ -989,3 +989,84 @@ export async function markProjectScenarioSeen(projectId: string): Promise<void> 
     .eq('id', projectId)
     .eq('user_id', user.id);
 }
+
+/**
+ * Apply a structure template to a reel by REPLACING its scenes (§4, 86d3wadne).
+ *
+ * Re-selecting a structure used to append, stacking a second scenario onto the
+ * first. This wipes the existing scenes and writes the template's in one go, so
+ * a re-pick is genuinely a re-pick. The caller only reaches this after either
+ * confirming (a written reel) or determining there was nothing to lose.
+ */
+export async function replaceScenesWithStructure(
+  projectId: string,
+  sceneNames: string[],
+): Promise<{ ok: true; scenes: Scene[] } | { ok: false; error: string }> {
+  const user = await requireAuth();
+  if (!user) return { ok: false, error: 'Необхідно увійти в акаунт.' };
+  if (!(await assertProjectOwner(projectId, user.id))) {
+    return { ok: false, error: 'Немає доступу до цього проєкту.' };
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const { error: deleteError } = await supabase.from('scenes').delete().eq('project_id', projectId);
+  if (deleteError) {
+    return { ok: false, error: 'Не вдалося очистити сцени. Спробуй ще раз.' };
+  }
+
+  const rows = sceneNames.map((name, index) => ({
+    project_id: projectId,
+    order_index: index,
+    ...DEFAULT_SCENE_VALUES,
+    name,
+    lines: '',
+  }));
+
+  const { data, error } = await supabase.from('scenes').insert(rows).select();
+  if (error || !data) {
+    return { ok: false, error: 'Не вдалося застосувати структуру. Спробуй ще раз.' };
+  }
+  return { ok: true, scenes: data as Scene[] };
+}
+
+/**
+ * Spin the chosen structure off into a SECOND reel, leaving the current one
+ * untouched — the other half of the re-selection choice. Returns the new
+ * project id so the caller can navigate to it.
+ */
+export async function createReelFromStructure(
+  name: string,
+  sceneNames: string[],
+): Promise<{ ok: true; projectId: string } | { ok: false; error: string }> {
+  const user = await requireAuth();
+  if (!user) return { ok: false, error: 'Необхідно увійти в акаунт.' };
+
+  const supabase = await createServerSupabaseClient();
+  const { data: project, error } = await supabase
+    .from('projects')
+    .insert({
+      name: name.slice(0, 120) || 'Без назви',
+      crew_mode: 'with_crew',
+      user_id: user.id,
+      project_type: 'reels',
+    })
+    .select('id')
+    .single();
+
+  if (error || !project) {
+    return { ok: false, error: 'Не вдалося створити рілс.' };
+  }
+
+  const rows = sceneNames.map((sceneName, index) => ({
+    project_id: project.id,
+    order_index: index,
+    ...DEFAULT_SCENE_VALUES,
+    name: sceneName,
+    lines: '',
+  }));
+  if (rows.length > 0) {
+    await supabase.from('scenes').insert(rows);
+  }
+
+  return { ok: true, projectId: project.id as string };
+}

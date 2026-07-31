@@ -637,41 +637,51 @@ export default function SceneCard({
                     />
                   </div>
 
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-zinc-700">
-                      Примітка для актора
-                    </label>
-                    <textarea
-                      value={scene.actor_note || ''}
-                      onChange={(e) => {
-                        onUpdate({ actor_note: e.target.value });
-                        persist({ actor_note: e.target.value });
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                      className="w-full rounded-[10px] border border-[color:var(--border)] bg-white px-3.5 py-2.5 text-[14px] leading-normal text-[color:var(--foreground)] placeholder-[color:var(--text-muted)] outline-none transition focus:border-[color:var(--accent)] focus:ring-2 focus:ring-[color:var(--accent)]/15"
-                      rows={2}
-                      placeholder="Примітка для актора..."
-                    />
-                  </div>
+                  {/* Editor / SMM handoff notes — HIDDEN (§4). Ruta works solo,
+                      so "note for the actor" and "note for the editor" address
+                      people who don't exist, and two textareas per scene is the
+                      most expensive space in the editor. Kept in code: this is
+                      the block that later becomes "instructions for my editor".
+                  */}
+                  {HANDOFF_NOTES_ENABLED ? (
+                    <>
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-zinc-700">
+                        Примітка для актора
+                      </label>
+                      <textarea
+                        value={scene.actor_note || ''}
+                        onChange={(e) => {
+                          onUpdate({ actor_note: e.target.value });
+                          persist({ actor_note: e.target.value });
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-full rounded-[10px] border border-[color:var(--border)] bg-white px-3.5 py-2.5 text-[14px] leading-normal text-[color:var(--foreground)] placeholder-[color:var(--text-muted)] outline-none transition focus:border-[color:var(--accent)] focus:ring-2 focus:ring-[color:var(--accent)]/15"
+                        rows={2}
+                        placeholder="Примітка для актора..."
+                      />
+                    </div>
 
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-zinc-700">
-                      Примітка для редактора
-                    </label>
-                    <textarea
-                      value={scene.editor_note || ''}
-                      onChange={(e) => {
-                        onUpdate({ editor_note: e.target.value });
-                        persist({
-                          editor_note: e.target.value,
-                        });
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                      className="w-full rounded-[10px] border border-[color:var(--border)] bg-white px-3.5 py-2.5 text-[14px] leading-normal text-[color:var(--foreground)] placeholder-[color:var(--text-muted)] outline-none transition focus:border-[color:var(--accent)] focus:ring-2 focus:ring-[color:var(--accent)]/15"
-                      rows={2}
-                      placeholder="Примітка для редактора..."
-                    />
-                  </div>
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-zinc-700">
+                        Примітка для редактора
+                      </label>
+                      <textarea
+                        value={scene.editor_note || ''}
+                        onChange={(e) => {
+                          onUpdate({ editor_note: e.target.value });
+                          persist({
+                            editor_note: e.target.value,
+                          });
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-full rounded-[10px] border border-[color:var(--border)] bg-white px-3.5 py-2.5 text-[14px] leading-normal text-[color:var(--foreground)] placeholder-[color:var(--text-muted)] outline-none transition focus:border-[color:var(--accent)] focus:ring-2 focus:ring-[color:var(--accent)]/15"
+                        rows={2}
+                        placeholder="Примітка для редактора..."
+                      />
+                    </div>
+                    </>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -681,6 +691,13 @@ export default function SceneCard({
     </div>
   );
 }
+
+/**
+ * Per-scene handoff notes (actor + editor) are switched OFF (§4). No teams,
+ * personal use only — they were pure space cost. Flip to re-enable; nothing
+ * else about them changed, and existing values stay in the database untouched.
+ */
+const HANDOFF_NOTES_ENABLED = false;
 
 function DurationToneIcon({ tone }: { tone: DurationTone }) {
   const common = 'h-3 w-3 shrink-0';
