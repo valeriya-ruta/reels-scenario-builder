@@ -16,9 +16,12 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core';
 import ContentCard from '@/components/content/ContentCard';
-import { setContentScheduledDate, setContentStatus } from '@/app/content-actions';
-import { nextStatus, PUBLISHED_STATUS, STATUS_COLORS } from '@/lib/content/statusSystem';
-import { dispatchContentPublished } from '@/lib/content/postedLinkEvent';
+import { setContentScheduledDate } from '@/app/content-actions';
+import { STATUS_COLORS } from '@/lib/content/statusSystem';
+import {
+  useAdvanceContentStatus,
+  useLiveStatuses,
+} from '@/lib/content/contentStatusStore';
 import { contentHref } from '@/lib/content/contentPiece';
 import PlanCreateMenu from '@/components/plan/PlanCreateMenu';
 import StagingPressureCard from '@/components/staging/StagingPressureCard';
@@ -121,34 +124,25 @@ export default function PlanCalendar({
   // DB write in the background and a rollback if it fails.
   const [dateById, setDateById] = useState<Record<string, string>>({});
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  // Optimistic status overrides for the ring tap inside a day card.
-  const [statusById, setStatusById] = useState<Record<string, ContentPiece['status']>>({});
   const router = useRouter();
+  const advanceStatus = useAdvanceContentStatus();
 
-  /** Ring tap on a day card — advance one stage, optimistic with rollback. */
-  const advance = useCallback((piece: ContentPiece) => {
-    const current = statusById[piece.id] ?? piece.status;
-    const next = nextStatus(piece.type, current);
-    if (!next) return;
-    setStatusById((m) => ({ ...m, [piece.id]: next }));
-    void setContentStatus(piece.refTable, piece.id, piece.type, next).then((res) => {
-      if (!res.ok) {
-        setStatusById((m) => ({ ...m, [piece.id]: current }));
-        return;
-      }
-      if (next === PUBLISHED_STATUS) dispatchContentPublished(piece.refTable, piece.id);
-    });
-  }, [statusById]);
-
-  const effective = useMemo(
-    () =>
-      pieces.map((p) => ({
-        ...p,
-        ...(dateById[p.id] ? { scheduledDate: dateById[p.id] } : {}),
-        ...(statusById[p.id] ? { status: statusById[p.id] } : {}),
-      })),
-    [pieces, dateById, statusById],
+  /** Ring tap on a day card — one stage, through the shared status store. */
+  const advance = useCallback(
+    (piece: ContentPiece) => {
+      void advanceStatus(piece);
+    },
+    [advanceStatus],
   );
+
+  // Dates stay local (drag is optimistic); status comes from the ONE store, so
+  // a piece on the calendar can never disagree with the same piece on Home.
+  const dated = useMemo(
+    () =>
+      pieces.map((p) => (dateById[p.id] ? { ...p, scheduledDate: dateById[p.id] } : p)),
+    [pieces, dateById],
+  );
+  const effective = useLiveStatuses(dated);
   const byDay = useMemo(() => groupByScheduledDate(effective), [effective]);
 
   const sensors = useSensors(

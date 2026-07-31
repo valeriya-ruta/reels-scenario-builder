@@ -1,49 +1,55 @@
 import { Suspense } from 'react';
 import WelcomeModal from '@/components/WelcomeModal';
 import Greeting from './Greeting';
-import Agenda from './Agenda';
-import HomeRecents from './HomeRecents';
-import Insights from './Insights';
-import WorkshopLessons from './WorkshopLessons';
-import StagingPressureCard from '@/components/staging/StagingPressureCard';
 import CoinBadge from './CoinBadge';
-import TodayWidget from './TodayWidget';
+import TodaySection from './TodaySection';
+import InboxPressureRow from './InboxPressureRow';
+import StatsPreview from './StatsPreview';
+import AllContentSection from './AllContentSection';
 import type { ContentPiece } from '@/lib/content/contentPiece';
-import type { ProducerInsights } from '@/lib/insights/producerInsights';
 
 /**
- * Home (Головна). The app opens as an assistant, not a menu: greeting → the
- * agenda («Сьогодні» / «Завтра» / dated days — what you're actually posting) →
- * recents → insights → lessons.
+ * Home (Головна) — ONE vertical stack, ranked by urgency (Prompt 7).
+ *
+ * This supersedes the earlier greeting + coin + today-widget layout and the
+ * agenda/recents/rhythm sections that grew around it. The order is the whole
+ * design:
+ *
+ *   1. greeting + coin   — who you are, how you're doing (the coin is the ONLY
+ *                          entry point to Нагороди)
+ *   2. Сьогодні          — what you're posting today, with «＋» to add to today
+ *   3. inbox row         — the unfinished pile, framed as pressure to finish;
+ *                          the inbox's only home in the app (no inbox tab, no
+ *                          standalone inbox screen — just this row and the list
+ *                          it opens)
+ *   4. Статистика        — a preview of the Insights tab, same data, «більше»
+ *   5. Весь контент      — everything, last, because it's the least urgent
  *
  * Deliberately NO grid of "create a reel / carousel / story" buttons: the user's
- * problem isn't choosing a format, it's knowing what to make — so the app leads
- * with the plan and keeps creation to one entry point.
+ * problem isn't choosing a format, it's knowing what to make.
+ *
+ * Bottom clearance is the shell's job (`.app-main-scroll`), so nothing here
+ * renders under the nav.
  */
 export default function HomeView({
   userName,
-  upcoming,
   todayKey,
-  recents,
+  today,
+  all,
   stagedCount,
   stagedOverdue,
-  insights,
-  today,
   postedCount,
 }: {
   userName?: string | null;
-  /** Everything scheduled today or later, any type. */
-  upcoming: ContentPiece[];
   todayKey: string;
-  recents: ContentPiece[];
-  /** Kept-but-undated work awaiting a decision (Розбір). */
+  /** Pieces scheduled for today. */
+  today: ContentPiece[];
+  /** Everything, for the bottom section and the statistics preview. */
+  all: ContentPiece[];
+  /** Kept-but-undated work awaiting a decision — the inbox count. */
   stagedCount: number;
   stagedOverdue: number;
-  /** Real output insights (§7) — ambient on the main page, not a nav tab. */
-  insights: ProducerInsights;
-  /** Pieces scheduled for today — the daily widget (Prompt 3). */
-  today: ContentPiece[];
-  /** Posted links logged, shown on the coin (Prompt 3). */
+  /** Posted links logged, shown on the coin. */
   postedCount: number;
 }) {
   return (
@@ -51,7 +57,8 @@ export default function HomeView({
       <Suspense fallback={null}>
         <WelcomeModal />
       </Suspense>
-      {/* Greeting left, coin right — who you are, how you're doing (Prompt 3). */}
+
+      {/* 1 — top bar. */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <Greeting name={userName} />
@@ -59,14 +66,17 @@ export default function HomeView({
         <CoinBadge count={postedCount} />
       </div>
 
-      <TodayWidget pieces={today} />
-      {/* The staging count sits directly under the plan: what's committed, then
-          what's still undecided. It disappears entirely at zero. */}
-      <StagingPressureCard count={stagedCount} overdue={stagedOverdue} />
-      <Agenda pieces={upcoming} todayKey={todayKey} />
-      <HomeRecents pieces={recents} />
-      <Insights insights={insights} />
-      <WorkshopLessons />
+      {/* 2 — today. */}
+      <TodaySection pieces={today} todayKey={todayKey} />
+
+      {/* 3 — the inbox, as one row. Disappears at zero. */}
+      <InboxPressureRow count={stagedCount} overdue={stagedOverdue} />
+
+      {/* 4 — statistics preview (same data as the Insights tab). */}
+      <StatsPreview pieces={all} />
+
+      {/* 5 — everything else. */}
+      <AllContentSection pieces={all} />
     </div>
   );
 }

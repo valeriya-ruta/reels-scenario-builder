@@ -84,6 +84,24 @@ export function stagingSummary(count: number): string {
 }
 
 /**
+ * The Home inbox row's line (Prompt 7). Pressure, not storage: a neutral label
+ * («Чернетки», «Збережене») invites the pile to grow, which is the failure mode
+ * staging exists to prevent — so the row says how many are UNFINISHED and asks
+ * to finish them. Ukrainian plurals are not optional here.
+ */
+export function unfinishedLine(count: number): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) {
+    return `${count} ідея не завершена — давай її завершимо!`;
+  }
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+    return `${count} ідеї не завершені — давай їх завершимо!`;
+  }
+  return `${count} ідей не завершені — давай їх завершимо!`;
+}
+
+/**
  * Guard against dumping a whole generated batch into staging at once (4.4).
  * A batch bigger than this is a graveyard in the making, so the caller must
  * route it through a review instead of writing it straight to staging.

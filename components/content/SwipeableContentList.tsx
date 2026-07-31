@@ -7,11 +7,13 @@ import DateSheet from '@/components/content/DateSheet';
 import ContentCard from '@/components/content/ContentCard';
 import SwipeRow from '@/components/content/SwipeRow';
 import ProposingEmptyState from '@/components/propose/ProposingEmptyState';
-import { setContentStatus, setContentScheduledDate } from '@/app/content-actions';
+import { setContentScheduledDate } from '@/app/content-actions';
 import { contentHref, opensBraindumpOverlay, type ContentPiece } from '@/lib/content/contentPiece';
 import { dispatchOpenBraindumpIdea } from '@/lib/content/braindumpIdeaEvent';
-import { dispatchContentPublished } from '@/lib/content/postedLinkEvent';
-import { nextStatus, PUBLISHED_STATUS, type ContentStatus } from '@/lib/content/statusSystem';
+import {
+  useAdvanceContentStatus,
+  useLiveStatuses,
+} from '@/lib/content/contentStatusStore';
 
 /**
  * Sleek hairline list for a single content type (carousel / reels / …), matching
@@ -58,9 +60,8 @@ export default function SwipeableContentList({
 }) {
   const HeaderIcon = HEADER_ICONS[iconKey];
   const router = useRouter();
+  const advanceStatus = useAdvanceContentStatus();
   const [items, setItems] = useState<ContentPiece[]>(pieces);
-  // Optimistic status overrides for ring-tap-advance (task 86d3czf78).
-  const [statusById, setStatusById] = useState<Record<string, ContentStatus>>({});
   const [openId, setOpenId] = useState<string | null>(null);
   const [armedId, setArmedId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -71,6 +72,9 @@ export default function SwipeableContentList({
 
   useEffect(() => setItems(pieces), [pieces]);
   useEffect(() => () => { if (undoTimer.current) clearTimeout(undoTimer.current); }, []);
+
+  // Same canonical status every other surface reads (Prompt 9).
+  const rows = useLiveStatuses(items);
 
   const closeAll = useCallback(() => {
     setOpenId(null);
@@ -136,27 +140,17 @@ export default function SwipeableContentList({
   };
 
   // Ring-tap-advance — the only status control (task 86d3czf78). One tap moves
-  // the piece exactly one stage along its track; optimistic with rollback.
+  // the piece exactly one stage along its track, through the shared store.
   const advance = useCallback(
     (piece: ContentPiece) => {
       if (opensBraindumpOverlay(piece)) {
         dispatchOpenBraindumpIdea(piece.id, piece.text ?? piece.title);
         return;
       }
-      const current = statusById[piece.id] ?? piece.status;
-      const next = nextStatus(piece.type, current);
-      if (!next) return; // already at the final stage → gentle no-op
       vibrate(8);
-      setStatusById((m) => ({ ...m, [piece.id]: next }));
-      void setContentStatus(piece.refTable, piece.id, piece.type, next).then((res) => {
-        if (!res.ok) {
-          setStatusById((m) => ({ ...m, [piece.id]: current })); // roll back
-          return;
-        }
-        if (next === PUBLISHED_STATUS) dispatchContentPublished(piece.refTable, piece.id);
-      });
+      void advanceStatus(piece);
     },
-    [statusById],
+    [advanceStatus],
   );
 
   return (
@@ -196,8 +190,7 @@ export default function SwipeableContentList({
         </div>
       ) : (
         <ul className="pt-3">
-          {items.map((piece) => {
-            const status = statusById[piece.id] ?? piece.status;
+          {rows.map((piece) => {
             return (
               <SwipeRow
                 key={piece.id}
@@ -223,7 +216,7 @@ export default function SwipeableContentList({
                   router.push(contentHref(piece));
                 }}
               >
-                <ContentCard piece={{ ...piece, status }} onAdvance={() => advance(piece)} hideTypeTag />
+                <ContentCard piece={piece} onAdvance={() => advance(piece)} hideTypeTag />
               </SwipeRow>
             );
           })}
@@ -231,7 +224,7 @@ export default function SwipeableContentList({
       )}
 
       {undo ? (
-        <div className="pointer-events-none fixed inset-x-0 bottom-24 z-[80] flex justify-center px-4">
+        <div className="app-float-above-nav pointer-events-none z-[80] flex justify-center px-4">
           <div className="pointer-events-auto w-full max-w-sm overflow-hidden rounded-2xl bg-zinc-900 text-white shadow-xl">
             <div className="flex items-center justify-between gap-3 px-4 py-3">
               <span className="truncate text-sm">

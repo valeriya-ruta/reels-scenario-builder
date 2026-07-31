@@ -73,6 +73,26 @@
   --border-radius-md: 0.375rem;
   --border-radius-xl: 1rem;
   --border-radius-2xl: 1.25rem;
+
+  /* ── Bottom-nav clearance (global, Prompt 10) ────────────────────────────
+     The floating nav is a 56px bar sitting 12px off the bottom, and the Create
+     FAB rises another 20px above its top edge — so 88px is the real band of
+     screen the nav occludes. Nothing may render inside it.
+
+     Every scrolling surface reserves `--nav-clear` at the bottom, and every
+     fixed action bar is positioned AT `--nav-clear` rather than at 0. Both read
+     the same variable, so the band is defined once: no screen can be "fixed"
+     with a different number and drift back out of sync. */
+  --nav-height: 88px;
+  --nav-clear: calc(var(--nav-height) + env(safe-area-inset-bottom, 0px));
+}
+
+/* Desktop uses the sidebar — the bottom nav is `md:hidden`, so the band is
+   zero and screens reclaim the space. */
+@media (min-width: 768px) {
+  :root {
+    --nav-height: 0px;
+  }
 }
 
 @theme inline {
@@ -191,14 +211,52 @@ button:disabled,
   min-height: 100vh;
 }
 
-/* Standard page shell: centred column, mobile-first gutters, nav clearance. */
+/* Standard page shell: centred column, mobile-first gutters.
+   Nav clearance is NOT here — it belongs to the scroll container
+   (`.app-main-scroll`), so screens that don't use `.app-page` are covered too. */
 .app-page {
   width: 100%;
   max-width: 640px;
   margin-inline: auto;
   padding-inline: 16px;
   padding-top: 20px;
-  padding-bottom: 110px;
+  padding-bottom: 24px;
+}
+
+/* The app's single scroll container (AppShell's <main>). This is the ONE place
+   nav clearance is reserved, which is what makes the fix global: a new screen
+   inherits it without knowing the nav exists (Prompt 10). */
+.app-main-scroll {
+  padding-bottom: var(--nav-clear);
+}
+
+/* Immersive editors hide the nav entirely — they own the whole viewport. */
+.app-main-scroll[data-immersive='true'] {
+  padding-bottom: 0;
+}
+
+@media (min-width: 768px) {
+  .app-main-scroll {
+    padding-bottom: 24px;
+  }
+}
+
+/* Fixed action bar pinned in the thumb zone. Sits ON TOP of the nav band, never
+   under it — this is what un-traps the buttons that were unreachable. */
+.app-action-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: var(--nav-clear);
+  z-index: 60;
+}
+
+/* Transient floating layer (undo toasts, hints): clears the nav the same way. */
+.app-float-above-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--nav-clear) + 12px);
 }
 
 /* One page-title treatment everywhere. */

@@ -139,9 +139,13 @@ export default function RewardsView({ initialCount }: { initialCount: number }) 
         </section>
       </div>
 
-      {/* Thumb zone (§1 of the UX rounds): the repeated action lives at the bottom. */}
+      {/* Thumb zone (§1 of the UX rounds): the repeated action lives at the
+          bottom — but ABOVE the nav, not under it. This bar used to be pinned
+          at `bottom-0` with a lower z-index than the floating nav, so «Додати
+          ще одне» rendered behind it and could not be tapped at all (Prompt 10).
+          `.app-action-bar` pins it at `--nav-clear` instead. */}
       <div
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-[color:var(--border)] bg-[color:var(--background)]/95 px-4 pb-[calc(12px+env(safe-area-inset-bottom))] pt-3 backdrop-blur"
+        className="app-action-bar border-t border-[color:var(--border)] bg-[color:var(--background)]/95 px-4 pb-3 pt-3 backdrop-blur"
         style={{ boxShadow: '0 -2px 20px rgba(0,0,0,0.06)' }}
       >
         <div className="mx-auto max-w-2xl">

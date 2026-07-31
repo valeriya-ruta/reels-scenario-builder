@@ -7,20 +7,22 @@ import ProposingEmptyState from '@/components/propose/ProposingEmptyState';
 import type { ContentPiece } from '@/lib/content/contentPiece';
 
 /**
- * Home "Твій контент" recents (app UI system). A titled section over a grouped
- * card of content rows, with "Усі" to the full library — the standard
- * section-header + card-group pattern.
+ * ВЕСЬ КОНТЕНТ — the bottom of the stack (Prompt 7).
+ *
+ * Everything, all types, all statuses. It sits last on purpose: the stack is
+ * ranked by urgency, and «what exists» is the least urgent question on the
+ * screen. «Усі» opens the full library with its filters.
  */
-export default function HomeRecents({ pieces }: { pieces: ContentPiece[] }) {
+export default function AllContentSection({ pieces }: { pieces: ContentPiece[] }) {
   return (
-    <section className="space-y-2.5" aria-labelledby="recents-heading">
+    <section className="space-y-2.5" aria-labelledby="all-content-heading">
       <div className="flex items-center justify-between px-0.5">
-        <h2 id="recents-heading" className="app-section-label">
-          Твій контент
+        <h2 id="all-content-heading" className="app-section-label">
+          Весь контент
         </h2>
         <Link
           href="/content"
-          data-testid="recents-all-link"
+          data-testid="all-content-link"
           className="inline-flex items-center gap-0.5 text-[13px] font-semibold text-[color:var(--accent)]"
         >
           Усі
@@ -29,14 +31,14 @@ export default function HomeRecents({ pieces }: { pieces: ContentPiece[] }) {
       </div>
 
       {pieces.length === 0 ? (
-        <div data-testid="recents-empty">
+        <div data-testid="all-content-empty">
           <ProposingEmptyState
             headline="Почнімо з одного з цих"
             sub="Тапни напрямок — далі просто наговори своїми словами."
           />
         </div>
       ) : (
-        <div data-testid="recents-list">
+        <div data-testid="all-content-list">
           <ContentRows pieces={pieces} />
         </div>
       )}

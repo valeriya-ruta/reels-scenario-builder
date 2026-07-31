@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
+import { usePathname } from 'next/navigation';
+import { isImmersiveEditorRoute } from '@/lib/immersiveEditorRoute';
 import Sidebar from './Sidebar';
 import BottomNav from './BottomNav';
 import { NavBadgeProvider, NavBadgePathSync } from './NavBadgeContext';
@@ -23,6 +25,10 @@ const MIN_WIDTH = 160;
 const MAX_WIDTH = 420;
 
 export default function AppShell({ children, userName, userEmail }: AppShellProps) {
+  const pathname = usePathname();
+  // Immersive editors render without the bottom nav, so they must NOT reserve
+  // the nav band — see `.app-main-scroll` (Prompt 10).
+  const immersive = isImmersiveEditorRoute(pathname ?? '');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_WIDTH);
   const [isResizing, setIsResizing] = useState(false);
@@ -136,8 +142,13 @@ export default function AppShell({ children, userName, userEmail }: AppShellProp
                   )}
                 </div>
 
+                {/* THE scroll container. Bottom padding = nav height +
+                    safe-area inset, applied once here (`.app-main-scroll`) so
+                    every screen — including ones that don't use `.app-page` —
+                    is guaranteed to scroll clear of the nav (Prompt 10). */}
                 <main
-                  className="page-enter flex min-h-0 flex-1 flex-col overflow-y-auto px-0 pb-28 pt-0 md:px-6 md:py-6"
+                  data-immersive={immersive ? 'true' : 'false'}
+                  className="page-enter app-main-scroll flex min-h-0 flex-1 flex-col overflow-y-auto px-0 pt-0 md:px-6 md:pt-6"
                   style={{ background: 'var(--canvas)' }}
                 >
                   {children}

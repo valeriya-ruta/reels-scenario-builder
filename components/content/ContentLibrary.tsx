@@ -67,7 +67,7 @@ export default function ContentLibrary({ pieces }: { pieces: ContentPiece[] }) {
       </div>
 
       {hint ? (
-        <div className="pointer-events-none fixed inset-x-0 bottom-24 z-[80] flex justify-center px-4">
+        <div className="app-float-above-nav pointer-events-none z-[80] flex justify-center px-4">
           <div className="rounded-full bg-black/85 px-4 py-2 text-sm font-medium text-white shadow-lg">
             {hint}
           </div>

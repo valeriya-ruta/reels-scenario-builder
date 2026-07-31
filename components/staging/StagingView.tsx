@@ -10,6 +10,7 @@ import TapButton from '@/components/ui/TapButton';
 import { displayTitle } from '@/lib/content/displayTitle';
 import { setContentScheduledDate, deleteContentPiece } from '@/app/content-actions';
 import { contentHref, type ContentPiece } from '@/lib/content/contentPiece';
+import { useLiveStatuses } from '@/lib/content/contentStatusStore';
 import { TYPE_LABELS, STATUS_LABELS, STATUS_COLORS } from '@/lib/content/statusSystem';
 import {
   sortByPressure,
@@ -53,7 +54,9 @@ export default function StagingView({
   nowIso: string;
 }) {
   const router = useRouter();
-  const [items, setItems] = useState<ContentPiece[]>(() => sortByPressure(initial));
+  const [rows, setItems] = useState<ContentPiece[]>(() => sortByPressure(initial));
+  // Same canonical status as Home / План / Інсайти (Prompt 9).
+  const items = useLiveStatuses(rows);
   const [dateFor, setDateFor] = useState<ContentPiece | null>(null);
   const [killing, setKilling] = useState<string | null>(null);
   // Which item is expanded for reading. One at a time: the pile is worked top

@@ -17,6 +17,8 @@ type ApifyPostItem = {
   videoDuration?: number | null;
   timestamp?: string | null;
   shortCode?: string | null;
+  /** Post image / video still — the Insights list's thumbnail (Prompt 8). */
+  displayUrl?: string | null;
   type?: string | null;
   productType?: string | null;
   ownerUsername?: string | null;
@@ -66,6 +68,14 @@ export function normalizeApifyPost(raw: unknown): InsightsPayload | null {
     ...(num(item.videoDuration) !== undefined ? { durationSec: num(item.videoDuration) } : {}),
     ...(item.timestamp ? { postedAt: item.timestamp } : {}),
     ...(item.shortCode ? { shortcode: item.shortCode } : {}),
+    /**
+     * Stored as given. Instagram's CDN URLs are signed and DO expire, so this is
+     * a best-effort thumbnail: the UI must fall back rather than reserve a
+     * broken image box for it.
+     */
+    ...(typeof item.displayUrl === 'string' && item.displayUrl.startsWith('http')
+      ? { thumbnail: item.displayUrl }
+      : {}),
     ...(item.productType ? { productType: item.productType } : {}),
     // Stamped so a stored payload can always be traced to how it was obtained.
     provider: 'apify/instagram-scraper',

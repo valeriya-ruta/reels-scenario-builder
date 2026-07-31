@@ -3,7 +3,6 @@ import { requireAuth } from '@/lib/auth';
 import { getAllContent } from '@/lib/content/contentList';
 import { dateKey } from '@/lib/content/calendar';
 import { stagedPieces, countNeedingDecision } from '@/lib/content/staging';
-import { buildProducerInsights } from '@/lib/insights/producerInsights';
 import { countPostedLinks } from '@/app/posted-actions';
 import HomeView from '@/components/home/HomeView';
 
@@ -15,21 +14,15 @@ export default async function DashboardPage() {
     redirect('/');
   }
 
-  // One read powers both sections: everything scheduled for today (the «Сьогодні»
-  // plan) and the latest few across all types (recents; full list at /content).
+  // ONE read powers the whole stack — today, the inbox count, the statistics
+  // preview and the all-content list are all views of the same objects, so they
+  // cannot disagree about a piece's status or its date (Prompt 9).
   const all = await getAllContent();
   const now = new Date();
   const todayKey = dateKey(now.getFullYear(), now.getMonth(), now.getDate());
-  // Everything from today onwards, soonest first — the agenda's source.
-  const upcoming = all
-    .filter((p) => (p.scheduledDate?.slice(0, 10) ?? '') >= todayKey)
-    .sort((a, b) => (a.scheduledDate ?? '').localeCompare(b.scheduledDate ?? ''));
-  const recents = all.slice(0, 6);
-  // Kept-but-undecided work — the Розбір count, shown as pressure on Home.
-  const staged = stagedPieces(all);
-  // Today only — the daily widget (Prompt 3). The agenda below still answers
-  // "and what's next?".
   const today = all.filter((p) => p.scheduledDate?.slice(0, 10) === todayKey);
+  // Kept-but-undecided work — the number the inbox row applies pressure with.
+  const staged = stagedPieces(all);
   const nowIso = now.toISOString();
 
   const fullName =
@@ -42,13 +35,11 @@ export default async function DashboardPage() {
   return (
     <HomeView
       userName={firstName}
-      upcoming={upcoming}
       todayKey={todayKey}
-      recents={recents}
+      today={today}
+      all={all}
       stagedCount={staged.length}
       stagedOverdue={countNeedingDecision(staged, nowIso)}
-      insights={buildProducerInsights(all, todayKey)}
-      today={today}
       postedCount={await countPostedLinks()}
     />
   );

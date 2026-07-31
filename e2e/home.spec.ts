@@ -3,8 +3,9 @@ import { ACTIVE_STATE } from './utils/authPaths';
 import { watchConsoleErrors } from './utils/consoleErrors';
 
 /**
- * Home (Головна) page. Authenticated; skips cleanly when E2E_ACTIVE_*
- * credentials are not configured (same pattern as the other authed specs).
+ * Home (Головна) — the one urgency-ranked stack (Prompt 7). Authenticated;
+ * skips cleanly when E2E_ACTIVE_* credentials are not configured (same pattern
+ * as the other authed specs).
  */
 const hasActive = !!process.env.E2E_ACTIVE_EMAIL && !!process.env.E2E_ACTIVE_PASSWORD;
 
@@ -12,21 +13,24 @@ test.describe('Home (Головна)', () => {
   test.skip(!hasActive, 'Requires E2E_ACTIVE_* credentials and a seeded authenticated user.');
   test.use({ storageState: ACTIVE_STATE });
 
-  test('renders as the default screen with greeting + all sections', async ({ page }) => {
+  test('renders the whole stack, in order', async ({ page }) => {
     const watcher = watchConsoleErrors(page);
     await page.goto('/dashboard');
 
     const greeting = page.getByTestId('home-greeting');
     await expect(greeting).toBeVisible();
-    // Greeting is one of the three time-of-day variants.
     await expect(greeting).toContainText(/Доброго ранку|Добрий день|Добрий вечір/);
 
-    await expect(page.getByRole('heading', { name: 'Твій контент' })).toBeVisible();
-    await expect(page.getByTestId('recents-all-link')).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Уроки воркшопу' })).toBeVisible();
+    // Coin (the gamification entry point) sits opposite the greeting.
+    await expect(page.getByTestId('coin-badge')).toBeVisible();
 
-    // 86d39e36r: the leftover "Ruta / Твоя контент-подружка" app header must not
-    // show on mobile main screens.
+    // Sections, top to bottom.
+    await expect(page.getByRole('heading', { name: 'Сьогодні' })).toBeVisible();
+    await expect(page.getByTestId('today-add')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Статистика' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Весь контент' })).toBeVisible();
+
+    // 86d39e36r: the leftover app header must not show on mobile main screens.
     await expect(page.getByText('Твоя контент-подружка')).not.toBeVisible();
 
     expect(watcher.errors, watcher.errors.join('\n')).toEqual([]);
@@ -45,61 +49,56 @@ test.describe('Home (Головна)', () => {
     }
   });
 
-  test('recents list (or empty state) renders without chevrons', async ({ page }) => {
-    await page.goto('/dashboard');
-    const list = page.getByTestId('recents-list');
-    const empty = page.getByTestId('recents-empty');
-    // Exactly one of the two states is shown.
-    await expect(list.or(empty)).toBeVisible();
-
-    if (await list.isVisible()) {
-      const rows = list.locator('[data-content-id]');
-      const count = await rows.count();
-      expect(count).toBeGreaterThan(0);
-      // Subline carries the status label + type chip — assert a type label is present.
-      await expect(rows.first()).toContainText(/Рілс|Карусель|Сторіс|Ідея/);
-    }
-  });
-
-  test('insights teaser shows a blurred fake preview with a "Скоро" lockup, not navigable', async ({
+  test('Сьогодні shows real cards or a PROPOSING empty state — never "нічого немає"', async ({
     page,
   }) => {
     await page.goto('/dashboard');
-    const card = page.getByTestId('insights-skeleton');
-    await expect(card).toBeVisible();
-    // Sharp lockup + caption on top of the blur.
-    await expect(card).toContainText('Скоро');
-    await expect(card).toContainText('Тут зʼявиться що працює, а що ні');
-    // Realistic FAKE content rendered behind the blur (static placeholders).
-    await expect(card).toContainText('12.4k переглядів');
-    await expect(card).toContainText('19:00');
-    // Non-interactive: no links/navigable rows inside the teaser.
-    await expect(card.locator('a')).toHaveCount(0);
+    const list = page.getByTestId('today-list');
+    const empty = page.getByTestId('today-empty');
+    await expect(list.or(empty)).toBeVisible();
+
+    if (await empty.isVisible()) {
+      await expect(empty).toContainText('Зробимо щось на сьогодні');
+      await expect(empty.getByTestId('proposing-empty')).toBeVisible();
+    }
   });
 
-  test('insights skeleton dismisses and stays gone after reload', async ({ page }) => {
+  test('the ＋ on Сьогодні offers the four create options', async ({ page }) => {
     await page.goto('/dashboard');
-    const card = page.getByTestId('insights-skeleton');
-    await expect(card).toBeVisible();
-    await expect(card).toContainText('Скоро');
-
-    await page.getByTestId('insights-dismiss').click();
-    await expect(card).toHaveCount(0);
-
-    await page.reload();
-    await expect(page.getByTestId('insights-skeleton')).toHaveCount(0);
+    await page.getByTestId('today-add').click();
+    for (const id of ['ideas', 'reels', 'carousel', 'stories']) {
+      await expect(page.getByTestId(`today-add-${id}`)).toBeVisible();
+    }
   });
 
-  test('workshop lesson row is tappable', async ({ page }) => {
+  test('the coin opens Нагороди', async ({ page }) => {
     await page.goto('/dashboard');
-    const firstLesson = page.getByTestId('workshop-row').first();
-    await expect(firstLesson).toBeVisible();
-    await expect(firstLesson).toHaveAttribute('href', /youtube\.com/);
+    await page.getByTestId('coin-badge').click();
+    await expect(page).toHaveURL(/\/rewards/);
   });
 
-  test('"Усі" link navigates to the full content library', async ({ page }) => {
+  test('the inbox row is the only inbox, and opens the staging list', async ({ page }) => {
     await page.goto('/dashboard');
-    await page.getByTestId('recents-all-link').click();
+    const row = page.getByTestId('inbox-pressure-row');
+    // The row renders only when there IS a pile — an empty inbox disappears.
+    if (await row.isVisible()) {
+      await expect(row).toContainText(/не заверше/);
+      await expect(page.getByTestId('inbox-pressure-count')).toBeVisible();
+      await row.click();
+      await expect(page).toHaveURL(/\/staging/);
+    }
+    // Either way there is no inbox tab in the bottom nav.
+    const nav = page.getByRole('navigation', { name: 'Основна навігація' });
+    await expect(nav.getByText(/Вхідні|Інбокс/)).toHaveCount(0);
+  });
+
+  test('«більше» routes to the Insights tab, «Усі» to the content library', async ({ page }) => {
+    await page.goto('/dashboard');
+    await page.getByTestId('stats-more-link').click();
+    await expect(page).toHaveURL(/\/insights/);
+
+    await page.goto('/dashboard');
+    await page.getByTestId('all-content-link').click();
     await expect(page).toHaveURL(/\/content/);
   });
 });

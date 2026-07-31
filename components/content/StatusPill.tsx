@@ -3,9 +3,7 @@
 import { useState } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
 import BottomSheet from '@/components/ui/BottomSheet';
-import { setContentStatus } from '@/app/content-actions';
-import { dispatchContentPublished } from '@/lib/content/postedLinkEvent';
-import { PUBLISHED_STATUS } from '@/lib/content/statusSystem';
+import { useLiveStatus, useSetContentStatus } from '@/lib/content/contentStatusStore';
 import {
   STATUS_COLORS,
   STATUS_LABELS,
@@ -34,23 +32,18 @@ export default function StatusPill({
   initialStatus: ContentStatus;
   size?: 'sm' | 'md';
 }) {
-  const [status, setStatus] = useState<ContentStatus>(initialStatus);
+  // The editor's pill reads the SAME status as every list and calendar card —
+  // an editor that kept its own copy is half of how one object ended up with
+  // two statuses on screen (Prompt 9).
+  const status = useLiveStatus(id, initialStatus);
+  const setStatus = useSetContentStatus();
   const [open, setOpen] = useState(false);
   const track = trackFor(type);
 
   const choose = async (next: ContentStatus) => {
     setOpen(false);
-    if (next === status) return;
-    const prev = status;
-    setStatus(next);
-    const res = await setContentStatus(refTable, id, type, next);
-    if (!res.ok) {
-      setStatus(prev);
-      return;
-    }
-    // Ask for the link the moment it goes live. One shared host renders the
-    // sheet, so every status path behaves identically.
-    if (next === PUBLISHED_STATUS) dispatchContentPublished(refTable, id);
+    // Rollback, the «got a link?» prompt and revalidation all live in the store.
+    await setStatus({ id, refTable, type, status }, next);
   };
 
   const color = STATUS_COLORS[status] ?? '#9A9A9A';

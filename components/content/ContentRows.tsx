@@ -1,14 +1,16 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import SwipeRow from '@/components/content/SwipeRow';
 import ContentCard from '@/components/content/ContentCard';
-import { setContentStatus, deleteContentPiece, setContentScheduledDate } from '@/app/content-actions';
+import { deleteContentPiece, setContentScheduledDate } from '@/app/content-actions';
 import { contentHref, opensBraindumpOverlay, type ContentPiece } from '@/lib/content/contentPiece';
 import { OPEN_BRAINDUMP_IDEA_EVENT } from '@/lib/content/braindumpIdeaEvent';
-import { dispatchContentPublished } from '@/lib/content/postedLinkEvent';
-import { nextStatus, PUBLISHED_STATUS, type ContentStatus } from '@/lib/content/statusSystem';
+import {
+  useAdvanceContentStatus,
+  useLiveStatuses,
+} from '@/lib/content/contentStatusStore';
 import DateSheet from '@/components/content/DateSheet';
 
 /**
@@ -39,8 +41,8 @@ export default function ContentRows({
   onHint?: (message: string) => void;
 }) {
   const router = useRouter();
+  const advanceStatus = useAdvanceContentStatus();
   const [items, setItems] = useState<ContentPiece[]>(initialPieces);
-  const [statusById, setStatusById] = useState<Record<string, ContentStatus>>({});
   const [openId, setOpenId] = useState<string | null>(null);
   const [armedId, setArmedId] = useState<string | null>(null);
   const [undo, setUndo] = useState<{ piece: ContentPiece; index: number } | null>(null);
@@ -51,10 +53,11 @@ export default function ContentRows({
   useEffect(() => setItems(initialPieces), [initialPieces]);
   useEffect(() => () => { if (undoTimer.current) clearTimeout(undoTimer.current); }, []);
 
-  const pieces = useMemo(
-    () => items.map((p) => ({ ...p, status: statusById[p.id] ?? p.status })),
-    [items, statusById],
-  );
+  // Status comes from the ONE app-wide store, never from a copy owned by this
+  // list — Home mounts this component three times over overlapping data, and
+  // per-instance copies are exactly how the same object used to render two
+  // different statuses on one screen (Prompt 9).
+  const pieces = useLiveStatuses(items);
 
   const closeAll = useCallback(() => {
     setOpenId(null);
@@ -71,34 +74,19 @@ export default function ContentRows({
     );
   }, []);
 
-  const persist = useCallback(
-    async (piece: ContentPiece, next: ContentStatus, prev: ContentStatus) => {
-      setStatusById((m) => ({ ...m, [piece.id]: next }));
-      const res = await setContentStatus(piece.refTable, piece.id, piece.type, next);
-      if (!res.ok) {
-        setStatusById((m) => ({ ...m, [piece.id]: prev })); // roll back
-        onHint?.('Не вдалося оновити статус');
-        return;
-      }
-      // Tapping the ring is the MOST common way a piece goes live — it must ask
-      // for the link exactly like the editor's status pill does.
-      if (next === PUBLISHED_STATUS) dispatchContentPublished(piece.refTable, piece.id);
-    },
-    [onHint],
-  );
-
   const advance = useCallback(
     (piece: ContentPiece) => {
       if (opensBraindumpOverlay(piece)) {
         openIdea(piece);
         return;
       }
-      const current = statusById[piece.id] ?? piece.status;
-      const next = nextStatus(piece.type, current);
-      if (!next) return; // already at Опубліковано → gentle no-op
-      void persist(piece, next, current);
+      // The store owns the optimistic update, the write, the rollback, the
+      // «got a link?» prompt and the revalidation — one path for every surface.
+      void advanceStatus(piece).then((outcome) => {
+        if (outcome === 'failed') onHint?.('Не вдалося оновити статус');
+      });
     },
-    [statusById, persist, openIdea],
+    [advanceStatus, openIdea, onHint],
   );
 
   const open = useCallback(
@@ -193,7 +181,7 @@ export default function ContentRows({
       </ul>
 
       {undo ? (
-        <div className="pointer-events-none fixed inset-x-0 bottom-24 z-[80] flex justify-center px-4">
+        <div className="app-float-above-nav pointer-events-none z-[80] flex justify-center px-4">
           <div className="pointer-events-auto w-full max-w-sm overflow-hidden rounded-2xl bg-zinc-900 text-white shadow-xl">
             <div className="flex items-center justify-between gap-3 px-4 py-3">
               <span className="truncate text-sm">

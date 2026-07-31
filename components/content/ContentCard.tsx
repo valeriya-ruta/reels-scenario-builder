@@ -71,7 +71,14 @@ export default function ContentCard({
     piece.type === 'reel' ? preview?.durationLabel ?? preview?.countLabel : preview?.countLabel;
 
   return (
-    <div className="flex min-w-0 flex-1 items-start gap-3">
+    // Identity + status on the card itself, so «the same object shows the same
+    // status in every section» is something that can actually be asserted rather
+    // than eyeballed (Prompt 9).
+    <div
+      className="flex min-w-0 flex-1 items-start gap-3"
+      data-content-id={piece.id}
+      data-status={piece.status}
+    >
       {/* Ring is its own hit target — one tap advances a stage. */}
       <button
         type="button"
