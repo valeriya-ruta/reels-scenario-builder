@@ -41,9 +41,21 @@ export function normalizeApifyPost(raw: unknown): InsightsPayload | null {
 
   const likes = num(item.likesCount);
   const comments = num(item.commentsCount);
-  // Reels report plays and views separately; views is the headline number and
-  // plays is the fallback when only it came back.
-  const views = num(item.videoViewCount) ?? num(item.videoPlayCount);
+  /**
+   * PLAYS first, views second — verified against real runs, not assumed.
+   *
+   * For reels the actor returns BOTH, and they are wildly different:
+   *   reel A → videoPlayCount 2345, videoViewCount 28
+   *   reel B → videoPlayCount  593, videoViewCount 34
+   *
+   * `videoPlayCount` is the number Instagram shows the creator as "views";
+   * `videoViewCount` is a much smaller legacy metric. Preferring the latter (the
+   * obvious-looking choice from the field name alone) would report a 2,345-play
+   * reel as 28 views — every reel would read as a catastrophic flop, and winner
+   * detection, which compares against the account's own median, would be
+   * inverted rather than merely wrong.
+   */
+  const views = num(item.videoPlayCount) ?? num(item.videoViewCount);
 
   if (likes === undefined && comments === undefined && views === undefined) return null;
 

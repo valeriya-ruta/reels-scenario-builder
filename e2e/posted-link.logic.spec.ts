@@ -18,18 +18,26 @@ import {
  */
 
 test.describe('pasted post URLs', () => {
-  test('canonicalises reel, reels, p and tv to one stored form', () => {
-    for (const input of [
+  test('the SAME reel via /reel/, /reels/ and /p/ is ONE stored URL', () => {
+    // Instagram serves a reel at every one of these, and the Apify actor returns
+    // /p/ even for reels (verified live). Storing the pasted variant would let
+    // one reel count twice toward the coin and be fetched twice.
+    const forms = [
       'https://www.instagram.com/reel/ABC123xyz/',
       'https://instagram.com/reels/ABC123xyz',
       'instagram.com/reel/ABC123xyz/',
-    ]) {
-      const out = parseInstagramPostUrl(input);
-      expect(out.ok).toBe(true);
-      if (out.ok) expect(out.url).toBe('https://www.instagram.com/reel/ABC123xyz/');
-    }
-    const post = parseInstagramPostUrl('https://www.instagram.com/p/ABC123xyz/');
-    expect(post.ok && post.url).toBe('https://www.instagram.com/p/ABC123xyz/');
+      'https://www.instagram.com/p/ABC123xyz/',
+    ].map(parseInstagramPostUrl);
+
+    expect(forms.every((f) => f.ok)).toBe(true);
+    const urls = new Set(forms.map((f) => (f.ok ? f.url : '')));
+    expect(urls.size).toBe(1);
+    expect([...urls][0]).toBe('https://www.instagram.com/p/ABC123xyz/');
+  });
+
+  test('the original kind is still reported, for display', () => {
+    const reel = parseInstagramPostUrl('https://www.instagram.com/reel/ABC123xyz/');
+    expect(reel.ok && reel.kind).toBe('reel');
   });
 
   test('strips share tokens, so one post pasted twice is ONE link', () => {

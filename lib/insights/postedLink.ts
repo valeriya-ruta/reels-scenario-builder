@@ -74,9 +74,17 @@ export function parseInstagramPostUrl(raw: string): ParsedPostUrl {
 
   return {
     ok: true,
-    // Canonical form — query strings and share tokens dropped, so the same post
-    // pasted twice is recognised as the same post.
-    url: `https://www.instagram.com/${kind}/${shortcode}/`,
+    /**
+     * Canonical form is ALWAYS `/p/<shortcode>/`.
+     *
+     * Instagram serves a reel at both `/reel/<code>/` and `/p/<code>/`, and the
+     * Apify actor returns `/p/` even for reels (verified against real runs). If
+     * we stored the pasted variant, the same reel pasted from the app and from a
+     * browser would be two different URLs — counting twice toward the coin and
+     * fetching insights twice. The shortcode is the identity; the path segment
+     * is decoration.
+     */
+    url: `https://www.instagram.com/p/${shortcode}/`,
     shortcode,
     kind,
   };

@@ -10,28 +10,41 @@ import { normalizeApifyPost } from '@/lib/insights/apifyNormalize';
  */
 
 test.describe('apify post → insights payload', () => {
-  test('maps a reel: views, likes, comments', () => {
+  test('a reel reports PLAYS as views — real values from a live run', () => {
+    // Verified against apify/instagram-scraper on a real account. The two
+    // fields disagree by two orders of magnitude, and `videoPlayCount` is the
+    // number Instagram shows the creator.
     const out = normalizeApifyPost({
-      likesCount: 412,
-      commentsCount: 37,
-      videoViewCount: 10432,
-      videoPlayCount: 11000,
-      videoDuration: 41.2,
-      shortCode: 'ABC123xyz',
+      likesCount: 57,
+      commentsCount: 2,
+      videoViewCount: 28,
+      videoPlayCount: 2345,
+      videoDuration: 24.961,
+      shortCode: 'DbDYzFKtF_y',
       productType: 'clips',
-      timestamp: '2026-07-30T09:00:00.000Z',
+      timestamp: '2026-07-21T11:17:12.000Z',
     });
-    expect(out).toMatchObject({ views: 10432, likes: 412, comments: 37, shortcode: 'ABC123xyz' });
+    // Taking videoViewCount here would report 28 and make every reel look like
+    // a flop — inverting winner detection, which compares to the own median.
+    expect(out?.views).toBe(2345);
+    expect(out).toMatchObject({ likes: 57, comments: 2, shortcode: 'DbDYzFKtF_y' });
   });
 
-  test('falls back to play count when view count is missing', () => {
-    const out = normalizeApifyPost({ likesCount: 5, videoPlayCount: 900 });
+  test('falls back to videoViewCount only when there is no play count', () => {
+    const out = normalizeApifyPost({ likesCount: 5, videoViewCount: 900 });
     expect(out?.views).toBe(900);
   });
 
   test('a photo carousel omits views rather than reporting zero', () => {
-    const out = normalizeApifyPost({ likesCount: 120, commentsCount: 4 });
-    expect(out).toMatchObject({ likes: 120, comments: 4 });
+    // Real shape from a live run: a Sidecar carries no video counters at all.
+    const out = normalizeApifyPost({
+      likesCount: 31,
+      commentsCount: 3,
+      shortCode: 'DWkv1rFiL8Q',
+      productType: 'carousel_container',
+      timestamp: '2026-04-01T03:36:03.000Z',
+    });
+    expect(out).toMatchObject({ likes: 31, comments: 3 });
     expect('views' in (out ?? {})).toBe(false);
   });
 
