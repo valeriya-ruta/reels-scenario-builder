@@ -1,0 +1,75 @@
+name: Deploy Ruta Pro
+
+# Stands up a SEPARATE Vercel project ("ruta-pro") linked to this repo and
+# deploys the `pro` branch to it on every push. This is the git-connected Pro
+# deployment; the customer project (main -> web.ruta.media) is never touched.
+#
+# One-time setup: add a repository secret VERCEL_TOKEN
+#   (Vercel -> Account Settings -> Tokens -> Create). Until it exists the
+#   Vercel steps are skipped (the run stays green), so nothing breaks.
+#
+# Public build env (Supabase URL + anon key + edition flag) is baked from the
+# committed .env.production, so the build is self-contained. Add the secret AI
+# keys (GROQ_API_KEY, APIFY_*, etc.) as env vars on the ruta-pro Vercel project
+# afterwards to light up the AI features.
+
+on:
+  push:
+    branches: [pro]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-pro
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_SCOPE: rutas-projects-a6b0c387
+      VERCEL_PROJECT: ruta-pro
+    steps:
+      - name: Check for VERCEL_TOKEN
+        id: guard
+        run: |
+          if [ -n "$VERCEL_TOKEN" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::VERCEL_TOKEN secret not set — skipping deploy. Add it in repo Settings -> Secrets -> Actions to enable."
+          fi
+
+      - name: Checkout
+        if: steps.guard.outputs.ready == 'true'
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        if: steps.guard.outputs.ready == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Vercel CLI
+        if: steps.guard.outputs.ready == 'true'
+        run: npm i -g vercel@latest
+
+      - name: Link (create if missing) the separate ruta-pro project
+        if: steps.guard.outputs.ready == 'true'
+        run: vercel link --yes --project "$VERCEL_PROJECT" --scope "$VERCEL_SCOPE" --token "$VERCEL_TOKEN"
+
+      - name: Pull project settings
+        if: steps.guard.outputs.ready == 'true'
+        run: vercel pull --yes --environment=production --scope "$VERCEL_SCOPE" --token "$VERCEL_TOKEN"
+
+      - name: Build (bakes public env from committed .env.production)
+        if: steps.guard.outputs.ready == 'true'
+        run: vercel build --prod --token "$VERCEL_TOKEN"
+
+      - name: Deploy to production (default *.vercel.app URL)
+        if: steps.guard.outputs.ready == 'true'
+        run: |
+          URL=$(vercel deploy --prebuilt --prod --scope "$VERCEL_SCOPE" --token "$VERCEL_TOKEN")
+          echo "Deployed: $URL"
+          echo "### 🚀 Ruta Pro deployed" >> "$GITHUB_STEP_SUMMARY"
+          echo "$URL" >> "$GITHUB_STEP_SUMMARY"
