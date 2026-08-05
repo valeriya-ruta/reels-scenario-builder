@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
 import { DEFAULT_BLOGGER_COLORS, type ProProject } from '@/lib/pro/types';
 import { createBloggerAction, updateBloggerAction, deleteBloggerAction } from '@/app/pro/actions';
 
@@ -16,7 +15,6 @@ type Props = {
 const EMOJI_CHOICES = ['🎬', '💄', '🏋️', '🍳', '✈️', '📸', '🎨', '🐶', '👗', '💅', '🌿', '⚽', '🎸', '📚'];
 
 export default function BloggerFormModal({ mode, project, onClose, onCreated }: Props) {
-  const router = useRouter();
   const [name, setName] = useState(project?.name ?? '');
   const [color, setColor] = useState(project?.color ?? DEFAULT_BLOGGER_COLORS[0]);
   const [emoji, setEmoji] = useState<string | null>(project?.emoji ?? EMOJI_CHOICES[0]);
@@ -38,10 +36,9 @@ export default function BloggerFormModal({ mode, project, onClose, onCreated }: 
         }
         onClose();
         if (onCreated) onCreated(res.project);
-        else {
-          router.push('/');
-          router.refresh();
-        }
+        // New blogger becomes the active scope — hard nav so every RSC reads the
+        // new cookie fresh (a client refresh can paint stale scope until reload).
+        else window.location.assign('/');
       } else if (project) {
         const res = await updateBloggerAction(project.id, { name, color, emoji });
         if (!res.ok) {
@@ -49,7 +46,7 @@ export default function BloggerFormModal({ mode, project, onClose, onCreated }: 
           return;
         }
         onClose();
-        router.refresh();
+        window.location.reload();
       }
     });
   }
@@ -60,8 +57,7 @@ export default function BloggerFormModal({ mode, project, onClose, onCreated }: 
     startTransition(async () => {
       await deleteBloggerAction(project.id);
       onClose();
-      router.push('/pro/dashboard');
-      router.refresh();
+      window.location.assign('/pro/dashboard');
     });
   }
 

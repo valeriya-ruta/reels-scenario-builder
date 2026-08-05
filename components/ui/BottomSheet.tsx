@@ -63,15 +63,22 @@ export default function BottomSheet({
   if (!mounted || typeof document === 'undefined') return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[120]" role="dialog" aria-modal="true" aria-label={title}>
+    <div
+      className="fixed inset-0 z-[120] flex items-end justify-center sm:items-center sm:p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+    >
       <div
         onClick={onClose}
         className="absolute inset-0 bg-black/35 transition-opacity duration-[240ms]"
         style={{ opacity: shown ? 1 : 0 }}
         aria-hidden
       />
+      {/* Mobile: iOS bottom sheet (full width, slides up). Desktop: a centered,
+          width-capped modal so it never spans the whole screen. */}
       <div
-        className="absolute inset-x-0 bottom-0 rounded-t-[22px] border border-b-0 border-[color:var(--border)] bg-[color:var(--background)] shadow-[0_-8px_40px_rgba(0,0,0,0.16)]"
+        className="relative w-full rounded-t-[22px] border border-b-0 border-[color:var(--border)] bg-[color:var(--background)] shadow-[0_-8px_40px_rgba(0,0,0,0.16)] sm:w-full sm:max-w-md sm:rounded-[22px] sm:border-b sm:shadow-[0_20px_60px_rgba(0,0,0,0.22)]"
         style={{
           transform: shown ? 'translateY(0)' : 'translateY(100%)',
           transition: 'transform 280ms cubic-bezier(0.22,1,0.36,1)',
@@ -79,11 +86,11 @@ export default function BottomSheet({
           paddingBottom: 'calc(16px + env(safe-area-inset-bottom))',
         }}
       >
-        <div className="flex justify-center pb-1 pt-2.5">
+        <div className="flex justify-center pb-1 pt-2.5 sm:hidden">
           <span className="h-1 w-9 rounded-full bg-zinc-300" />
         </div>
         {title ? (
-          <h3 className="px-5 pb-1 pt-1 text-center text-[15px] font-semibold text-[color:var(--foreground)]">
+          <h3 className="px-5 pb-1 pt-1 text-center text-[15px] font-semibold text-[color:var(--foreground)] sm:pt-4">
             {title}
           </h3>
         ) : null}

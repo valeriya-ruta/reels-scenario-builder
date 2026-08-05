@@ -162,7 +162,10 @@ export default function StorytellingBuilder({
         </div>
       )}
 
-      <div className="app-page pb-28">
+      {/* Inline padding-bottom beats `.app-page`'s own rule (Tailwind pb-* is
+          overridden by the unlayered .app-page class), so the last card's
+          «Інтерактив» always clears the fixed «Додати сторіс» bar. */}
+      <div className="app-page" style={{ paddingBottom: 'calc(104px + env(safe-area-inset-bottom))' }}>
         <EditorTopBar
           backHref="/storytellings"
           title={project.name}

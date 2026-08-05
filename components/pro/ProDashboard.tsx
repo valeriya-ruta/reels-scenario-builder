@@ -1,7 +1,6 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import type { ProProject } from '@/lib/pro/types';
 import type { DashboardPiece } from '@/lib/pro/dashboard';
 import {
@@ -34,7 +33,6 @@ export default function ProDashboard({
   projects: ProProject[];
   pieces: DashboardPiece[];
 }) {
-  const router = useRouter();
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month0, setMonth0] = useState(now.getMonth());
@@ -82,8 +80,9 @@ export default function ProDashboard({
 
   async function openBlogger(id: string) {
     await setActiveProjectAction(id);
-    router.push('/');
-    router.refresh();
+    // Hard nav so the new active-project cookie is read fresh server-side
+    // (a client push+refresh can paint stale scope until a manual reload).
+    window.location.assign('/');
   }
 
   function move(delta: number) {

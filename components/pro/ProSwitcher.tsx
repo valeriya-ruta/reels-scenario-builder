@@ -49,8 +49,11 @@ export default function ProSwitcher() {
     setOpen(false);
     startTransition(async () => {
       await setActiveProjectAction(value);
-      router.push(dest);
-      router.refresh();
+      // Switching the active blogger changes a server-side (cookie) scope that
+      // every RSC reads. A client push+refresh races Next's router cache and can
+      // paint the previous blogger's data until a manual reload — so do a hard
+      // navigation, which reads the new cookie fresh on the server. (Pro-only.)
+      window.location.assign(dest);
     });
   }
 
