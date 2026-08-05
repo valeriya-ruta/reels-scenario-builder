@@ -4,6 +4,9 @@ import SettingsClient from '@/components/SettingsClient';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import type { BrandSettings } from '@/lib/brand';
 import { normalizeAccentStyle } from '@/lib/brand';
+import { getProScope } from '@/lib/pro/scope';
+import { getProProjectBrand } from '@/lib/pro/projects';
+import { proBrandToBrandSettings } from '@/lib/pro/brandMap';
 
 interface BrandSettingsRow {
   theme: 'light' | 'dark';
@@ -46,6 +49,16 @@ export default async function SettingsPage({
   // the dedicated Profile page). We intentionally ignore ?tab and always show
   // branding, so old ?tab=account links no longer reach the deprecated setup.
   await searchParams;
+
+  // Ruta Pro: a pinned blogger edits its OWN brand row, fully isolated from the
+  // global brand and from other bloggers.
+  const scope = await getProScope();
+  if (scope.kind === 'project') {
+    const proBrand = await getProProjectBrand(scope.projectId);
+    return (
+      <SettingsClient initialBrandSettings={proBrand ? proBrandToBrandSettings(proBrand) : null} />
+    );
+  }
 
   const supabase = await createServerSupabaseClient();
   const [{ data: brandData }, { data: profileData }] = await Promise.all([

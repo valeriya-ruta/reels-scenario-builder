@@ -2,6 +2,7 @@
 
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import { requireAuth } from '@/lib/auth';
+import { getProScope, applyScope, insertProjectId } from '@/lib/pro/scope';
 import { optionalServerEnv, requireServerEnv } from '@/lib/env';
 import { computeTopReelsPayload } from '@/lib/competitorScoring';
 import {
@@ -347,11 +348,13 @@ export async function listIdeaScansForUser(): Promise<IdeaScanSummary[]> {
   const user = await requireAuth();
   if (!user) return [];
   const supabase = await createServerSupabaseClient();
-  const { data, error } = await supabase
-    .from('idea_scans')
-    .select('id, handle, followers_count, scanned_at, saved_reel_ids, top_reels')
-    .eq('user_id', user.id)
-    .order('scanned_at', { ascending: false });
+  const { data, error } = await applyScope(
+    supabase
+      .from('idea_scans')
+      .select('id, handle, followers_count, scanned_at, saved_reel_ids, top_reels')
+      .eq('user_id', user.id),
+    await getProScope(),
+  ).order('scanned_at', { ascending: false });
 
   if (error) {
     console.error('listIdeaScansForUser', error);
@@ -523,6 +526,7 @@ export async function pollCompetitorScan(
         raw_reels: items,
         top_reels: topPayload,
         saved_reel_ids: [],
+        project_id: insertProjectId(await getProScope()),
       })
       .select('*')
       .single();

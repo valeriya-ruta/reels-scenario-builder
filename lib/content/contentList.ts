@@ -5,6 +5,7 @@ import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import type { ContentStatus, ContentType } from '@/lib/content/statusSystem';
 import { contentHref, type ContentPiece } from '@/lib/content/contentPiece';
 import { attachPreviews } from '@/lib/content/contentPreview';
+import { getProScope, applyScope } from '@/lib/pro/scope';
 
 /**
  * Canonical "all content pieces for this user" read (Status system 1/8).
@@ -70,11 +71,17 @@ export async function getAllContent(limit?: number, withPreviews = true): Promis
   } = await supabase.auth.getUser();
   if (!user) return [];
 
-  let query = supabase
-    .from('content_pieces')
-    .select('id,user_id,content_type,status,title,ref_table,scheduled_date,set_index,set_size,posted_url,posted_at,insights_json,insights_fetched_at,created_at,updated_at')
-    .eq('user_id', user.id)
-    .order('updated_at', { ascending: false });
+  // Ruta Pro scopes the unified feed by the active blogger. `pro_content_pieces`
+  // is content_pieces + project_id (a new view; the customer view is untouched).
+  // Personal/customer scope is a no-op, so behavior is identical there.
+  const scope = await getProScope();
+  let query = applyScope(
+    supabase
+      .from('pro_content_pieces')
+      .select('id,user_id,content_type,status,title,ref_table,scheduled_date,set_index,set_size,posted_url,posted_at,insights_json,insights_fetched_at,created_at,updated_at')
+      .eq('user_id', user.id),
+    scope,
+  ).order('updated_at', { ascending: false });
 
   if (typeof limit === 'number' && limit > 0) {
     query = query.limit(limit);

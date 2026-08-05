@@ -2,6 +2,7 @@
 
 import { requireAuth } from '@/lib/auth';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
+import { getProScope, insertProjectId } from '@/lib/pro/scope';
 import { parseInstagramPostUrl } from '@/lib/insights/postedLink';
 import { pullPostInsights } from '@/lib/insights/apifyInsights';
 import type { ContentPiece } from '@/lib/content/contentPiece';
@@ -121,6 +122,7 @@ export async function addStandalonePostedLink(
     status: 'published',
     posted_url: parsed.url,
     posted_at: new Date().toISOString(),
+    project_id: insertProjectId(await getProScope()),
   });
 
   if (error) {

@@ -23,6 +23,8 @@ import { getDefaultFontForVibe, resolveBrandFont } from '@/lib/brandFonts';
 import { loadBrandFontsCatalog, loadGoogleFont } from '@/lib/loadGoogleFont';
 import { FontSelector } from '@/components/FontSelector';
 import { useToast } from '@/components/ToastProvider';
+import { usePro } from '@/components/pro/ProContext';
+import { saveProBrandAction } from '@/app/pro/actions';
 import CarouselSlidePreview from '@/components/carousel/CarouselSlidePreview';
 import { createEmptySlide } from '@/lib/carouselSlides';
 import type { Slide } from '@/lib/carouselTypes';
@@ -288,6 +290,9 @@ export default function BrandDNASetup({
   const [accentJustSaved, setAccentJustSaved] = useState(false);
   const accentAutoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toast = useToast();
+  // Ruta Pro: when a blogger is pinned, brand persists to that blogger's own
+  // isolated row (pro_project_brand_settings) instead of the global one.
+  const { activeProjectId } = usePro();
 
   useEffect(() => {
     if (initialValues?.fontId) {
@@ -412,6 +417,26 @@ export default function BrandDNASetup({
     const { theme: t, vibe: v, favHex: fav, fontId: fid, palette: pal, accentStyle: ast } =
       persistRef.current;
 
+    // Ruta Pro — persist to the pinned blogger's isolated brand row.
+    if (activeProjectId) {
+      const res = await saveProBrandAction(activeProjectId, {
+        theme: t,
+        vibe: v,
+        favColorHex: fav,
+        colorLightBg: pal.lightBg,
+        colorDarkBg: pal.darkBg,
+        colorAccent1: pal.accent1,
+        colorAccent2: pal.accent2,
+        fontId: fid,
+        accentStyle: ast,
+      });
+      if (!res.ok) {
+        toast?.pushToast('Не вдалося зберегти Brand DNA блогера.', 'error');
+        return false;
+      }
+      return true;
+    }
+
     const payload = {
       user_id: currentUser.id,
       theme: t,
@@ -454,7 +479,7 @@ export default function BrandDNASetup({
       return false;
     }
     return true;
-  }, [toast]);
+  }, [toast, activeProjectId]);
 
   const scheduleAccentAutoSave = useCallback(() => {
     if (accentAutoSaveTimerRef.current) {

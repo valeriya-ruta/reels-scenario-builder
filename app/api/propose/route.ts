@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
+import { getProScope, applyScope } from '@/lib/pro/scope';
 import { buildSignals, type SignalInputs } from '@/lib/propose/signals';
 import { fallbackProposals } from '@/lib/propose/fallback';
 import { proposeAngles, tagWithSourceKinds, dropSeen } from '@/lib/propose/proposeAngles';
@@ -43,18 +44,22 @@ export async function GET(req: Request) {
     .slice(0, 12);
 
   const supabase = await createServerSupabaseClient();
+  const scope = await getProScope();
   const [piecesRes, ideasRes, linksRes] = await Promise.all([
-    supabase
-      .from('content_pieces')
-      .select('id,content_type,status,title,scheduled_date,updated_at')
-      .eq('user_id', user.id)
-      .neq('ref_table', 'ideas')
+    applyScope(
+      supabase
+        .from('pro_content_pieces')
+        .select('id,content_type,status,title,scheduled_date,updated_at')
+        .eq('user_id', user.id)
+        .neq('ref_table', 'ideas'),
+      scope,
+    )
       .order('updated_at', { ascending: false })
       .limit(30),
-    supabase
-      .from('ideas')
-      .select('id,content,created_at')
-      .eq('user_id', user.id)
+    applyScope(
+      supabase.from('ideas').select('id,content,created_at').eq('user_id', user.id),
+      scope,
+    )
       .order('created_at', { ascending: false })
       .limit(15),
     supabase.from('idea_content_links').select('idea_id').eq('user_id', user.id),

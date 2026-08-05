@@ -10,6 +10,8 @@ import { RantResultsProvider } from './RantResultsContext';
 import { ToastProvider } from './ToastProvider';
 import { BrandProvider } from './BrandProvider';
 import PostedLinkHost from '@/components/posted/PostedLinkHost';
+import { ProProvider, type ProState } from '@/components/pro/ProContext';
+import ProSwitcher from '@/components/pro/ProSwitcher';
 
 /** Ignore repeat toggles from double-clicks / touch quirks so close → open doesn’t fire back-to-back. */
 const TOGGLE_COOLDOWN_MS = 320;
@@ -18,13 +20,23 @@ interface AppShellProps {
   children: React.ReactNode;
   userName?: string | null;
   userEmail?: string | null;
+  /** Ruta Pro context (operator flag + bloggers + active project). Absent in the customer edition. */
+  pro?: ProState;
 }
 
 const DEFAULT_WIDTH = 224;
 const MIN_WIDTH = 160;
 const MAX_WIDTH = 420;
 
-export default function AppShell({ children, userName, userEmail }: AppShellProps) {
+const EMPTY_PRO: ProState = {
+  isOperator: false,
+  projects: [],
+  activeProjectId: null,
+  activeProject: null,
+};
+
+export default function AppShell({ children, userName, userEmail, pro }: AppShellProps) {
+  const proState = pro ?? EMPTY_PRO;
   const pathname = usePathname();
   // Immersive editors render without the bottom nav, so they must NOT reserve
   // the nav band — see `.app-main-scroll` (Prompt 10).
@@ -71,7 +83,8 @@ export default function AppShell({ children, userName, userEmail }: AppShellProp
       <RantResultsProvider>
         <NavBadgePathSync />
         <ToastProvider>
-          <BrandProvider>
+          <ProProvider value={proState}>
+          <BrandProvider activeProjectId={proState.activeProjectId}>
             {/* h-[100dvh] (not 100vh) so mobile browser-chrome resize never traps
                 the bottom of the scroll — fixes the "scroll stuck / logout row
                 hidden behind the floating nav" report (86d39e36r). */}
@@ -106,14 +119,21 @@ export default function AppShell({ children, userName, userEmail }: AppShellProp
                   </svg>
                 </button>
 
-                <a href="/dashboard" className="group flex flex-col leading-none">
+                <a href={proState.isOperator ? '/pro/dashboard' : '/dashboard'} className="group flex flex-col leading-none">
                   <span className="font-display text-lg font-bold tracking-wide text-zinc-900 group-hover:text-black">
-                    Ruta
+                    Ruta{proState.isOperator ? ' Pro' : ''}
                   </span>
                   <span className="mt-0.5 text-[0.8rem] font-normal leading-normal tracking-wide text-zinc-600 group-hover:text-zinc-800">
-                    Твоя контент-подружка
+                    {proState.isOperator ? 'Операторський пульт' : 'Твоя контент-подружка'}
                   </span>
                 </a>
+
+                {/* Top-left blogger/project switcher (operator only). */}
+                {proState.isOperator && (
+                  <div className="ml-2 border-l border-[color:var(--border)] pl-3">
+                    <ProSwitcher />
+                  </div>
+                )}
               </header>
 
               {/* Body: sidebar + content */}
@@ -161,6 +181,7 @@ export default function AppShell({ children, userName, userEmail }: AppShellProp
               <PostedLinkHost />
             </div>
           </BrandProvider>
+          </ProProvider>
         </ToastProvider>
       </RantResultsProvider>
     </NavBadgeProvider>

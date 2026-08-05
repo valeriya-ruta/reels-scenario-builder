@@ -3,6 +3,7 @@ import { NEW_LABELS } from '@/lib/content/displayTitle';
 
 import { requireAuth } from '@/lib/auth';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
+import { getProScope, insertProjectId } from '@/lib/pro/scope';
 import { nanoid } from 'nanoid';
 import { Project, Scene, Transition, SnapshotData, Location } from '@/lib/domain';
 import {
@@ -674,6 +675,7 @@ export async function generateReelFromRant(
         name: title,
         crew_mode: 'with_crew',
         user_id: user.id,
+        project_id: insertProjectId(await getProScope()),
       })
       .select()
       .single();
@@ -897,6 +899,7 @@ export async function saveCompetitorReelToScenario(
       scenario_unseen: true,
       reference_url: refUrlRaw || null,
       reference_note: refNoteRaw || null,
+      project_id: insertProjectId(await getProScope()),
     };
 
     const { data: project, error: projectError } = await supabase
@@ -1050,6 +1053,7 @@ export async function createReelFromStructure(
       crew_mode: 'with_crew',
       user_id: user.id,
       project_type: 'reels',
+      project_id: insertProjectId(await getProScope()),
     })
     .select('id')
     .single();

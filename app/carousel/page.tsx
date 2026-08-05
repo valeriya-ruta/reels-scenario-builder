@@ -7,6 +7,7 @@ import type { ContentPiece } from '@/lib/content/contentPiece';
 import type { ContentStatus } from '@/lib/content/statusSystem';
 import { attachPreviews } from '@/lib/content/contentPreview';
 import { displayTitle } from '@/lib/content/displayTitle';
+import { getProScope, applyScope } from '@/lib/pro/scope';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,11 +26,14 @@ export default async function CarouselListPage() {
   if (!user) redirect('/');
 
   const supabase = await createServerSupabaseClient();
-  const { data: projects, error } = await supabase
-    .from('carousel_projects')
-    .select('id, user_id, name, status, scheduled_date, created_at, updated_at')
-    .eq('user_id', user.id)
-    .order('updated_at', { ascending: false });
+  const scope = await getProScope();
+  const { data: projects, error } = await applyScope(
+    supabase
+      .from('carousel_projects')
+      .select('id, user_id, name, status, scheduled_date, created_at, updated_at')
+      .eq('user_id', user.id),
+    scope,
+  ).order('updated_at', { ascending: false });
 
   if (error) {
     console.warn('[carousel] list query failed:', { message: error.message, code: error.code });

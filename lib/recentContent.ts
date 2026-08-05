@@ -2,6 +2,7 @@ import 'server-only';
 
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import type { ContentType } from '@/lib/contentTypes';
+import { getProScope, applyScope } from '@/lib/pro/scope';
 
 import { NEW_LABELS } from '@/lib/content/displayTitle';
 /**
@@ -34,25 +35,29 @@ export async function getRecentContent(
   limit = 5
 ): Promise<RecentContentItem[]> {
   const supabase = await createServerSupabaseClient();
+  const scope = await getProScope();
 
   const [reels, carousels, stories] = await Promise.all([
-    supabase
-      .from('projects')
-      .select('id, name, updated_at')
-      .eq('user_id', userId)
-      .eq('project_type', 'reels')
+    applyScope(
+      supabase
+        .from('projects')
+        .select('id, name, updated_at')
+        .eq('user_id', userId)
+        .eq('project_type', 'reels'),
+      scope,
+    )
       .order('updated_at', { ascending: false })
       .limit(limit),
-    supabase
-      .from('carousel_projects')
-      .select('id, name, updated_at')
-      .eq('user_id', userId)
+    applyScope(
+      supabase.from('carousel_projects').select('id, name, updated_at').eq('user_id', userId),
+      scope,
+    )
       .order('updated_at', { ascending: false })
       .limit(limit),
-    supabase
-      .from('storytelling_projects')
-      .select('id, name, updated_at')
-      .eq('user_id', userId)
+    applyScope(
+      supabase.from('storytelling_projects').select('id, name, updated_at').eq('user_id', userId),
+      scope,
+    )
       .order('updated_at', { ascending: false })
       .limit(limit),
   ]);

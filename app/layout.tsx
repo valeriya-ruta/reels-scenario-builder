@@ -3,6 +3,10 @@ import { headers } from "next/headers";
 import "./globals.css";
 import AppShell from "@/components/AppShell";
 import { getCurrentUser } from "@/lib/auth";
+import { getOperatorContext } from "@/lib/pro/operator";
+import { listProProjects } from "@/lib/pro/projects";
+import { getActiveProjectId } from "@/lib/pro/activeProject";
+import type { ProState } from "@/components/pro/ProContext";
 import { PostHogProvider } from "@/components/PostHogProvider";
 import StandaloneLaunchRedirect from '@/components/StandaloneLaunchRedirect';
 import { PostHogPageView } from "@/components/PostHogPageView";
@@ -35,6 +39,26 @@ export default async function RootLayout({
     pathname === "/trial/success" ||
     pathname === "/" ||
     pathname === "/signup";
+  // Public share links (actor/editor/client) render full-screen with no app chrome.
+  const isBareRoute = pathname.startsWith("/share");
+
+  // Ruta Pro: resolve the operator context + bloggers once, server-side, so the
+  // top selector and per-project brand are seeded without a client round-trip.
+  let pro: ProState | undefined;
+  if (user && !isAuthRoute) {
+    const { isOperator } = await getOperatorContext();
+    if (isOperator) {
+      const projects = await listProProjects();
+      const pinned = await getActiveProjectId();
+      const activeProject = pinned ? projects.find((p) => p.id === pinned) ?? null : null;
+      pro = {
+        isOperator: true,
+        projects,
+        activeProjectId: activeProject ? activeProject.id : null,
+        activeProject,
+      };
+    }
+  }
 
   return (
     <html lang="uk">
@@ -56,10 +80,13 @@ export default async function RootLayout({
           <Suspense>
             <StandaloneLaunchRedirect />
           </Suspense>
-          {user && !isAuthRoute ? (
+          {isBareRoute ? (
+            children
+          ) : user && !isAuthRoute ? (
             <AppShell
               userName={user.user_metadata?.full_name ?? null}
               userEmail={user.email ?? null}
+              pro={pro}
             >
               {children}
             </AppShell>

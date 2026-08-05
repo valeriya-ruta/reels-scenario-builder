@@ -16,6 +16,8 @@ interface BrandSettingsRow {
   color_accent1: string;
   color_accent2: string;
   font_id: string;
+  /** Present only on the per-project (Pro) brand row. */
+  accent_style?: string | null;
 }
 
 interface BrandStore {
@@ -43,7 +45,14 @@ function mapRow(row: BrandSettingsRow, accentFromProfile: string | null | undefi
   };
 }
 
-export function BrandProvider({ children }: { children: ReactNode }) {
+export function BrandProvider({
+  children,
+  activeProjectId = null,
+}: {
+  children: ReactNode;
+  /** Ruta Pro: when a blogger is pinned, brand comes from that project's own row. */
+  activeProjectId?: string | null;
+}) {
   const [brandSettings, setBrandSettings] = useState<BrandSettings | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -52,6 +61,27 @@ export function BrandProvider({ children }: { children: ReactNode }) {
     // Do not set loading=true here: when the user has no brand row yet, CarouselPageClient
     // shows BrandDNASetup only while !loading — toggling loading would unmount the wizard
     // and discard theme/color choices mid-flow.
+
+    // Ruta Pro — a pinned blogger draws its brand from its own isolated row.
+    if (activeProjectId) {
+      const { data, error } = await supabase
+        .from('pro_project_brand_settings')
+        .select(
+          'theme,vibe,fav_color_hex,color_light_bg,color_dark_bg,color_accent1,color_accent2,font_id,accent_style',
+        )
+        .eq('project_id', activeProjectId)
+        .maybeSingle<BrandSettingsRow>();
+      if (error) {
+        console.error('Failed to load pro brand settings:', error);
+        setBrandSettings(null);
+        setLoading(false);
+        return;
+      }
+      setBrandSettings(data ? mapRow(data, data.accent_style) : null);
+      setLoading(false);
+      return;
+    }
+
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -81,7 +111,7 @@ export function BrandProvider({ children }: { children: ReactNode }) {
     const accentFromProfile = profileRes.data?.accent_style;
     setBrandSettings(brandRes.data ? mapRow(brandRes.data, accentFromProfile) : null);
     setLoading(false);
-  }, []);
+  }, [activeProjectId]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {

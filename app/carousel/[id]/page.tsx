@@ -6,6 +6,8 @@ import type { BrandSettings } from '@/lib/brand';
 import { normalizeAccentStyle } from '@/lib/brand';
 import { normalizeSlidesFromDb } from '@/lib/carouselSlides';
 import type { Slide } from '@/lib/carouselTypes';
+import { getProProjectBrand } from '@/lib/pro/projects';
+import { proBrandToBrandSettings } from '@/lib/pro/brandMap';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -76,12 +78,18 @@ export default async function CarouselStudioPage({ params }: PageProps) {
 
   const slides: Slide[] = normalizeSlidesFromDb(projectRow.slides);
 
+  // Ruta Pro: a carousel that belongs to a blogger renders in THAT blogger's
+  // brand, isolated from the global brand and other bloggers.
+  let initialBrandSettings = brandRow ? mapRow(brandRow, profileRow?.accent_style) : null;
+  if (projectRow.project_id) {
+    const proBrand = await getProProjectBrand(projectRow.project_id);
+    if (proBrand) initialBrandSettings = proBrandToBrandSettings(proBrand);
+  }
+
   return (
     <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col">
       <CarouselPageClient
-        initialBrandSettings={
-          brandRow ? mapRow(brandRow, profileRow?.accent_style) : null
-        }
+        initialBrandSettings={initialBrandSettings}
         carouselProject={{
           id: projectRow.id,
           name: projectRow.name,

@@ -6,6 +6,7 @@ import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import { isValidStatus, type ContentStatus, type ContentType } from '@/lib/content/statusSystem';
 import { NEW_LABELS } from '@/lib/content/displayTitle';
 import type { ContentPiece } from '@/lib/content/contentList';
+import { getProScope, insertProjectId } from '@/lib/pro/scope';
 
 /**
  * Every surface reads the same object from the same `content_pieces` view, so a
@@ -102,6 +103,8 @@ export async function createContentOnDate(
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { ok: false, error: 'BAD_DATE' };
 
   const supabase = await createServerSupabaseClient();
+  const scope = await getProScope();
+  const project_id = insertProjectId(scope);
 
   if (type === 'reel') {
     const { data, error } = await supabase
@@ -112,6 +115,7 @@ export async function createContentOnDate(
         project_type: 'reels',
         user_id: user.id,
         scheduled_date: date,
+        project_id,
       })
       .select('id')
       .single<{ id: string }>();
@@ -123,7 +127,7 @@ export async function createContentOnDate(
   if (type === 'carousel') {
     const { data, error } = await supabase
       .from('carousel_projects')
-      .insert({ name: NEW_LABELS.carousel, user_id: user.id, scheduled_date: date })
+      .insert({ name: NEW_LABELS.carousel, user_id: user.id, scheduled_date: date, project_id })
       .select('id')
       .single<{ id: string }>();
     if (error || !data) return { ok: false, error: error?.message ?? 'INSERT_FAILED' };
@@ -133,7 +137,7 @@ export async function createContentOnDate(
 
   const { data, error } = await supabase
     .from('storytelling_projects')
-    .insert({ name: NEW_LABELS.story, user_id: user.id, scheduled_date: date })
+    .insert({ name: NEW_LABELS.story, user_id: user.id, scheduled_date: date, project_id })
     .select('id')
     .single<{ id: string }>();
   if (error || !data) return { ok: false, error: error?.message ?? 'INSERT_FAILED' };

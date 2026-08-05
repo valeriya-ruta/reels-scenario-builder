@@ -7,15 +7,17 @@ import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import type { CarouselRantOutput, Slide } from '@/lib/carouselTypes';
 import { createEmptySlide } from '@/lib/carouselSlides';
 import { slidesForDatabase } from '@/lib/carouselSlides';
+import { getProScope, insertProjectId } from '@/lib/pro/scope';
 
 export async function createCarouselProject() {
   const user = await requireAuth();
   if (!user) redirect('/');
 
   const supabase = await createServerSupabaseClient();
+  const scope = await getProScope();
   const { data: row, error } = await supabase
     .from('carousel_projects')
-    .insert({ name: NEW_LABELS.carousel, user_id: user.id })
+    .insert({ name: NEW_LABELS.carousel, user_id: user.id, project_id: insertProjectId(scope) })
     .select()
     .single();
 
@@ -83,6 +85,7 @@ export async function createCarouselProjectFromRant(output: CarouselRantOutput, 
   if (!output?.slides?.length) return { ok: false as const, error: 'EMPTY' as const };
 
   const supabase = await createServerSupabaseClient();
+  const scope = await getProScope();
   const name = deriveCarouselNameFromRant(output, rant);
   const slides = slidesForDatabase(mapRantOutputToDbSlides(output));
 
@@ -93,6 +96,7 @@ export async function createCarouselProjectFromRant(output: CarouselRantOutput, 
       name,
       slides,
       updated_at: new Date().toISOString(),
+      project_id: insertProjectId(scope),
     })
     .select('id')
     .single();

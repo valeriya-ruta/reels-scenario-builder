@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
+import { getProScope, insertProjectId } from '@/lib/pro/scope';
 
 export const runtime = 'nodejs';
 
@@ -60,9 +61,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, id: data.id });
   }
 
+  const scope = await getProScope();
   const { data, error } = await supabase
     .from('ideas')
-    .insert({ user_id: user.id, content, title, source: 'braindump' })
+    .insert({ user_id: user.id, content, title, source: 'braindump', project_id: insertProjectId(scope) })
     .select('id')
     .single();
 

@@ -7,6 +7,7 @@ import type { ContentPiece } from '@/lib/content/contentPiece';
 import type { ContentStatus } from '@/lib/content/statusSystem';
 import { attachPreviews } from '@/lib/content/contentPreview';
 import { NEW_LABELS, displayTitle } from '@/lib/content/displayTitle';
+import { getProScope, applyScope, insertProjectId } from '@/lib/pro/scope';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,12 +26,15 @@ export default async function ProjectsPage() {
   if (!user) redirect('/');
 
   const supabase = await createServerSupabaseClient();
-  const { data: projects, error } = await supabase
-    .from('projects')
-    .select('id, user_id, name, status, scheduled_date, created_at, updated_at')
-    .eq('user_id', user.id)
-    .eq('project_type', 'reels')
-    .order('updated_at', { ascending: false });
+  const scope = await getProScope();
+  const { data: projects, error } = await applyScope(
+    supabase
+      .from('projects')
+      .select('id, user_id, name, status, scheduled_date, created_at, updated_at')
+      .eq('user_id', user.id)
+      .eq('project_type', 'reels'),
+    scope,
+  ).order('updated_at', { ascending: false });
 
   if (error) console.error('Error fetching projects:', error);
 
@@ -75,9 +79,16 @@ async function createReelProject() {
   if (!user) return;
 
   const supabase = await createServerSupabaseClient();
+  const scope = await getProScope();
   const { data: project, error } = await supabase
     .from('projects')
-    .insert({ name: NEW_LABELS.reel, crew_mode: 'with_crew', user_id: user.id, project_type: 'reels' })
+    .insert({
+      name: NEW_LABELS.reel,
+      crew_mode: 'with_crew',
+      user_id: user.id,
+      project_type: 'reels',
+      project_id: insertProjectId(scope),
+    })
     .select()
     .single();
 

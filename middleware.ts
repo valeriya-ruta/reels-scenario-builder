@@ -10,6 +10,8 @@ function isPublicPath(pathname: string): boolean {
   if (pathname.startsWith('/auth')) return true;
   if (pathname === '/subscribe' || pathname === '/trial/success') return true;
   if (pathname.startsWith('/share')) return true;
+  // Ruta Pro: no-login client approve/reject endpoint (token-gated at the DB).
+  if (pathname.startsWith('/api/pro/share')) return true;
   if (pathname === '/api/payments/webhook') return true;
   if (pathname === '/api/payments/verify-return') return true;
   if (pathname.startsWith('/api/cron/')) return true;
