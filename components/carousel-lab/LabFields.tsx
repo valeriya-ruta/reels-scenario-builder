@@ -78,22 +78,90 @@ function BulletsEditor({ bullets, onChange }: { bullets: string[]; onChange: (b:
   );
 }
 
+function clampPan(v: number, scale: number) {
+  const max = Math.max(0, (scale - 1) / 2);
+  return Math.max(-max, Math.min(max, v));
+}
+
 function ImageSlot({ label, fit, image, projectId, slideId, index, onChange }: { label: string; fit: 'cover' | 'contain'; image: LabImage | undefined; projectId: string; slideId: string; index: number; onChange: (img: LabImage | null) => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const src = resolveImageSrc(image);
+  const t = image?.transform ?? { tx: 0, ty: 0, scale: 1 };
+  const canPosition = !!src && fit === 'cover';
+
+  const setTransform = (next: { tx: number; ty: number; scale: number }) => {
+    if (!image) return;
+    onChange({ ...image, transform: next });
+  };
+
   return (
     <div>
       <Label>{label}</Label>
-      <div className="relative flex items-center justify-center overflow-hidden rounded-lg border border-neutral-200 bg-neutral-50" style={{ height: 120 }}>
+      <div
+        ref={boxRef}
+        className="relative flex touch-none select-none items-center justify-center overflow-hidden rounded-lg border border-neutral-200 bg-neutral-50"
+        style={{ height: 140, cursor: canPosition && t.scale > 1 ? 'grab' : 'default' }}
+        onPointerDown={(e) => {
+          if (!canPosition || t.scale <= 1) return;
+          (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+          dragRef.current = { x: e.clientX, y: e.clientY, tx: t.tx, ty: t.ty };
+        }}
+        onPointerMove={(e) => {
+          const d = dragRef.current;
+          const box = boxRef.current;
+          if (!d || !box) return;
+          const dtx = (e.clientX - d.x) / box.clientWidth;
+          const dty = (e.clientY - d.y) / box.clientHeight;
+          setTransform({ tx: clampPan(d.tx + dtx, t.scale), ty: clampPan(d.ty + dty, t.scale), scale: t.scale });
+        }}
+        onPointerUp={() => (dragRef.current = null)}
+        onPointerCancel={() => (dragRef.current = null)}
+      >
         {src ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: fit }} />
+          <img
+            src={src}
+            alt=""
+            draggable={false}
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: fit,
+              transformOrigin: 'center',
+              transform: canPosition ? `translate(${t.tx * 100}%, ${t.ty * 100}%) scale(${t.scale})` : undefined,
+            }}
+          />
         ) : (
           <span className="text-[12px] text-neutral-400">Немає фото</span>
         )}
         {busy && <div className="absolute inset-0 flex items-center justify-center bg-white/70 text-[12px] text-neutral-600">Завантаження…</div>}
       </div>
+      {canPosition && (
+        <div className="mt-1.5 flex items-center gap-2">
+          <span className="text-[11px] text-neutral-400">Масштаб</span>
+          <input
+            type="range"
+            min={1}
+            max={3}
+            step={0.05}
+            value={t.scale}
+            onChange={(e) => {
+              const scale = parseFloat(e.target.value);
+              setTransform({ tx: clampPan(t.tx, scale), ty: clampPan(t.ty, scale), scale });
+            }}
+            className="flex-1 accent-[#4a6cf7]"
+          />
+          {t.scale > 1 && (
+            <button type="button" onClick={() => setTransform({ tx: 0, ty: 0, scale: 1 })} className="text-[11px] text-neutral-500 hover:text-[#4a6cf7]">
+              Скинути
+            </button>
+          )}
+        </div>
+      )}
+      {canPosition && t.scale > 1 && <div className="mt-0.5 text-[11px] text-neutral-400">Перетягни фото, щоб розташувати</div>}
       <div className="mt-1.5 flex gap-2">
         <button type="button" onClick={() => inputRef.current?.click()} className="rounded-lg bg-[#4a6cf7] px-3 py-1.5 text-[12.5px] font-medium text-white">{src ? 'Замінити' : 'Завантажити'}</button>
         {src && <button type="button" onClick={() => onChange(null)} className="rounded-lg border border-neutral-200 px-3 py-1.5 text-[12.5px] text-neutral-600">Прибрати</button>}

@@ -44,6 +44,10 @@ export type LabVariant =
  * (the NEW `carousel-lab` bucket/path) AND an inline base64 fallback, so the
  * editor works offline/pre-upload and the export always has pixels.
  */
+/** Pan/zoom of a cover-fit image within its slot (like a normal photo background).
+ *  tx/ty are pan as a fraction of slot width/height; scale ≥ 1 is zoom. */
+export type LabImageTransform = { tx: number; ty: number; scale: number };
+
 export type LabImage = {
   /** Storage object path within the `carousel-lab` bucket, e.g. `<uid>/<project>/<slide>-0.jpg`. */
   storagePath?: string | null;
@@ -53,6 +57,8 @@ export type LabImage = {
   base64?: string | null;
   /** Natural aspect ratio hint (w/h) for contain-fit layout math when known. */
   aspect?: number | null;
+  /** Pan/zoom within the slot (cover-fit slots only). */
+  transform?: LabImageTransform | null;
 };
 
 /** One side of a point A→Б slide. */

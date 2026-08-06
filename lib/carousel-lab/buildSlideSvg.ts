@@ -119,8 +119,24 @@ function imageEl(slot: Slot, href: string, fit: 'cover' | 'contain'): string {
 function slotImage(slot: Slot, img: LabImage | undefined, fit: 'cover' | 'contain', opts: BuildOpts): string {
   const src = opts.imageSrc?.(img) ?? null;
   if (!src) return placeholder(slot);
-  // contain-fit letterboxes onto the slide background (never cropped).
-  return imageEl(slot, src, fit);
+  // contain-fit letterboxes onto the slide background (never cropped) — no pan/zoom.
+  if (fit === 'contain') return imageEl(slot, src, 'contain');
+  // cover-fit with optional pan/zoom (image enlarged about the slot center, then
+  // offset by tx/ty as a fraction of the slot), clipped to the slot.
+  const t = img?.transform;
+  const scale = Math.max(1, t?.scale ?? 1);
+  const tx = t?.tx ?? 0;
+  const ty = t?.ty ?? 0;
+  if (scale === 1 && tx === 0 && ty === 0) return imageEl(slot, src, 'cover');
+  const iw = slot.w * scale;
+  const ih = slot.h * scale;
+  const ix = slot.x + slot.w / 2 - iw / 2 + tx * slot.w;
+  const iy = slot.y + slot.h / 2 - ih / 2 + ty * slot.h;
+  const clipId = `clip_${Math.round(slot.x)}_${Math.round(slot.y)}`;
+  return (
+    `<clipPath id="${clipId}"><rect x="${slot.x}" y="${slot.y}" width="${slot.w}" height="${slot.h}"/></clipPath>` +
+    `<g clip-path="url(#${clipId})"><image x="${r2(ix)}" y="${r2(iy)}" width="${r2(iw)}" height="${r2(ih)}" href="${esc(src)}" preserveAspectRatio="xMidYMid slice"/></g>`
+  );
 }
 
 // ── chip (white box + knockout background-colored text) ────────────────────────

@@ -23,11 +23,21 @@ function strArr(v: unknown): string[] {
 }
 function normImage(v: unknown): LabImage {
   const o = (v ?? {}) as Record<string, unknown>;
+  const tRaw = (o.transform ?? null) as Record<string, unknown> | null;
+  const transform =
+    tRaw && typeof tRaw === 'object'
+      ? {
+          tx: typeof tRaw.tx === 'number' ? tRaw.tx : 0,
+          ty: typeof tRaw.ty === 'number' ? tRaw.ty : 0,
+          scale: typeof tRaw.scale === 'number' ? tRaw.scale : 1,
+        }
+      : null;
   return {
     storagePath: typeof o.storagePath === 'string' ? o.storagePath : null,
     url: typeof o.url === 'string' ? o.url : null,
     base64: typeof o.base64 === 'string' ? o.base64 : null,
     aspect: typeof o.aspect === 'number' ? o.aspect : null,
+    transform,
   };
 }
 function normImages(v: unknown): LabImage[] {
@@ -92,6 +102,7 @@ export function slidesForDb(slides: LabSlide[]): unknown[] {
       url: i.url ?? null,
       base64: i.base64 ?? null,
       aspect: i.aspect ?? null,
+      transform: i.transform ?? null,
     })),
   }));
 }

@@ -57,6 +57,16 @@ export const EXTRA_SAMPLES: { key: string; slide: LabSlide; note: string }[] = [
     },
   },
   {
+    key: 'fit-reposition',
+    note: 'Image pan+zoom within slot (scale 1.6, panned right)',
+    slide: {
+      ...createSlide('text', 'paragraph', { picturePosition: 'up' }),
+      title: 'Розташування фото',
+      body: 'Фото збільшене і зсунуте вправо.',
+      images: [{ base64: WIDE_IMAGE_B64, aspect: 3, transform: { tx: 0.18, ty: 0, scale: 1.6 } }],
+    },
+  },
+  {
     key: 'cyrillic-ukrainian',
     note: 'Ukrainian Cyrillic incl. Ґ Є І Ї renders (not tofu)',
     slide: { ...createSlide('cover', 'title_subtext'), title: 'ҐРУНТ ЄДНІСТЬ ЇЖА', body: 'Її ґанок іє їхній — ЄІЇҐ works' },
