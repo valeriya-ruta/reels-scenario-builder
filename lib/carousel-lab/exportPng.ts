@@ -33,8 +33,13 @@ async function fetchAsDataUri(url: string): Promise<string | null> {
 async function resolveImagesForExport(slide: LabSlide): Promise<Map<unknown, string>> {
   const map = new Map<unknown, string>();
   for (const img of slide.images) {
+    // Prefer inline base64 (uploads keep it) — resolveImageSrc would pick the
+    // cross-origin storage URL, which fails/taints when the SVG rasterizes and
+    // shows a broken-image icon. A slot with NO image stays out of the map, so
+    // buildSlideSvg draws the white placeholder (matching the editor preview).
     if (img?.base64) {
-      map.set(img, resolveImageSrc(img)!);
+      const d = resolveImageSrc({ base64: img.base64 });
+      if (d) map.set(img, d);
     } else if (img?.url) {
       const d = await fetchAsDataUri(img.url);
       if (d) map.set(img, d);

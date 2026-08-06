@@ -349,9 +349,11 @@ function renderNumbers(slide: LabSlide, o: BuildOpts): string {
   const numMaxW = 920;
   let fitSize = SIZE.statLarge;
   while (fitSize > 60 && m(value, fitSize, WEIGHT.title) > numMaxW) fitSize -= 4;
-  const numBaseline = fitSize * 0.75;
+  const numBaseline = fitSize * CAP; // cap-aligned: digit top at element top
   els.push({
-    h: Math.round(fitSize * CAP),
+    // Height = glyph baseline (the number's visual bottom) so the 36px gapAfter
+    // is measured from the bottom of the number to the label's cap top.
+    h: Math.round(numBaseline),
     gapAfter: GAP.statToLabel,
     draw: (y) => `<text x="${W / 2}" y="${r2(y + numBaseline)}" text-anchor="middle" font-family="${FONT_FAMILY}" font-size="${fitSize}" font-weight="${WEIGHT.title}" fill="${COLORS.title}">${esc(value)}</text>`,
   });

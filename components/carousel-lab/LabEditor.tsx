@@ -18,6 +18,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { ChevronLeft, ChevronDown, ChevronRight, Calendar, Download, Loader2, Pencil, Plus, Trash2, Undo2, Redo2, X } from 'lucide-react';
 import { LAB_CANVAS_W as CW, LAB_CANVAS_H as CH, type LabSlide, type LabImage, type LabStyleId } from '@/lib/carousel-lab/types';
 import { SLOTS, type Slot } from '@/lib/carousel-lab/tokens';
+import { getT, normalizeT, zoomAroundPoint, type ImgT } from '@/lib/carousel-lab/imageTransform';
 import { createSlide } from '@/lib/carousel-lab/defaults';
 import { saveLabSlides, updateLabStyle, renameLabProject } from '@/app/carousel-lab/actions';
 import { slideToPngBlob, blobToBase64, downloadBlob, downloadZipOfBlobs, sharePngBlobs } from '@/lib/carousel-lab/exportPng';
@@ -39,49 +40,78 @@ function LabTabIcon({ tab, active, size = 22 }: { tab: EditorTab; active: boolea
   return (<svg width={size} height={size} viewBox="0 0 24 24" fill="none"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.3-.3-.4-.5-.8-.5-1.2 0-.8.7-1.5 1.5-1.5H16a5 5 0 0 0 5-5c0-3.9-4-7-9-7z" stroke={s} strokeWidth={sw} strokeLinejoin="round" /><circle cx="7.5" cy="11.5" r="1" fill={s} /><circle cx="12" cy="8" r="1" fill={s} /><circle cx="16" cy="11" r="1" fill={s} /></svg>);
 }
 
-const clampT = (v: number, max: number) => Math.max(-max, Math.min(max, v));
-
-/** Cover-image slots (with an image) that support drag-to-reposition on the preview. */
-function coverImageSlots(slide: LabSlide): { slot: Slot; index: number }[] {
+/** All image slots shown on the preview (with a hasImage flag + fit). */
+function previewImageSlots(slide: LabSlide): { slot: Slot; index: number; fit: 'cover' | 'contain'; hasImage: boolean }[] {
   const has = (i: number) => { const im = slide.images[i]; return !!(im && (im.url || im.base64)); };
-  const out: { slot: Slot; index: number }[] = [];
-  if (slide.type === 'text' && slide.picturePosition !== 'none' && has(0)) {
+  const out: { slot: Slot; index: number; fit: 'cover' | 'contain'; hasImage: boolean }[] = [];
+  if (slide.type === 'text' && slide.picturePosition !== 'none') {
     const slot = slide.picturePosition === 'up' ? SLOTS.textImageUp : slide.picturePosition === 'down' ? SLOTS.textImageDown : { x: 76, y: 500, w: 928, h: 350 };
-    out.push({ slot, index: 0 });
+    out.push({ slot, index: 0, fit: 'cover', hasImage: has(0) });
   }
-  if (slide.subtype === 'before_after') SLOTS.beforeAfter.forEach((slot, i) => { if (has(i)) out.push({ slot, index: i }); });
-  if (slide.subtype === 'point_ab') SLOTS.pointAbDiagonal.forEach((slot, i) => { if (has(i)) out.push({ slot, index: i }); });
+  if (slide.subtype === 'screenshot') out.push({ slot: SLOTS.screenshot, index: 0, fit: 'contain', hasImage: has(0) });
+  if (slide.subtype === 'before_after') SLOTS.beforeAfter.forEach((slot, i) => out.push({ slot, index: i, fit: 'cover', hasImage: has(i) }));
+  if (slide.subtype === 'point_ab') SLOTS.pointAbDiagonal.forEach((slot, i) => out.push({ slot, index: i, fit: 'cover', hasImage: has(i) }));
   return out;
 }
 
-/** Transparent draggable overlays over cover-image slots: drag to pan (once
- *  zoomed), wheel to zoom — directly on the slide preview like a photo bg. */
-function ImageHandles({ slide, boxW, onPatch }: { slide: LabSlide; boxW: number; onPatch: (index: number, t: { tx: number; ty: number; scale: number }) => void }) {
+/** Overlays on the preview (logic stolen from the main app's photo positioner):
+ *  an EMPTY slot (or a contain screenshot) taps to open the photo panel; a FILLED
+ *  cover slot supports drag-to-pan, pinch-to-zoom (2 fingers) and wheel-to-zoom. */
+function ImageHandles({ slide, boxW, onPatch, onOpenPhoto }: { slide: LabSlide; boxW: number; onPatch: (index: number, t: ImgT) => void; onOpenPhoto: () => void }) {
   const scale = boxW / CW;
-  const drag = useRef<{ index: number; x: number; y: number; tx: number; ty: number } | null>(null);
+  const ptrs = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const g = useRef<{ index: number; mode: 'drag' | 'pinch'; sx: number; sy: number; initial: ImgT; dist: number; a: number; b: number } | null>(null);
+
   return (
     <>
-      {coverImageSlots(slide).map(({ slot, index }) => {
-        const t = slide.images[index]?.transform ?? { tx: 0, ty: 0, scale: 1 };
+      {previewImageSlots(slide).map(({ slot, index, fit, hasImage }) => {
+        const box = { left: slot.x * scale, top: slot.y * scale, width: slot.w * scale, height: slot.h * scale } as const;
+        if (!(hasImage && fit === 'cover')) {
+          return <div key={index} className="absolute cursor-pointer" style={box} onClick={onOpenPhoto} aria-label="Додати фото" />;
+        }
+        const t = getT(slide.images[index]?.transform ?? null);
         return (
           <div
             key={index}
             className="absolute touch-none"
-            style={{ left: slot.x * scale, top: slot.y * scale, width: slot.w * scale, height: slot.h * scale, cursor: t.scale > 1 ? 'grab' : 'default' }}
-            onPointerDown={(e) => { if (t.scale <= 1) return; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); drag.current = { index, x: e.clientX, y: e.clientY, tx: t.tx, ty: t.ty }; }}
-            onPointerMove={(e) => {
-              const d = drag.current;
-              if (!d || d.index !== index) return;
-              const max = (t.scale - 1) / 2;
-              onPatch(index, { tx: clampT(d.tx + (e.clientX - d.x) / (slot.w * scale), max), ty: clampT(d.ty + (e.clientY - d.y) / (slot.h * scale), max), scale: t.scale });
+            style={{ ...box, cursor: 'grab' }}
+            onPointerDown={(e) => {
+              (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+              ptrs.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+              const ids = [...ptrs.current.keys()];
+              if (ids.length >= 2) {
+                const a = ptrs.current.get(ids[0])!;
+                const b = ptrs.current.get(ids[1])!;
+                g.current = { index, mode: 'pinch', sx: 0, sy: 0, initial: t, dist: Math.max(1, Math.hypot(b.x - a.x, b.y - a.y)), a: ids[0], b: ids[1] };
+              } else {
+                g.current = { index, mode: 'drag', sx: e.clientX, sy: e.clientY, initial: t, dist: 0, a: e.pointerId, b: -1 };
+              }
             }}
-            onPointerUp={() => (drag.current = null)}
-            onPointerCancel={() => (drag.current = null)}
+            onPointerMove={(e) => {
+              if (!ptrs.current.has(e.pointerId) || !g.current || g.current.index !== index) return;
+              ptrs.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              const gg = g.current;
+              if (gg.mode === 'pinch') {
+                const a = ptrs.current.get(gg.a);
+                const b = ptrs.current.get(gg.b);
+                if (!a || !b) return;
+                const dist = Math.max(1, Math.hypot(b.x - a.x, b.y - a.y));
+                const cx = (a.x + b.x) / 2 - rect.left - rect.width / 2;
+                const cy = (a.y + b.y) / 2 - rect.top - rect.height / 2;
+                onPatch(index, zoomAroundPoint(gg.initial, gg.initial.scale * (dist / gg.dist), cx, cy, rect.width, rect.height));
+              } else {
+                onPatch(index, normalizeT({ tx: gg.initial.tx + (e.clientX - gg.sx) / rect.width, ty: gg.initial.ty + (e.clientY - gg.sy) / rect.height, scale: gg.initial.scale }));
+              }
+            }}
+            onPointerUp={(e) => { ptrs.current.delete(e.pointerId); if (ptrs.current.size < 2) g.current = ptrs.current.size ? g.current : null; }}
+            onPointerCancel={(e) => { ptrs.current.delete(e.pointerId); if (ptrs.current.size === 0) g.current = null; }}
             onWheel={(e) => {
               e.preventDefault();
-              const ns = Math.max(1, Math.min(3, t.scale - e.deltaY * 0.0015));
-              const max = (ns - 1) / 2;
-              onPatch(index, { tx: clampT(t.tx, max), ty: clampT(t.ty, max), scale: ns });
+              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              const px = e.clientX - rect.left - rect.width / 2;
+              const py = e.clientY - rect.top - rect.height / 2;
+              onPatch(index, zoomAroundPoint(t, t.scale - e.deltaY * 0.0015, px, py, rect.width, rect.height));
             }}
           />
         );
@@ -180,7 +210,7 @@ export default function LabEditor({ projectId, initialName, initialStyleId, init
   const patchActive = useCallback((patch: Partial<LabSlide>) => {
     setSlides((prev) => prev.map((s) => (s.id === activeSlide?.id ? { ...s, ...patch } : s)));
   }, [activeSlide?.id]);
-  const patchImage = useCallback((index: number, transform: { tx: number; ty: number; scale: number }) => {
+  const patchImage = useCallback((index: number, transform: ImgT) => {
     setSlides((prev) => prev.map((s) => (s.id === activeSlide?.id ? { ...s, images: s.images.map((im: LabImage, i: number) => (i === index ? { ...im, transform } : im)) } : s)));
   }, [activeSlide?.id]);
 
@@ -239,7 +269,7 @@ export default function LabEditor({ projectId, initialName, initialStyleId, init
   const sensors = isDesktop ? desktopSensors : mobileSensors;
   const dragModifiers = useMemo(() => [isDesktop ? restrictToVerticalAxis : restrictToHorizontalAxis], [isDesktop]);
 
-  const tabLabel = (t: EditorTab) => (t === 'type' ? 'Тип' : t === 'text' ? 'Текст' : t === 'position' ? 'Позиція' : t === 'bg' ? 'Фон' : 'Бренд');
+  const tabLabel = (t: EditorTab) => (t === 'type' ? 'Тип' : t === 'text' ? 'Текст' : t === 'position' ? 'Позиція' : t === 'bg' ? 'Фото' : 'Бренд');
 
   async function exportAll() {
     const list = slides;
@@ -279,27 +309,11 @@ export default function LabEditor({ projectId, initialName, initialStyleId, init
     tab === 'type' ? <LabTypeTab slide={activeSlide} onChange={patchActive} />
     : tab === 'text' ? <LabFields slide={activeSlide} projectId={projectId} onChange={patchActive} section="text" />
     : tab === 'position' ? (
-        activeSlide.type === 'text' ? (
-          <div>
-            <div className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-zinc-400">Фото на слайді</div>
-            <div className="flex flex-wrap gap-1.5">
-              {(['none', 'up', 'down', 'middle'] as const).map((p) => {
-                const active = activeSlide.picturePosition === p;
-                const dim = p === 'middle';
-                const label = p === 'none' ? 'Без фото' : p === 'up' ? 'Фото зверху' : p === 'down' ? 'Фото знизу' : 'Фото по центру';
-                return (
-                  <button key={p} type="button" onClick={() => patchActive({ picturePosition: p })}
-                    className={active ? 'rounded-full bg-[#4a6cf7] px-3.5 py-2 text-[13px] font-medium text-white' : `rounded-full bg-[#f1f1f4] px-3.5 py-2 text-[13px] ${dim ? 'text-zinc-400' : 'text-zinc-700'}`}>
-                    {label}{dim ? ' •' : ''}
-                  </button>
-                );
-              })}
-            </div>
-            {activeSlide.picturePosition === 'middle' && <div className="mt-1 text-[11px] text-amber-600">«По центру» без Figma-еталона — не звірена.</div>}
-          </div>
-        ) : (
-          <p className="rounded-lg bg-[color:var(--surface)] px-3 py-2 text-sm text-zinc-500">Розташування задане стилем Modern Elegant для цього типу слайду.</p>
-        )
+        <p className="rounded-lg bg-[color:var(--surface)] px-3 py-2 text-sm text-zinc-500">
+          {activeSlide.type === 'text'
+            ? 'Розташування фото (без / зверху / знизу) обирається у вкладці «Тип».'
+            : 'Розташування задане стилем Modern Elegant для цього типу слайду.'}
+        </p>
       )
     : tab === 'bg' ? <LabFields slide={activeSlide} projectId={projectId} onChange={patchActive} section="images" />
     : tab === 'brand' ? (
@@ -349,7 +363,7 @@ export default function LabEditor({ projectId, initialName, initialStyleId, init
     return (
       <div className="relative" style={{ width: w }}>
         <LabSlideCanvas slide={slide} renderWidth={w} rounded={Math.round(w * 0.02)} testId={slide.id === activeSlideId ? 'active-preview' : undefined} />
-        <ImageHandles slide={slide} boxW={w} onPatch={patchImage} />
+        <ImageHandles slide={slide} boxW={w} onPatch={patchImage} onOpenPhoto={() => setTab('bg')} />
       </div>
     );
   };

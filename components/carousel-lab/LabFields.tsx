@@ -46,18 +46,18 @@ function TextArea({ label, value, onChange, maxLength, rows = 4, hint, placehold
   );
 }
 
-function BulletsEditor({ bullets, onChange }: { bullets: string[]; onChange: (b: string[]) => void }) {
+function BulletsEditor({ bullets, onChange, max }: { bullets: string[]; onChange: (b: string[]) => void; max?: number }) {
   const list = bullets.length ? bullets : [''];
+  const atCap = !!max && list.length >= max;
   return (
     <div>
-      <Label>Пункти списку (макс. {LIMITS.bulletsMax})</Label>
+      <Label>Пункти списку{max ? ` (макс. ${max} з фото)` : ''}</Label>
       <div className="space-y-1.5">
         {list.map((b, i) => (
           <div key={i} className="flex items-center gap-1.5">
             <span className="w-5 text-center text-[12px] text-neutral-400">{i + 1}</span>
             <input
               value={b}
-              maxLength={LIMITS.bulletItem}
               onChange={(e) => {
                 const next = [...list];
                 next[i] = e.target.value;
@@ -69,7 +69,9 @@ function BulletsEditor({ bullets, onChange }: { bullets: string[]; onChange: (b:
           </div>
         ))}
       </div>
-      {list.length < LIMITS.bulletsMax && (
+      {atCap ? (
+        <div className="mt-1.5 text-[11px] text-neutral-400">Зі фото на слайді — максимум {max} пунктів. Прибери фото, щоб додати більше.</div>
+      ) : (
         <button type="button" onClick={() => onChange([...list, ''])} className="mt-1.5 rounded-lg border border-dashed border-neutral-300 px-3 py-1.5 text-[12.5px] text-neutral-500 hover:border-[#4a6cf7] hover:text-[#4a6cf7]">
           + Додати пункт
         </button>
@@ -78,112 +80,76 @@ function BulletsEditor({ bullets, onChange }: { bullets: string[]; onChange: (b:
   );
 }
 
-function clampPan(v: number, scale: number) {
-  const max = Math.max(0, (scale - 1) / 2);
-  return Math.max(-max, Math.min(max, v));
-}
-
 function ImageSlot({ label, fit, image, projectId, slideId, index, onChange }: { label: string; fit: 'cover' | 'contain'; image: LabImage | undefined; projectId: string; slideId: string; index: number; onChange: (img: LabImage | null) => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const boxRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const src = resolveImageSrc(image);
   const t = image?.transform ?? { tx: 0, ty: 0, scale: 1 };
-  const canPosition = !!src && fit === 'cover';
-
-  const setTransform = (next: { tx: number; ty: number; scale: number }) => {
+  const canZoom = !!src && fit === 'cover';
+  const openPicker = () => inputRef.current?.click();
+  const setScale = (scale: number) => {
     if (!image) return;
-    onChange({ ...image, transform: next });
+    const max = Math.max(0, (scale - 1) / 2);
+    const clamp = (v: number) => Math.max(-max, Math.min(max, v));
+    onChange({ ...image, transform: { tx: clamp(t.tx), ty: clamp(t.ty), scale } });
   };
 
   return (
     <div>
       <Label>{label}</Label>
-      <div
-        ref={boxRef}
-        className="relative flex touch-none select-none items-center justify-center overflow-hidden rounded-lg border border-neutral-200 bg-neutral-50"
-        style={{ height: 140, cursor: canPosition && t.scale > 1 ? 'grab' : 'default' }}
-        onPointerDown={(e) => {
-          if (!canPosition || t.scale <= 1) return;
-          (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-          dragRef.current = { x: e.clientX, y: e.clientY, tx: t.tx, ty: t.ty };
-        }}
-        onPointerMove={(e) => {
-          const d = dragRef.current;
-          const box = boxRef.current;
-          if (!d || !box) return;
-          const dtx = (e.clientX - d.x) / box.clientWidth;
-          const dty = (e.clientY - d.y) / box.clientHeight;
-          setTransform({ tx: clampPan(d.tx + dtx, t.scale), ty: clampPan(d.ty + dty, t.scale), scale: t.scale });
-        }}
-        onPointerUp={() => (dragRef.current = null)}
-        onPointerCancel={() => (dragRef.current = null)}
+      {/* Tap the box to open the picker (no separate blue button). */}
+      <button
+        type="button"
+        onClick={openPicker}
+        className="relative flex w-full select-none items-center justify-center overflow-hidden rounded-lg border border-dashed border-neutral-300 bg-neutral-50 transition hover:border-[#4a6cf7]"
+        style={{ height: 140 }}
       >
         {src ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={src}
-            alt=""
-            draggable={false}
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: fit,
-              transformOrigin: 'center',
-              transform: canPosition ? `translate(${t.tx * 100}%, ${t.ty * 100}%) scale(${t.scale})` : undefined,
-            }}
-          />
+          <img src={src} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: fit, transformOrigin: 'center', transform: canZoom ? `translate(${t.tx * 100}%, ${t.ty * 100}%) scale(${t.scale})` : undefined }} />
         ) : (
-          <span className="text-[12px] text-neutral-400">Немає фото</span>
+          <span className="px-3 text-center text-[13px] text-neutral-400">Натисни, щоб додати фото</span>
         )}
         {busy && <div className="absolute inset-0 flex items-center justify-center bg-white/70 text-[12px] text-neutral-600">Завантаження…</div>}
-      </div>
-      {canPosition && (
-        <div className="mt-1.5 flex items-center gap-2">
-          <span className="text-[11px] text-neutral-400">Масштаб</span>
-          <input
-            type="range"
-            min={1}
-            max={3}
-            step={0.05}
-            value={t.scale}
-            onChange={(e) => {
-              const scale = parseFloat(e.target.value);
-              setTransform({ tx: clampPan(t.tx, scale), ty: clampPan(t.ty, scale), scale });
-            }}
-            className="flex-1 accent-[#4a6cf7]"
-          />
-          {t.scale > 1 && (
-            <button type="button" onClick={() => setTransform({ tx: 0, ty: 0, scale: 1 })} className="text-[11px] text-neutral-500 hover:text-[#4a6cf7]">
-              Скинути
-            </button>
+      </button>
+
+      {src && (
+        <>
+          {canZoom && (
+            <div className="mt-1.5 flex items-center gap-2">
+              <span className="text-[11px] text-neutral-400">Масштаб</span>
+              <input type="range" min={1} max={2.5} step={0.05} value={t.scale} onChange={(e) => setScale(parseFloat(e.target.value))} className="flex-1 accent-[#4a6cf7]" />
+              {t.scale > 1 && (
+                <button type="button" onClick={() => image && onChange({ ...image, transform: { tx: 0, ty: 0, scale: 1 } })} className="text-[11px] text-neutral-500 hover:text-[#4a6cf7]">Скинути</button>
+              )}
+            </div>
           )}
-        </div>
+          <div className="mt-1.5 flex gap-2">
+            <button type="button" onClick={openPicker} className="rounded-lg border border-neutral-200 px-3 py-1.5 text-[12.5px] text-neutral-700 hover:bg-neutral-50">Змінити</button>
+            <button type="button" onClick={() => onChange(null)} className="rounded-lg border border-neutral-200 px-3 py-1.5 text-[12.5px] text-neutral-600 hover:bg-neutral-50">Прибрати</button>
+          </div>
+          {canZoom && <div className="mt-0.5 text-[11px] text-neutral-400">Розташуй фото прямо на слайді: перетягни (або пінч/колесо для масштабу).</div>}
+        </>
       )}
-      {canPosition && t.scale > 1 && <div className="mt-0.5 text-[11px] text-neutral-400">Перетягни фото, щоб розташувати</div>}
-      <div className="mt-1.5 flex gap-2">
-        <button type="button" onClick={() => inputRef.current?.click()} className="rounded-lg bg-[#4a6cf7] px-3 py-1.5 text-[12.5px] font-medium text-white">{src ? 'Замінити' : 'Завантажити'}</button>
-        {src && <button type="button" onClick={() => onChange(null)} className="rounded-lg border border-neutral-200 px-3 py-1.5 text-[12.5px] text-neutral-600">Прибрати</button>}
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={async (e) => {
-            const f = e.target.files?.[0];
-            if (!f) return;
-            setBusy(true);
-            try {
-              const img = await uploadLabImage(f, { projectId, slideId, index });
-              onChange(img);
-            } finally {
-              setBusy(false);
-              if (inputRef.current) inputRef.current.value = '';
-            }
-          }}
-        />
-      </div>
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={async (e) => {
+          const f = e.target.files?.[0];
+          if (!f) return;
+          setBusy(true);
+          try {
+            const img = await uploadLabImage(f, { projectId, slideId, index });
+            onChange(img);
+          } finally {
+            setBusy(false);
+            if (inputRef.current) inputRef.current.value = '';
+          }
+        }}
+      />
     </div>
   );
 }
@@ -235,7 +201,7 @@ export default function LabFields({
           ) : (
             <>
               <TextArea label="Вступ (над списком)" placeholder="Текст над списком…" value={slide.body} maxLength={LIMITS.body} rows={2} onChange={(v) => onChange({ body: v })} />
-              <BulletsEditor bullets={slide.bullets} onChange={(b) => onChange({ bullets: b })} />
+              <BulletsEditor bullets={slide.bullets} onChange={(b) => onChange({ bullets: b })} max={slide.picturePosition !== 'none' ? 5 : undefined} />
               <TextArea label="Завершення (під списком)" placeholder="Текст під списком…" value={slide.bodyAfter} maxLength={LIMITS.body} rows={2} onChange={(v) => onChange({ bodyAfter: v })} />
             </>
           )}
@@ -277,7 +243,7 @@ export default function LabFields({
       <p className="rounded-lg bg-[color:var(--surface)] px-3 py-2 text-[12.5px] text-zinc-500">Цей тип слайду не має фото.</p>
     ) : count === 1 ? (
       <ImageSlot
-        label={slide.subtype === 'screenshot' ? 'Скриншот (не обрізається)' : 'Фото'}
+        label={slide.subtype === 'screenshot' ? 'Скріншот (не обрізається)' : 'Фото'}
         fit={imgFit}
         image={slide.images[0]}
         projectId={projectId}

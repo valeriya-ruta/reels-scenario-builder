@@ -11,8 +11,11 @@ export type PlacedWord = { text: string; x: number };
 export type PlacedLine = { baseline: number; words: PlacedWord[] };
 export type TextBlock = { lines: PlacedLine[]; height: number };
 
-/** Baseline offset from the top of a line box (all-caps → cap sits high). */
-const ASCENT_RATIO = 0.75;
+/** Cap height as a fraction of font size. Baselines are cap-aligned: a block's
+ *  first line has its CAP TOP at the block top (y=0), so a block's rendered
+ *  height equals the last line's baseline (its cap bottom). Stacking blocks with
+ *  a fixed gap then yields that exact visual gap between cap-bottom and cap-top. */
+const CAP_RATIO = 0.72;
 
 function splitWords(s: string): string[] {
   return s.split(/\s+/).filter(Boolean);
@@ -57,7 +60,7 @@ export type LayoutOpts = {
 export function layoutParagraphs(text: string, opts: LayoutOpts, paragraphGapPx: number): TextBlock {
   const { measure, fontPx, lineHeight, maxWidth, marginX, align } = opts;
   const spaceW = Math.max(1, measure(' ') || fontPx * 0.28);
-  const ascent = fontPx * ASCENT_RATIO;
+  const cap = fontPx * CAP_RATIO;
 
   const paragraphs = String(text ?? '')
     .replace(/\r\n/g, '\n')
@@ -67,6 +70,7 @@ export function layoutParagraphs(text: string, opts: LayoutOpts, paragraphGapPx:
   const lines: PlacedLine[] = [];
   let y = 0; // top of current line box
   let first = true;
+  let lastBaseline = 0;
 
   for (const para of paragraphs) {
     if (!first) y += paragraphGapPx; // blank-line gap between paragraphs
@@ -81,12 +85,16 @@ export function layoutParagraphs(text: string, opts: LayoutOpts, paragraphGapPx:
     wrapped.forEach((lineWords, li) => {
       const isLast = li === wrapped.length - 1;
       const placed = placeWords(lineWords, measure, spaceW, maxWidth, marginX, align, isLast);
-      lines.push({ baseline: y + ascent, words: placed });
+      // cap-aligned: first line's cap top sits at the line box top.
+      lastBaseline = y + cap;
+      lines.push({ baseline: lastBaseline, words: placed });
       y += lineHeight;
     });
   }
 
-  return { lines, height: y };
+  // Height = cap bottom of the last line, so a following block placed at
+  // height + 36 sits exactly 36px below this block's last text.
+  return { lines, height: lastBaseline };
 }
 
 function placeWords(

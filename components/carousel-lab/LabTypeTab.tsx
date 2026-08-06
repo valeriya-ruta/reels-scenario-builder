@@ -12,7 +12,7 @@ const GROUPS: { type: LabSlideType; label: string }[] = [
   { type: 'cover', label: 'Обкладинка' },
   { type: 'text', label: 'Контент' },
   { type: 'numbers', label: 'Цифри' },
-  { type: 'testimonial', label: 'Скриншот / Відгук' },
+  { type: 'testimonial', label: 'Скріншот / Відгук' },
   { type: 'cta', label: 'Заклик' },
 ];
 
@@ -118,41 +118,63 @@ export default function LabTypeTab({
         })}
       </div>
 
-      {/* section title + subtype cards (3 per row, smaller) */}
-      <div>
-        <div className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-zinc-400">
-          {GROUPS.find((g) => g.type === slide.type)?.label}
-        </div>
-        <div className="grid grid-cols-3 gap-2">
-          {previews.map(({ card, slide: ps }) => {
-            const active = isCardActive(card);
-            return (
-              <button
-                key={card.label}
-                type="button"
-                onClick={() => pickCard(card)}
-                className="relative rounded-lg border bg-white p-1 text-left transition"
-                style={{
-                  borderColor: active ? '#4a6cf7' : '#e6e6ea',
-                  boxShadow: active ? '0 0 0 2px #4a6cf7' : 'none',
-                }}
-              >
-                <div className="overflow-hidden rounded-md" style={{ pointerEvents: 'none' }}>
-                  <LabSlideCanvas slide={ps} renderWidth={92} rounded={6} />
-                </div>
-                <div className="mt-1 flex items-center justify-between gap-0.5 px-0.5">
-                  <span className="truncate text-[10.5px] font-medium leading-tight text-zinc-800">{card.label}</span>
-                  {active && (
-                    <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-[#4a6cf7] text-white">
-                      <Check className="h-2.5 w-2.5" strokeWidth={3} />
-                    </span>
-                  )}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      {/* subtype cards — text shows 3 rows (no photo / photo up / photo down) */}
+      {slide.type === 'text'
+        ? ([
+            { pos: 'none', label: 'Без фото' },
+            { pos: 'up', label: 'Фото зверху' },
+            { pos: 'down', label: 'Фото знизу' },
+          ] as { pos: LabPicturePosition; label: string }[]).map((row) => (
+            <div key={row.pos}>
+              <div className="mb-1.5 text-[12px] font-semibold uppercase tracking-wide text-zinc-400">{row.label}</div>
+              <div className="grid grid-cols-3 gap-2">
+                {CARDS.text.map((card) => (
+                  <CardBtn
+                    key={card.label + row.pos}
+                    ps={previewSlide('text', card, row.pos)}
+                    label={card.label}
+                    active={slide.subtype === card.subtype && slide.picturePosition === row.pos}
+                    onClick={() => onChange({ type: 'text', subtype: card.subtype, variant: 'default', picturePosition: row.pos })}
+                  />
+                ))}
+              </div>
+            </div>
+          ))
+        : (
+          <div>
+            <div className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-zinc-400">
+              {GROUPS.find((g) => g.type === slide.type)?.label}
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {previews.map(({ card, slide: ps }) => (
+                <CardBtn key={card.label} ps={ps} label={card.label} active={isCardActive(card)} onClick={() => pickCard(card)} />
+              ))}
+            </div>
+          </div>
+        )}
     </div>
+  );
+}
+
+function CardBtn({ ps, label, active, onClick }: { ps: LabSlide; label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="relative rounded-lg border bg-white p-1 text-left transition"
+      style={{ borderColor: active ? '#4a6cf7' : '#e6e6ea', boxShadow: active ? '0 0 0 2px #4a6cf7' : 'none' }}
+    >
+      <div className="overflow-hidden rounded-md" style={{ pointerEvents: 'none' }}>
+        <LabSlideCanvas slide={ps} renderWidth={92} rounded={6} />
+      </div>
+      <div className="mt-1 flex items-center justify-between gap-0.5 px-0.5">
+        <span className="truncate text-[10.5px] font-medium leading-tight text-zinc-800">{label}</span>
+        {active && (
+          <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-[#4a6cf7] text-white">
+            <Check className="h-2.5 w-2.5" strokeWidth={3} />
+          </span>
+        )}
+      </div>
+    </button>
   );
 }

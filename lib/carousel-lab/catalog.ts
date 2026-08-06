@@ -52,7 +52,7 @@ export const CATALOG: TypeOption[] = [
   },
   {
     type: 'testimonial',
-    label: 'Скриншот / Відгук',
+    label: 'Скріншот / Відгук',
     subtypes: [
       { subtype: 'screenshot', label: 'Текстовий відгук (скриншот)' },
       { subtype: 'before_after', label: 'До / Після' },

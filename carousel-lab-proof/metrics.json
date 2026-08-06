@@ -2,91 +2,91 @@
   {
     "key": "cover-title",
     "parity": 0,
-    "fidelity": 2.5673703703703703
+    "fidelity": 2.3357325102880657
   },
   {
     "key": "cover-title-subtext",
     "parity": 0,
-    "fidelity": 4.97824074074074
+    "fidelity": 4.846288065843622
   },
   {
     "key": "text-paragraph",
     "parity": 0.20872427983539094,
-    "fidelity": 5.375086419753086
+    "fidelity": 6.897213991769547
   },
   {
     "key": "text-bullets",
-    "parity": 0.31796296296296295,
-    "fidelity": 10.586246913580247
+    "parity": 0.31788271604938273,
+    "fidelity": 12.21740534979424
   },
   {
     "key": "text-numbered",
-    "parity": 0.3219238683127572,
-    "fidelity": 10.78567489711934
+    "parity": 0.3218847736625514,
+    "fidelity": 12.381841563786008
   },
   {
     "key": "numbers-stat",
-    "parity": 0.07111111111111111,
-    "fidelity": 4.123761316872428
+    "parity": 0.07132716049382716,
+    "fidelity": 3.774312757201646
   },
   {
     "key": "numbers-stat-small",
-    "parity": 0.07111111111111111,
-    "fidelity": 4.547129629629629
+    "parity": 0.07132716049382716,
+    "fidelity": 4.384820987654321
   },
   {
     "key": "cta-keyword",
-    "parity": 0.07384156378600823,
-    "fidelity": 4.458646090534979
+    "parity": 0.07385802469135802,
+    "fidelity": 4.636753086419753
   },
   {
     "key": "cta-icons",
-    "parity": 0.044726337448559673,
-    "fidelity": 2.323125514403292
+    "parity": 0.04473456790123457,
+    "fidelity": 2.9934897119341564
   },
   {
     "key": "testimonial-screenshot",
     "parity": 0.07255349794238683,
-    "fidelity": 15.581779835390947
+    "fidelity": 15.46725720164609
   },
   {
     "key": "testimonial-before-after",
     "parity": 0.06586008230452675,
-    "fidelity": 21.840899176954732
+    "fidelity": 21.773158436213993
   },
   {
     "key": "testimonial-point-ab",
-    "parity": 0.13164197530864197,
-    "fidelity": 11.973944444444445
+    "parity": 0.13196913580246913,
+    "fidelity": 11.941864197530863
   },
   {
     "key": "text-paragraph-image-up",
-    "parity": 0.16121604938271605,
-    "fidelity": 23.717619341563786
+    "parity": 0.16097325102880658,
+    "fidelity": 24.910740740740742
   },
   {
     "key": "text-paragraph-image-down",
     "parity": 0.12647119341563787,
-    "fidelity": 23.780652263374485
+    "fidelity": 24.78996913580247
   },
   {
     "key": "text-bullets-image-up",
-    "parity": 0.043248971193415635,
-    "fidelity": 21.93643621399177
+    "parity": 0.043281893004115224,
+    "fidelity": 22.65672222222222
   },
   {
     "key": "text-bullets-image-down",
     "parity": 0.04326954732510288,
-    "fidelity": 23.084831275720166
+    "fidelity": 23.610516460905348
   },
   {
     "key": "text-numbered-image-up",
-    "parity": 0.04530041152263375,
-    "fidelity": 22.058995884773662
+    "parity": 0.04543004115226337,
+    "fidelity": 22.778034979423868
   },
   {
     "key": "text-numbered-image-down",
-    "parity": 0.04530041152263375,
-    "fidelity": 22.058991769547326
+    "parity": 0.04543004115226337,
+    "fidelity": 22.778055555555557
   }
 ]

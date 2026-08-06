@@ -61,8 +61,8 @@ export const PARAGRAPH_GAP = 0.55;
 
 /** Gaps between stacked blocks (design px). */
 export const GAP = {
-  coverTitleToBody: 22,
-  slideTitleToBody: 30,
+  coverTitleToBody: 36,
+  slideTitleToBody: 36,
   titleToBullets: 36,
   bulletsToBody: 36,
   titleToImage: 36,
