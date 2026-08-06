@@ -27,7 +27,7 @@ import {
   PARAGRAPH_GAP,
   type Slot,
 } from './tokens';
-import { layoutParagraphs, type Measure, type TextBlock } from './textLayout';
+import { layoutParagraphs, ACCENT_PAD, type Measure, type TextBlock } from './textLayout';
 import { CTA_ICON_PATHS } from './ctaIcons';
 
 export type Measurer = (text: string, fontPx: number, weight: number) => number;
@@ -76,14 +76,13 @@ function stackHeight(els: El[]): number {
 }
 
 // ── text emitters ────────────────────────────────────────────────────────────
-const ACCENT_PADX = 12;
 const ACCENT_PADY = 5;
 function emitBlock(block: TextBlock, topY: number, size: number, weight: number, color: string): string {
   const cap = size * CAP;
   const parts: string[] = [];
   for (const line of block.lines) {
     const by = topY + line.baseline;
-    // White chips behind each contiguous run of {accent} words (like bullets).
+    // White chips (straight corners) behind each contiguous run of *accent* words.
     let i = 0;
     while (i < line.words.length) {
       if (line.words[i].accent) {
@@ -91,10 +90,10 @@ function emitBlock(block: TextBlock, topY: number, size: number, weight: number,
         while (j < line.words.length && line.words[j].accent) j++;
         const first = line.words[i];
         const last = line.words[j - 1];
-        const left = first.x - ACCENT_PADX;
-        const right = last.x + last.w + ACCENT_PADX;
+        const left = first.x - ACCENT_PAD;
+        const right = last.x + last.w + ACCENT_PAD;
         parts.push(
-          `<rect x="${r2(left)}" y="${r2(by - cap - ACCENT_PADY)}" width="${r2(right - left)}" height="${r2(cap + 2 * ACCENT_PADY)}" rx="${CHIP.radius}" fill="${COLORS.chipFill}"/>`,
+          `<rect x="${r2(left)}" y="${r2(by - cap - ACCENT_PADY)}" width="${r2(right - left)}" height="${r2(cap + 2 * ACCENT_PADY)}" fill="${COLORS.chipFill}"/>`,
         );
         i = j;
       } else {

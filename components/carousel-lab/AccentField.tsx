@@ -50,7 +50,7 @@ export default function AccentField({
   inputClassName?: string;
 }) {
   const ref = useRef<El>(null);
-  const [tb, setTb] = useState<{ top: number; left: number } | null>(null);
+  const [tb, setTb] = useState<{ top: number; left: number; height: number } | null>(null);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
@@ -61,7 +61,7 @@ export default function AccentField({
     const e = el.selectionEnd;
     if (s == null || e == null || s === e) { setTb(null); return; }
     const c = caretCoords(el, Math.round((s + e) / 2));
-    setTb({ top: c.top, left: c.left });
+    setTb({ top: c.top, left: c.left, height: c.height });
   }, []);
 
   useEffect(() => {
@@ -123,7 +123,9 @@ export default function AccentField({
       {multiline ? <textarea rows={rows} {...common} /> : <input {...common} />}
       {mounted && tb
         ? createPortal(
-            <div style={{ position: 'fixed', top: tb.top - 46, left: tb.left, transform: 'translateX(-50%)', zIndex: 1000 }}>
+            // Placed BELOW the selection so the phone's native Cut/Copy callout
+            // (which appears above the selection) doesn't cover it.
+            <div style={{ position: 'fixed', top: tb.top + tb.height + 10, left: tb.left, transform: 'translateX(-50%)', zIndex: 1000 }}>
               <button
                 type="button"
                 onMouseDown={(e) => { e.preventDefault(); toggle(); }}

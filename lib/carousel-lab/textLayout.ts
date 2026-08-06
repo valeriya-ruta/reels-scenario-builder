@@ -18,6 +18,12 @@ type Tok = { text: string; accent: boolean };
 /** Cap height as a fraction of font size (see numbers/gap notes in buildSlideSvg). */
 const CAP_RATIO = 0.72;
 
+/** Horizontal padding of the accent chip (px). Also added as extra spacing on
+ *  each side of an accent run so the chip keeps a real empty space to the words
+ *  around it (a "double space": one empty, one where the accent starts) instead
+ *  of eating the inter-word space. Shared with the SVG emitter. */
+export const ACCENT_PAD = 8;
+
 /** Split a paragraph into words, tagging each word inside *asterisks* as accent.
  *  Stray/unclosed `*` stays as literal text so typing is never swallowed. */
 function tokenizeAccent(s: string): Tok[] {
@@ -122,12 +128,20 @@ function placeWords(
 
   const lineW = sum + spaceW * (words.length - 1);
   let x = align === 'center' ? marginX + Math.max(0, (maxWidth - lineW) / 2) : marginX;
+  // If the line starts with an accent word, inset by the chip padding so the
+  // chip's left edge lands on the margin (not left of it).
+  if (words[0].accent) x += ACCENT_PAD;
 
   const placed: PlacedWord[] = [];
-  words.forEach((w, i) => {
-    placed.push({ text: w.text, x: Math.round(x * 100) / 100, w: widths[i], accent: w.accent });
-    x += widths[i] + gap;
-  });
+  for (let i = 0; i < words.length; i++) {
+    if (i > 0) {
+      let g = gap;
+      // extra room on each side of an accent run (chip padding), keeping a real space
+      if (words[i].accent !== words[i - 1].accent) g += ACCENT_PAD;
+      x += widths[i - 1] + g;
+    }
+    placed.push({ text: words[i].text, x: Math.round(x * 100) / 100, w: widths[i], accent: words[i].accent });
+  }
   return placed;
 }
 
