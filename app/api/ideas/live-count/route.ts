@@ -10,18 +10,18 @@ export const runtime = 'nodejs';
  * Live word count while the user is still speaking (§4, task 86d3wadg3).
  *
  * Returns ONLY a number. That is the whole point: the braindump's saved
- * transcript stays the single source of truth produced by the one Groq Whisper
+ * transcript stays the single source of truth produced by the one Whisper
  * pass on stop, and nothing here can ever overwrite it. Interim passes are
  * lossy by nature — a truncated container, a half-finished sentence — so they
  * are allowed to inform a counter and nothing else.
  *
  * On the vendor: the spec named Deepgram's streaming layer, but no Deepgram key
- * is configured in this project (see .env.example) and adding a vendor is not a
- * refinement. This reuses the Groq Whisper path that already carries the
- * braindump, polled every few seconds by the client. The user-visible outcome is
- * the same — a count that ticks up while she talks, killing the
- * speak→stop→check→speak loop — at a coarser tick. If a true word-by-word tick
- * is wanted later, this route is the seam to swap.
+ * is configured in this project and adding a vendor is not a refinement. This
+ * reuses the Whisper path (`whisper-large-v3-turbo` via OpenRouter) that already
+ * carries the braindump, polled every few seconds by the client. The
+ * user-visible outcome is the same — a count that ticks up while she talks,
+ * killing the speak→stop→check→speak loop — at a coarser tick. If a true
+ * word-by-word tick is wanted later, this route is the seam to swap.
  */
 export async function POST(req: Request) {
   const user = await requireAuth();

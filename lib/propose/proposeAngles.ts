@@ -1,5 +1,4 @@
-import { requireServerEnv } from '@/lib/env';
-import { GROQ_TEXT_MODEL } from '@/lib/ai/groqModel';
+import { openRouterChatJSON, OPENROUTER_TEXT_MODEL } from '@/lib/openrouter';
 import type { ContentType } from '@/lib/contentTypes';
 import { CONTENT_TYPE_ORDER } from '@/lib/contentTypes';
 import type { Proposal, ProposalSignal } from '@/lib/propose/types';
@@ -113,29 +112,21 @@ export async function proposeAngles(
   signals: ProposalSignal[],
   exclude: ReadonlyArray<string> = [],
 ): Promise<Proposal[]> {
-  const apiKey = requireServerEnv('GROQ_API_KEY');
-
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model: GROQ_TEXT_MODEL,
-      temperature: 0.85,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: buildUserContent(signals, exclude) },
-      ],
-    }),
+  const result = await openRouterChatJSON({
+    model: OPENROUTER_TEXT_MODEL,
+    temperature: 0.85,
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: buildUserContent(signals, exclude) },
+    ],
   });
 
-  if (!res.ok) {
-    console.error('[propose] Groq HTTP error:', res.status, await res.text());
+  if (!result.ok) {
+    console.error('[propose] OpenRouter HTTP error:', result.status, result.bodyText);
     return [];
   }
 
-  const payload = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
-  const text = payload.choices?.[0]?.message?.content?.trim();
+  const text = result.content?.trim();
   if (!text) return [];
 
   try {

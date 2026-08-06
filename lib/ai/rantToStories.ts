@@ -1,5 +1,4 @@
-import { requireServerEnv } from '@/lib/env';
-import { GROQ_TEXT_MODEL } from '@/lib/ai/groqModel';
+import { openRouterChatJSON, OPENROUTER_TEXT_MODEL } from '@/lib/openrouter';
 import { normalizeOutput } from '@/lib/ai/storiesNormalize';
 import type { StoriesOutput } from '@/lib/ai/storiesNormalize';
 
@@ -12,12 +11,6 @@ export type {
   StoryDay,
   StoriesOutput,
 } from '@/lib/ai/storiesNormalize';
-
-interface GroqResponse {
-  choices?: Array<{
-    message?: { content?: string };
-  }>;
-}
 
 type OutputLanguage = 'uk' | 'en';
 
@@ -149,32 +142,21 @@ export async function generateStoriesFromRant(rant: string, name = ''): Promise<
   }
   const outputLanguage = detectOutputLanguage(trimmed);
 
-  const apiKey = requireServerEnv('GROQ_API_KEY');
-  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: GROQ_TEXT_MODEL,
-      temperature: 0.7,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: buildSystemPrompt(outputLanguage) },
-        { role: 'user', content: buildUserPrompt(trimmed, name, outputLanguage) },
-      ],
-    }),
+  const result = await openRouterChatJSON({
+    model: OPENROUTER_TEXT_MODEL,
+    temperature: 0.7,
+    messages: [
+      { role: 'system', content: buildSystemPrompt(outputLanguage) },
+      { role: 'user', content: buildUserPrompt(trimmed, name, outputLanguage) },
+    ],
   });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('[rantToStories] Groq error:', response.status, errorText);
+  if (!result.ok) {
+    console.error('[rantToStories] OpenRouter error:', result.status, result.bodyText);
     throw new Error('Не вдалося згенерувати сценарій. Спробуй ще раз.');
   }
 
-  const payload = (await response.json()) as GroqResponse;
-  const rawText = payload.choices?.[0]?.message?.content?.trim();
+  const rawText = result.content?.trim();
   if (!rawText) {
     throw new Error('AI повернув порожню відповідь. Спробуй ще раз.');
   }

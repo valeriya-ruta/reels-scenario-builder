@@ -30,6 +30,7 @@ function probe(base) {
 const STUBS = {
   'next/link': 'scripts/proof/_stubs/next-link.tsx',
   'next/navigation': 'scripts/proof/_stubs/next-navigation.ts',
+  'server-only': 'scripts/proof/_stubs/server-only.ts',
 };
 
 export async function resolve(specifier, context, nextResolve) {

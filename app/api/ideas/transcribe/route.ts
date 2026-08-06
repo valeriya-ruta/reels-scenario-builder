@@ -6,9 +6,9 @@ export const runtime = 'nodejs';
 
 /**
  * Braindump voice transcription. Accepts a multipart `audio` blob captured in the
- * browser (MediaRecorder) and runs it through the EXISTING Groq Whisper path
- * (whisper-large-v3-turbo, language uk) — same client/key/direct-bytes upload as
- * reel transcription. Returns the recognised text.
+ * browser (MediaRecorder) and runs it through the Whisper path
+ * (whisper-large-v3-turbo via OpenRouter, language uk) — same direct-bytes upload
+ * as reel transcription. Returns the recognised text.
  */
 export async function POST(req: Request) {
   const user = await requireAuth();
