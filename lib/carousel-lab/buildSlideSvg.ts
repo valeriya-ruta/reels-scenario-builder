@@ -76,14 +76,37 @@ function stackHeight(els: El[]): number {
 }
 
 // ── text emitters ────────────────────────────────────────────────────────────
+const ACCENT_PADX = 12;
+const ACCENT_PADY = 5;
 function emitBlock(block: TextBlock, topY: number, size: number, weight: number, color: string): string {
-  return block.lines
-    .map((line) => {
-      const by = r2(topY + line.baseline);
-      const tspans = line.words.map((w) => `<tspan x="${r2(w.x)}">${esc(w.text)}</tspan>`).join('');
-      return `<text y="${by}" font-family="${FONT_FAMILY}" font-size="${size}" font-weight="${weight}" fill="${color}">${tspans}</text>`;
-    })
-    .join('');
+  const cap = size * CAP;
+  const parts: string[] = [];
+  for (const line of block.lines) {
+    const by = topY + line.baseline;
+    // White chips behind each contiguous run of {accent} words (like bullets).
+    let i = 0;
+    while (i < line.words.length) {
+      if (line.words[i].accent) {
+        let j = i;
+        while (j < line.words.length && line.words[j].accent) j++;
+        const first = line.words[i];
+        const last = line.words[j - 1];
+        const left = first.x - ACCENT_PADX;
+        const right = last.x + last.w + ACCENT_PADX;
+        parts.push(
+          `<rect x="${r2(left)}" y="${r2(by - cap - ACCENT_PADY)}" width="${r2(right - left)}" height="${r2(cap + 2 * ACCENT_PADY)}" rx="${CHIP.radius}" fill="${COLORS.chipFill}"/>`,
+        );
+        i = j;
+      } else {
+        i++;
+      }
+    }
+    const tspans = line.words
+      .map((w) => `<tspan x="${r2(w.x)}" fill="${w.accent ? COLORS.chipText : color}">${esc(w.text)}</tspan>`)
+      .join('');
+    parts.push(`<text y="${r2(by)}" font-family="${FONT_FAMILY}" font-size="${size}" font-weight="${weight}">${tspans}</text>`);
+  }
+  return parts.join('');
 }
 
 function headingBlock(text: string, m: Measurer, size: number, weight: number, marginX: number, maxW: number): TextBlock {

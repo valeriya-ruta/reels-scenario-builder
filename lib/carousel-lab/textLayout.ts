@@ -2,39 +2,49 @@
 // Text layout: word-wrap + justification with baked per-word x positions.
 // Positions are computed once (browser canvas metrics) and written into the SVG,
 // so the editor's inline SVG and the exported rasterization are pixel-identical.
+// Accent runs are marked in the source with {curly braces} and carried per word
+// so the renderer can draw a white chip behind exactly those words.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** A measure fn already bound to a specific font family / weight / size. */
 export type Measure = (text: string) => number;
 
-export type PlacedWord = { text: string; x: number };
+export type PlacedWord = { text: string; x: number; w: number; accent?: boolean };
 export type PlacedLine = { baseline: number; words: PlacedWord[] };
 export type TextBlock = { lines: PlacedLine[]; height: number };
 
-/** Cap height as a fraction of font size. Baselines are cap-aligned: a block's
- *  first line has its CAP TOP at the block top (y=0), so a block's rendered
- *  height equals the last line's baseline (its cap bottom). Stacking blocks with
- *  a fixed gap then yields that exact visual gap between cap-bottom and cap-top. */
+type Tok = { text: string; accent: boolean };
+
+/** Cap height as a fraction of font size (see numbers/gap notes in buildSlideSvg). */
 const CAP_RATIO = 0.72;
 
-function splitWords(s: string): string[] {
-  return s.split(/\s+/).filter(Boolean);
+/** Split a paragraph into words, tagging each word inside {…} as accent. */
+function tokenizeAccent(s: string): Tok[] {
+  const out: Tok[] = [];
+  const re = /\{([^}]*)\}|([^{}]+)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(s))) {
+    const accent = m[1] !== undefined;
+    const chunk = (accent ? m[1] : m[2]) ?? '';
+    for (const w of chunk.split(/\s+/).filter(Boolean)) out.push({ text: w, accent });
+  }
+  return out;
 }
 
 /** Greedy wrap into lines that fit `maxWidth`. */
-function wrapLine(words: string[], measure: Measure, spaceW: number, maxWidth: number): string[][] {
-  const lines: string[][] = [];
-  let cur: string[] = [];
+function wrapLine(words: Tok[], measure: Measure, spaceW: number, maxWidth: number): Tok[][] {
+  const lines: Tok[][] = [];
+  let cur: Tok[] = [];
   let curW = 0;
-  for (const w of words) {
-    const ww = measure(w);
+  for (const word of words) {
+    const ww = measure(word.text);
     const add = cur.length === 0 ? ww : curW + spaceW + ww;
     if (cur.length > 0 && add > maxWidth) {
       lines.push(cur);
-      cur = [w];
+      cur = [word];
       curW = ww;
     } else {
-      cur.push(w);
+      cur.push(word);
       curW = add;
     }
   }
@@ -52,11 +62,6 @@ export type LayoutOpts = {
   align: 'left' | 'center' | 'justify';
 };
 
-/**
- * Lay out one or more paragraphs (separated by blank lines in `text`) into a
- * single block. Returns placed lines with absolute x per word and baseline y
- * measured from the block top (add the block's top Y to render).
- */
 export function layoutParagraphs(text: string, opts: LayoutOpts, paragraphGapPx: number): TextBlock {
   const { measure, fontPx, lineHeight, maxWidth, marginX, align } = opts;
   const spaceW = Math.max(1, measure(' ') || fontPx * 0.28);
@@ -73,11 +78,10 @@ export function layoutParagraphs(text: string, opts: LayoutOpts, paragraphGapPx:
   let lastBaseline = 0;
 
   for (const para of paragraphs) {
-    if (!first) y += paragraphGapPx; // blank-line gap between paragraphs
+    if (!first) y += paragraphGapPx;
     first = false;
-    const words = splitWords(para);
+    const words = tokenizeAccent(para);
     if (words.length === 0) {
-      // preserve an intentional empty paragraph as vertical space
       y += lineHeight;
       continue;
     }
@@ -85,20 +89,17 @@ export function layoutParagraphs(text: string, opts: LayoutOpts, paragraphGapPx:
     wrapped.forEach((lineWords, li) => {
       const isLast = li === wrapped.length - 1;
       const placed = placeWords(lineWords, measure, spaceW, maxWidth, marginX, align, isLast);
-      // cap-aligned: first line's cap top sits at the line box top.
       lastBaseline = y + cap;
       lines.push({ baseline: lastBaseline, words: placed });
       y += lineHeight;
     });
   }
 
-  // Height = cap bottom of the last line, so a following block placed at
-  // height + 36 sits exactly 36px below this block's last text.
   return { lines, height: lastBaseline };
 }
 
 function placeWords(
-  words: string[],
+  words: Tok[],
   measure: Measure,
   spaceW: number,
   maxWidth: number,
@@ -107,20 +108,18 @@ function placeWords(
   isLast: boolean,
 ): PlacedWord[] {
   if (words.length === 0) return [];
-  const widths = words.map(measure);
+  const widths = words.map((w) => measure(w.text));
   const sum = widths.reduce((a, b) => a + b, 0);
 
-  // Justify: only interior lines with ≥2 words; last line + single word stay left.
   const doJustify = align === 'justify' && !isLast && words.length > 1;
   const gap = doJustify ? (maxWidth - sum) / (words.length - 1) : spaceW;
 
-  // Center: shift the whole line so it's centered within [marginX, marginX+maxWidth].
   const lineW = sum + spaceW * (words.length - 1);
   let x = align === 'center' ? marginX + Math.max(0, (maxWidth - lineW) / 2) : marginX;
 
   const placed: PlacedWord[] = [];
   words.forEach((w, i) => {
-    placed.push({ text: w, x: Math.round(x * 100) / 100 });
+    placed.push({ text: w.text, x: Math.round(x * 100) / 100, w: widths[i], accent: w.accent });
     x += widths[i] + gap;
   });
   return placed;
