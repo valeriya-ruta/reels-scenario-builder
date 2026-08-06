@@ -50,7 +50,7 @@ export const SIZE = {
   coverBody: 50,
   slideTitle: 70,
   slideBody: 35,
-  bullet: 40,
+  bullet: 35,
   statLarge: 210,
   statSmall: 140,
   ctaKeyword: 70,
@@ -63,13 +63,13 @@ export const PARAGRAPH_GAP = 0.55;
 export const GAP = {
   coverTitleToBody: 22,
   slideTitleToBody: 30,
-  titleToBullets: 40,
-  bulletsToBody: 40,
+  titleToBullets: 36,
+  bulletsToBody: 36,
   titleToImage: 36,
-  imageToBody: 40,
-  statToLabel: 24,
-  ctaLineGap: 18,
-  iconsToBody: 40,
+  imageToBody: 36,
+  statToLabel: 36,
+  ctaLineGap: 36,
+  iconsToBody: 36,
 } as const;
 
 /** Highlight chip padding (design px) around knockout text. */

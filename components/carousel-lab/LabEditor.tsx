@@ -16,13 +16,15 @@ import { rectSortingStrategy, SortableContext, sortableKeyboardCoordinates, useS
 import { restrictToHorizontalAxis, restrictToVerticalAxis } from '@dnd-kit/modifiers';
 import { CSS } from '@dnd-kit/utilities';
 import { ChevronLeft, ChevronDown, ChevronRight, Calendar, Download, Loader2, Pencil, Plus, Trash2, Undo2, Redo2, X } from 'lucide-react';
-import { LAB_CANVAS_W as CW, LAB_CANVAS_H as CH, type LabSlide, type LabStyleId } from '@/lib/carousel-lab/types';
+import { LAB_CANVAS_W as CW, LAB_CANVAS_H as CH, type LabSlide, type LabImage, type LabStyleId } from '@/lib/carousel-lab/types';
+import { SLOTS, type Slot } from '@/lib/carousel-lab/tokens';
 import { createSlide } from '@/lib/carousel-lab/defaults';
 import { saveLabSlides, updateLabStyle, renameLabProject } from '@/app/carousel-lab/actions';
-import { downloadProjectZip } from '@/lib/carousel-lab/exportPng';
+import { slideToPngBlob, blobToBase64, downloadBlob, downloadZipOfBlobs, sharePngBlobs } from '@/lib/carousel-lab/exportPng';
 import LabSlideCanvas from './LabSlideCanvas';
 import LabTypeTab from './LabTypeTab';
 import LabFields from './LabFields';
+import LabExportOverlay from './LabExportOverlay';
 
 type EditorTab = 'type' | 'text' | 'position' | 'bg' | 'brand';
 const BAR = 72;
@@ -35,6 +37,57 @@ function LabTabIcon({ tab, active, size = 22 }: { tab: EditorTab; active: boolea
   if (tab === 'position') return (<svg width={size} height={size} viewBox="0 0 24 24" fill="none"><path d="M4 7h16M7 12h10M9 17h6" stroke={s} strokeWidth={sw} strokeLinecap="round" /></svg>);
   if (tab === 'bg') return (<svg width={size} height={size} viewBox="0 0 24 24" fill="none"><rect x="4" y="5" width="16" height="14" rx="2" stroke={s} strokeWidth={sw} /><circle cx="9" cy="10" r="1.5" stroke={s} strokeWidth={sw} /><path d="M7 17l10-8" stroke={s} strokeWidth={sw} /></svg>);
   return (<svg width={size} height={size} viewBox="0 0 24 24" fill="none"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.3-.3-.4-.5-.8-.5-1.2 0-.8.7-1.5 1.5-1.5H16a5 5 0 0 0 5-5c0-3.9-4-7-9-7z" stroke={s} strokeWidth={sw} strokeLinejoin="round" /><circle cx="7.5" cy="11.5" r="1" fill={s} /><circle cx="12" cy="8" r="1" fill={s} /><circle cx="16" cy="11" r="1" fill={s} /></svg>);
+}
+
+const clampT = (v: number, max: number) => Math.max(-max, Math.min(max, v));
+
+/** Cover-image slots (with an image) that support drag-to-reposition on the preview. */
+function coverImageSlots(slide: LabSlide): { slot: Slot; index: number }[] {
+  const has = (i: number) => { const im = slide.images[i]; return !!(im && (im.url || im.base64)); };
+  const out: { slot: Slot; index: number }[] = [];
+  if (slide.type === 'text' && slide.picturePosition !== 'none' && has(0)) {
+    const slot = slide.picturePosition === 'up' ? SLOTS.textImageUp : slide.picturePosition === 'down' ? SLOTS.textImageDown : { x: 76, y: 500, w: 928, h: 350 };
+    out.push({ slot, index: 0 });
+  }
+  if (slide.subtype === 'before_after') SLOTS.beforeAfter.forEach((slot, i) => { if (has(i)) out.push({ slot, index: i }); });
+  if (slide.subtype === 'point_ab') SLOTS.pointAbDiagonal.forEach((slot, i) => { if (has(i)) out.push({ slot, index: i }); });
+  return out;
+}
+
+/** Transparent draggable overlays over cover-image slots: drag to pan (once
+ *  zoomed), wheel to zoom — directly on the slide preview like a photo bg. */
+function ImageHandles({ slide, boxW, onPatch }: { slide: LabSlide; boxW: number; onPatch: (index: number, t: { tx: number; ty: number; scale: number }) => void }) {
+  const scale = boxW / CW;
+  const drag = useRef<{ index: number; x: number; y: number; tx: number; ty: number } | null>(null);
+  return (
+    <>
+      {coverImageSlots(slide).map(({ slot, index }) => {
+        const t = slide.images[index]?.transform ?? { tx: 0, ty: 0, scale: 1 };
+        return (
+          <div
+            key={index}
+            className="absolute touch-none"
+            style={{ left: slot.x * scale, top: slot.y * scale, width: slot.w * scale, height: slot.h * scale, cursor: t.scale > 1 ? 'grab' : 'default' }}
+            onPointerDown={(e) => { if (t.scale <= 1) return; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); drag.current = { index, x: e.clientX, y: e.clientY, tx: t.tx, ty: t.ty }; }}
+            onPointerMove={(e) => {
+              const d = drag.current;
+              if (!d || d.index !== index) return;
+              const max = (t.scale - 1) / 2;
+              onPatch(index, { tx: clampT(d.tx + (e.clientX - d.x) / (slot.w * scale), max), ty: clampT(d.ty + (e.clientY - d.y) / (slot.h * scale), max), scale: t.scale });
+            }}
+            onPointerUp={() => (drag.current = null)}
+            onPointerCancel={() => (drag.current = null)}
+            onWheel={(e) => {
+              e.preventDefault();
+              const ns = Math.max(1, Math.min(3, t.scale - e.deltaY * 0.0015));
+              const max = (ns - 1) / 2;
+              onPatch(index, { tx: clampT(t.tx, max), ty: clampT(t.ty, max), scale: ns });
+            }}
+          />
+        );
+      })}
+    </>
+  );
 }
 
 function LabSortableThumb({ slide, index, active, onSelect, size, wholeTileDrag = false, showTrash = false, canDelete = true, onDelete }: {
@@ -75,6 +128,7 @@ export default function LabEditor({ projectId, initialName, initialStyleId, init
   const [hist, setHist] = useState<{ past: LabSlide[][]; present: LabSlide[]; future: LabSlide[][] }>({ past: [], present: initial, future: [] });
   const slides = hist.present;
   const lastPush = useRef(0);
+  const panelSwipe = useRef<{ y: number } | null>(null);
   const setSlides = useCallback((updater: LabSlide[] | ((prev: LabSlide[]) => LabSlide[])) => {
     setHist((h) => {
       const next = typeof updater === 'function' ? (updater as (p: LabSlide[]) => LabSlide[])(h.present) : updater;
@@ -95,7 +149,13 @@ export default function LabEditor({ projectId, initialName, initialStyleId, init
   const [activeSlideId, setActiveSlideId] = useState(slides[0]?.id ?? '');
   const [tab, setTab] = useState<EditorTab | null>(null);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
-  const [exporting, setExporting] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportImages, setExportImages] = useState<(string | null)[]>([]);
+  const [exportDone, setExportDone] = useState<boolean[]>([]);
+  const [exportGenIndex, setExportGenIndex] = useState(0);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const exportBlobsRef = useRef<(Blob | null)[]>([]);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
   const [trashForId, setTrashForId] = useState<string | null>(null);
@@ -120,11 +180,17 @@ export default function LabEditor({ projectId, initialName, initialStyleId, init
   const patchActive = useCallback((patch: Partial<LabSlide>) => {
     setSlides((prev) => prev.map((s) => (s.id === activeSlide?.id ? { ...s, ...patch } : s)));
   }, [activeSlide?.id]);
+  const patchImage = useCallback((index: number, transform: { tx: number; ty: number; scale: number }) => {
+    setSlides((prev) => prev.map((s) => (s.id === activeSlide?.id ? { ...s, images: s.images.map((im: LabImage, i: number) => (i === index ? { ...im, transform } : im)) } : s)));
+  }, [activeSlide?.id]);
 
+  const MAX_SLIDES = 20;
   function addSlide() {
+    if (slides.length >= MAX_SLIDES) return;
     const s = createSlide('text', 'paragraph');
     setSlides((prev) => { const i = prev.findIndex((x) => x.id === activeSlideId); const n = [...prev]; n.splice(i + 1, 0, s); return n; });
     setActiveSlideId(s.id);
+    setTab('type'); // new slide → open the type picker automatically
   }
   function removeSlide(id: string) {
     setSlides((prev) => { if (prev.length <= 1) return prev; const i = prev.findIndex((s) => s.id === id); const n = prev.filter((s) => s.id !== id); if (id === activeSlideId) setActiveSlideId(n[Math.max(0, i - 1)].id); return n; });
@@ -166,22 +232,74 @@ export default function LabEditor({ projectId, initialName, initialStyleId, init
   const goSlide = useCallback((d: number) => { const n = activeIndex + d; if (n < 0 || n >= slides.length) return; setActiveSlideId(slides[n].id); }, [activeIndex, slides]);
   useEffect(() => { const onKey = (e: KeyboardEvent) => { if (window.matchMedia('(max-width: 767px)').matches) return; if (e.key === 'ArrowLeft') { e.preventDefault(); goSlide(-1); } if (e.key === 'ArrowRight') { e.preventDefault(); goSlide(1); } }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [goSlide]);
 
-  const mobileSensors = useSensors(useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 18 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
+  // Longer hold + tighter tolerance so scrolling a long filmstrip doesn't
+  // accidentally start a reorder (a quick horizontal swipe cancels the press).
+  const mobileSensors = useSensors(useSensor(TouchSensor, { activationConstraint: { delay: 320, tolerance: 6 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
   const desktopSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
   const sensors = isDesktop ? desktopSensors : mobileSensors;
   const dragModifiers = useMemo(() => [isDesktop ? restrictToVerticalAxis : restrictToHorizontalAxis], [isDesktop]);
 
   const tabLabel = (t: EditorTab) => (t === 'type' ? 'Тип' : t === 'text' ? 'Текст' : t === 'position' ? 'Позиція' : t === 'bg' ? 'Фон' : 'Бренд');
 
-  async function exportAll() { setExporting(true); try { await downloadProjectZip(slides, name || 'carousel'); } finally { setExporting(false); } }
+  async function exportAll() {
+    const list = slides;
+    setExportOpen(true);
+    setExportError(null);
+    setExportBusy(true);
+    const imgs: (string | null)[] = new Array(list.length).fill(null);
+    const done: boolean[] = new Array(list.length).fill(false);
+    const blobs: (Blob | null)[] = new Array(list.length).fill(null);
+    setExportImages([...imgs]);
+    setExportDone([...done]);
+    setExportGenIndex(0);
+    try {
+      for (let i = 0; i < list.length; i++) {
+        setExportGenIndex(i);
+        const blob = await slideToPngBlob(list[i]);
+        blobs[i] = blob;
+        imgs[i] = await blobToBase64(blob);
+        done[i] = true;
+        setExportImages([...imgs]);
+        setExportDone([...done]);
+      }
+      exportBlobsRef.current = blobs;
+    } catch {
+      setExportError('Не вдалося відрендерити слайди. Спробуй ще раз.');
+    } finally {
+      setExportBusy(false);
+    }
+  }
+  const exportGenerated = exportImages.length > 0 && exportImages.every((x) => x !== null);
+  const onDownloadAll = () => void downloadZipOfBlobs(exportBlobsRef.current, name || 'carousel');
+  const onSaveOne = (i: number) => { const b = exportBlobsRef.current[i]; if (b) downloadBlob(b, `${name || 'slide'}-${i + 1}.png`); };
+  const onShareAll = () => void sharePngBlobs(exportBlobsRef.current, name || 'carousel');
+  const onShareOne = (i: number) => void sharePngBlobs([exportBlobsRef.current[i]], `${name || 'slide'}-${i + 1}`);
 
   const tabPanel = activeSlide ? (
     tab === 'type' ? <LabTypeTab slide={activeSlide} onChange={patchActive} />
     : tab === 'text' ? <LabFields slide={activeSlide} projectId={projectId} onChange={patchActive} section="text" />
     : tab === 'position' ? (
-        activeSlide.type === 'text'
-          ? <LabTypeTab slide={activeSlide} onChange={patchActive} />
-          : <p className="rounded-lg bg-[color:var(--surface)] px-3 py-2 text-sm text-zinc-500">Розташування задане стилем Modern Elegant для цього типу слайду.</p>
+        activeSlide.type === 'text' ? (
+          <div>
+            <div className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-zinc-400">Фото на слайді</div>
+            <div className="flex flex-wrap gap-1.5">
+              {(['none', 'up', 'down', 'middle'] as const).map((p) => {
+                const active = activeSlide.picturePosition === p;
+                const dim = p === 'middle';
+                const label = p === 'none' ? 'Без фото' : p === 'up' ? 'Фото зверху' : p === 'down' ? 'Фото знизу' : 'Фото по центру';
+                return (
+                  <button key={p} type="button" onClick={() => patchActive({ picturePosition: p })}
+                    className={active ? 'rounded-full bg-[#4a6cf7] px-3.5 py-2 text-[13px] font-medium text-white' : `rounded-full bg-[#f1f1f4] px-3.5 py-2 text-[13px] ${dim ? 'text-zinc-400' : 'text-zinc-700'}`}>
+                    {label}{dim ? ' •' : ''}
+                  </button>
+                );
+              })}
+            </div>
+            {activeSlide.picturePosition === 'middle' && <div className="mt-1 text-[11px] text-amber-600">«По центру» без Figma-еталона — не звірена.</div>}
+          </div>
+        ) : (
+          <p className="rounded-lg bg-[color:var(--surface)] px-3 py-2 text-sm text-zinc-500">Розташування задане стилем Modern Elegant для цього типу слайду.</p>
+        )
       )
     : tab === 'bg' ? <LabFields slide={activeSlide} projectId={projectId} onChange={patchActive} section="images" />
     : tab === 'brand' ? (
@@ -226,9 +344,15 @@ export default function LabEditor({ projectId, initialName, initialStyleId, init
     </>
   );
 
-  const renderPreview = (slide: LabSlide, scale: number) => (
-    <LabSlideCanvas slide={slide} renderWidth={Math.max(40, Math.round(CW * scale))} rounded={Math.round(CW * scale * 0.02)} testId={slide.id === activeSlideId ? 'active-preview' : undefined} />
-  );
+  const renderPreview = (slide: LabSlide, scale: number) => {
+    const w = Math.max(40, Math.round(CW * scale));
+    return (
+      <div className="relative" style={{ width: w }}>
+        <LabSlideCanvas slide={slide} renderWidth={w} rounded={Math.round(w * 0.02)} testId={slide.id === activeSlideId ? 'active-preview' : undefined} />
+        <ImageHandles slide={slide} boxW={w} onPatch={patchImage} />
+      </div>
+    );
+  };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -247,9 +371,9 @@ export default function LabEditor({ projectId, initialName, initialStyleId, init
             </button>
           )}
           {undoRedo}
-          <button type="button" onClick={exportAll} disabled={exporting} aria-label="Експортувати" data-testid="carousel-export"
+          <button type="button" onClick={exportAll} disabled={exportBusy} aria-label="Експортувати" data-testid="carousel-export"
             className="ml-1 inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-[13px] font-semibold text-white disabled:opacity-50" style={{ backgroundColor: '#4a6cf7' }}>
-            {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" strokeWidth={2.2} />}
+            {exportBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" strokeWidth={2.2} />}
           </button>
         </div>
         <div className="mt-1 flex min-w-0 items-center gap-1.5 overflow-x-auto pl-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">{metaChips}</div>
@@ -296,8 +420,8 @@ export default function LabEditor({ projectId, initialName, initialStyleId, init
                 <div className="ml-auto flex items-center gap-2">
                   {undoRedo}
                   <span className="text-[12px] text-zinc-400">{saveState === 'saving' ? 'Збереження…' : saveState === 'saved' ? 'Збережено' : ''}</span>
-                  <button type="button" onClick={exportAll} disabled={exporting} className="inline-flex items-center gap-1.5 rounded-full bg-[#4a6cf7] px-3.5 py-2 text-[13px] font-semibold text-white disabled:opacity-50">
-                    {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} Експорт
+                  <button type="button" onClick={exportAll} disabled={exportBusy} className="inline-flex items-center gap-1.5 rounded-full bg-[#4a6cf7] px-3.5 py-2 text-[13px] font-semibold text-white disabled:opacity-50">
+                    {exportBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} Експорт
                   </button>
                 </div>
               </div>
@@ -317,7 +441,9 @@ export default function LabEditor({ projectId, initialName, initialStyleId, init
                   {slides.map((slide, index) => (
                     <LabSortableThumb key={slide.id} slide={slide} index={index} active={slide.id === activeSlideId} onSelect={() => setActiveSlideId(slide.id)} size="md" />
                   ))}
-                  <button type="button" onClick={addSlide} data-testid="add-slide" className="flex h-[78px] w-[62px] shrink-0 items-center justify-center rounded-[5px] border border-dashed border-[color:var(--border)] text-zinc-500 hover:bg-[color:var(--surface)]" aria-label="Додати слайд"><Plus className="h-5 w-5" /></button>
+                  {slides.length < MAX_SLIDES && (
+                    <button type="button" onClick={addSlide} data-testid="add-slide" className="flex h-[78px] w-[62px] shrink-0 items-center justify-center rounded-[5px] border border-dashed border-[color:var(--border)] text-zinc-500 hover:bg-[color:var(--surface)]" aria-label="Додати слайд"><Plus className="h-5 w-5" /></button>
+                  )}
                 </div>
               </SortableContext>
             </DndContext>
@@ -347,16 +473,31 @@ export default function LabEditor({ projectId, initialName, initialStyleId, init
                         onSelect={() => { if (slide.id !== activeSlideId) { setTrashForId(null); setActiveSlideId(slide.id); } else if (slides.length > 1) { setTrashForId(slide.id); } }}
                         onDelete={() => { setTrashForId(null); removeSlide(slide.id); }} />
                     ))}
-                    <button type="button" onClick={() => { setTrashForId(null); addSlide(); }} data-testid="add-slide" className="flex h-[58px] w-[46px] shrink-0 items-center justify-center rounded-[5px] border border-dashed border-[color:var(--border)] text-zinc-500 hover:bg-[color:var(--surface)]" aria-label="Додати слайд"><Plus className="h-5 w-5" /></button>
+                    {slides.length < MAX_SLIDES && (
+                      <button type="button" onClick={() => { setTrashForId(null); addSlide(); }} data-testid="add-slide" className="flex h-[58px] w-[46px] shrink-0 items-center justify-center rounded-[5px] border border-dashed border-[color:var(--border)] text-zinc-500 hover:bg-[color:var(--surface)]" aria-label="Додати слайд"><Plus className="h-5 w-5" /></button>
+                    )}
                   </div>
                 </SortableContext>
               </DndContext>
             </div>
           ) : null}
-          <div className="overflow-hidden transition-[max-height] duration-250 ease-in-out" style={{ maxHeight: panelOpen ? vh * 0.55 : 0 }}>
-            <div className="overflow-y-auto rounded-t-2xl border border-[color:var(--border)] border-b-0 bg-white px-4 pt-5 shadow-[0_-2px_20px_rgba(0,0,0,0.06)]"
-              style={{ maxHeight: '55vh', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', paddingBottom: 'calc(20px + env(safe-area-inset-bottom))' }}>
-              {tabPanel}
+          <div className="overflow-hidden" style={{ maxHeight: panelOpen ? vh * 0.6 : 0, transition: 'max-height 320ms cubic-bezier(0.22, 0.61, 0.36, 1)' }}>
+            <div className="rounded-t-2xl border border-[color:var(--border)] border-b-0 bg-white shadow-[0_-2px_20px_rgba(0,0,0,0.06)]">
+              {/* grabber: tap or swipe down to close */}
+              <div
+                className="flex cursor-grab touch-none items-center justify-center py-2.5"
+                onClick={() => setTab(null)}
+                onTouchStart={(e) => { panelSwipe.current = { y: e.touches[0].clientY }; }}
+                onTouchMove={(e) => {
+                  if (panelSwipe.current && e.touches[0].clientY - panelSwipe.current.y > 36) { setTab(null); panelSwipe.current = null; }
+                }}
+                onTouchEnd={() => { panelSwipe.current = null; }}
+              >
+                <div className="h-1 w-10 rounded-full bg-zinc-300" />
+              </div>
+              <div className="overflow-y-auto px-4" style={{ maxHeight: '52vh', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', paddingBottom: 'calc(20px + env(safe-area-inset-bottom))' }}>
+                {tabPanel}
+              </div>
             </div>
           </div>
           <div className="grid grid-cols-5 gap-1 px-2 py-2">
@@ -370,6 +511,21 @@ export default function LabEditor({ projectId, initialName, initialStyleId, init
           </div>
         </div>
       ) : null}
+
+      <LabExportOverlay
+        open={exportOpen}
+        isGenerating={exportBusy}
+        hasGenerated={exportGenerated}
+        generatedImages={exportImages}
+        generatingIndex={exportGenIndex}
+        doneMask={exportDone}
+        errorMessage={exportError}
+        onDownloadAll={onDownloadAll}
+        onShareAll={onShareAll}
+        onSaveOne={onSaveOne}
+        onShareOne={onShareOne}
+        onClose={() => setExportOpen(false)}
+      />
     </div>
   );
 }

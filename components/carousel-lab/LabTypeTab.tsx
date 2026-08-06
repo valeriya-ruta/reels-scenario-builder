@@ -4,7 +4,6 @@ import { useMemo } from 'react';
 import { Check } from 'lucide-react';
 import type { LabSlide, LabSlideType, LabSubtype, LabVariant, LabPicturePosition } from '@/lib/carousel-lab/types';
 import { createSlide } from '@/lib/carousel-lab/defaults';
-import { PICTURE_POSITION_LABEL } from '@/lib/carousel-lab/catalog';
 import LabSlideCanvas from './LabSlideCanvas';
 
 // Top-level groups (chips). Each maps to one slide type; each opens a scrollable
@@ -91,7 +90,6 @@ export default function LabTypeTab({
   const isCardActive = (c: Card) =>
     c.subtype === slide.subtype && (c.variant ? c.variant === slide.variant : true);
 
-  const showPhotoRow = slide.type === 'text';
   const previews = useMemo(
     () => cards.map((c) => ({ card: c, slide: previewSlide(slide.type, c, slide.picturePosition) })),
     [cards, slide.type, slide.picturePosition],
@@ -120,67 +118,41 @@ export default function LabTypeTab({
         })}
       </div>
 
-      {/* subtype cards */}
-      <div className="grid grid-cols-2 gap-3">
-        {previews.map(({ card, slide: ps }) => {
-          const active = isCardActive(card);
-          return (
-            <button
-              key={card.label}
-              type="button"
-              onClick={() => pickCard(card)}
-              className="relative rounded-xl border bg-white p-2 text-left transition"
-              style={{
-                borderColor: active ? '#4a6cf7' : '#e6e6ea',
-                boxShadow: active ? '0 0 0 2px #4a6cf7' : 'none',
-              }}
-            >
-              <div className="overflow-hidden rounded-lg" style={{ pointerEvents: 'none' }}>
-                <LabSlideCanvas slide={ps} renderWidth={148} rounded={8} />
-              </div>
-              <div className="mt-1.5 flex items-center justify-between px-0.5">
-                <span className="text-[12.5px] font-medium text-zinc-800">{card.label}</span>
-                {active && (
-                  <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#4a6cf7] text-white">
-                    <Check className="h-3 w-3" strokeWidth={3} />
-                  </span>
-                )}
-              </div>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* photo position (text types only) */}
-      {showPhotoRow && (
-        <div>
-          <div className="mb-1.5 text-[12px] font-semibold uppercase tracking-wide text-zinc-400">Фото</div>
-          <div className="flex flex-wrap gap-1.5">
-            {(['none', 'up', 'down', 'middle'] as LabPicturePosition[]).map((p) => {
-              const active = slide.picturePosition === p;
-              const dim = p === 'middle';
-              return (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => onChange({ picturePosition: p })}
-                  className={
-                    active
-                      ? 'rounded-full bg-[#4a6cf7] px-3 py-1.5 text-[12px] font-medium text-white'
-                      : `rounded-full bg-[#f1f1f4] px-3 py-1.5 text-[12px] ${dim ? 'text-zinc-400' : 'text-zinc-700'}`
-                  }
-                >
-                  {PICTURE_POSITION_LABEL[p]}
-                  {dim ? ' •' : ''}
-                </button>
-              );
-            })}
-          </div>
-          {slide.picturePosition === 'middle' && (
-            <div className="mt-1 text-[11px] text-amber-600">«По центру» без Figma-еталона — не звірена.</div>
-          )}
+      {/* section title + subtype cards (3 per row, smaller) */}
+      <div>
+        <div className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-zinc-400">
+          {GROUPS.find((g) => g.type === slide.type)?.label}
         </div>
-      )}
+        <div className="grid grid-cols-3 gap-2">
+          {previews.map(({ card, slide: ps }) => {
+            const active = isCardActive(card);
+            return (
+              <button
+                key={card.label}
+                type="button"
+                onClick={() => pickCard(card)}
+                className="relative rounded-lg border bg-white p-1 text-left transition"
+                style={{
+                  borderColor: active ? '#4a6cf7' : '#e6e6ea',
+                  boxShadow: active ? '0 0 0 2px #4a6cf7' : 'none',
+                }}
+              >
+                <div className="overflow-hidden rounded-md" style={{ pointerEvents: 'none' }}>
+                  <LabSlideCanvas slide={ps} renderWidth={92} rounded={6} />
+                </div>
+                <div className="mt-1 flex items-center justify-between gap-0.5 px-0.5">
+                  <span className="truncate text-[10.5px] font-medium leading-tight text-zinc-800">{card.label}</span>
+                  {active && (
+                    <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-[#4a6cf7] text-white">
+                      <Check className="h-2.5 w-2.5" strokeWidth={3} />
+                    </span>
+                  )}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }

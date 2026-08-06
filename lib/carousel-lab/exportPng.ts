@@ -108,6 +108,43 @@ export async function downloadSlidePng(slide: LabSlide, filename: string) {
   downloadBlob(blob, filename);
 }
 
+export function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve((fr.result as string).split(',')[1] ?? '');
+    fr.readAsDataURL(blob);
+  });
+}
+
+/** Zip a set of already-rendered PNG blobs and download it. */
+export async function downloadZipOfBlobs(blobs: (Blob | null)[], name: string) {
+  const JSZip = (await import('jszip')).default;
+  const zip = new JSZip();
+  let n = 0;
+  blobs.forEach((b, i) => {
+    if (b) zip.file(`${String(i + 1).padStart(2, '0')}.png`, b);
+    n++;
+  });
+  const out = await zip.generateAsync({ type: 'blob' });
+  downloadBlob(out, `${name || 'carousel'}.zip`);
+}
+
+/** Share PNG blobs via the OS share sheet (Telegram / save image …). */
+export async function sharePngBlobs(blobs: (Blob | null)[], name: string): Promise<boolean> {
+  const files = blobs
+    .map((b, i) => (b ? new File([b], `${name || 'slide'}-${i + 1}.png`, { type: 'image/png' }) : null))
+    .filter(Boolean) as File[];
+  if (!files.length) return false;
+  const nav = navigator as Navigator & { canShare?: (d: { files: File[] }) => boolean };
+  try {
+    if (nav.canShare && !nav.canShare({ files })) return false;
+    await nav.share({ files, title: name || 'carousel' } as ShareData);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Export all slides as a zip of PNGs. */
 export async function downloadProjectZip(slides: LabSlide[], name: string) {
   const JSZip = (await import('jszip')).default;

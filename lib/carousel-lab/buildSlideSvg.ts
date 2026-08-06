@@ -28,6 +28,7 @@ import {
   type Slot,
 } from './tokens';
 import { layoutParagraphs, type Measure, type TextBlock } from './textLayout';
+import { CTA_ICON_PATHS } from './ctaIcons';
 
 export type Measurer = (text: string, fontPx: number, weight: number) => number;
 
@@ -379,7 +380,7 @@ function renderCta(slide: LabSlide, o: BuildOpts): string {
     const h = Math.round(cap + 2 * padY);
     els.push({
       h,
-      gapAfter: GAP.ctaLineGap + 6,
+      gapAfter: GAP.ctaLineGap,
       draw: (y) => {
         const wtext = m(kw, size, WEIGHT.title);
         // Box left-aligned with the title's left edge (marginX); text inset by padX.
@@ -390,15 +391,17 @@ function renderCta(slide: LabSlide, o: BuildOpts): string {
       },
     });
   } else {
-    // action-with-icons — 4 PARKED placeholder circles
+    // action-with-icons — real Material Symbols: like · comment · send · save.
+    const iconSize = 92;
     els.push({
-      h: CTA_ICONS.radius * 2,
+      h: iconSize,
       gapAfter: GAP.iconsToBody,
       draw: (y) => {
-        const cy = y + CTA_ICONS.radius;
-        return CTA_ICONS.centersX
-          .map((cx) => `<circle cx="${cx}" cy="${r2(cy)}" r="${CTA_ICONS.radius}" fill="none" stroke="${COLORS.icon}" stroke-width="${CTA_ICONS.strokeW}"/>`)
-          .join('');
+        const s = iconSize / 960;
+        return CTA_ICON_PATHS.map((ic, i) => {
+          const bx = CTA_ICONS.centersX[i] - iconSize / 2;
+          return `<g transform="translate(${r2(bx)} ${r2(y)}) scale(${r2(s)}) translate(0 960)"><path d="${ic.d}" fill="${COLORS.icon}"/></g>`;
+        }).join('');
       },
     });
   }
