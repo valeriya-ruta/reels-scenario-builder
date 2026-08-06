@@ -12,6 +12,7 @@ import { BrandProvider } from './BrandProvider';
 import PostedLinkHost from '@/components/posted/PostedLinkHost';
 import { ProProvider, type ProState } from '@/components/pro/ProContext';
 import ProSwitcher from '@/components/pro/ProSwitcher';
+import QuickReport from '@/components/QuickReport';
 
 /** Ignore repeat toggles from double-clicks / touch quirks so close → open doesn’t fire back-to-back. */
 const TOGGLE_COOLDOWN_MS = 320;
@@ -179,6 +180,7 @@ export default function AppShell({ children, userName, userEmail, pro }: AppShel
                   pill, a card's ring, a list, a calendar day — asks for the
                   link through the same sheet. */}
               <PostedLinkHost />
+              <QuickReport userEmail={userEmail} />
             </div>
           </BrandProvider>
           </ProProvider>
