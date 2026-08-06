@@ -180,7 +180,7 @@ export default function AppShell({ children, userName, userEmail, pro }: AppShel
                   pill, a card's ring, a list, a calendar day — asks for the
                   link through the same sheet. */}
               <PostedLinkHost />
-              <QuickReport userEmail={userEmail} />
+              <QuickReport />
             </div>
           </BrandProvider>
           </ProProvider>

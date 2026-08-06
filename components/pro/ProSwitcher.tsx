@@ -170,6 +170,19 @@ export default function ProSwitcher() {
             type="button"
             onClick={() => {
               setOpen(false);
+              router.push('/pro/reports');
+            }}
+            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50"
+          >
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-zinc-100 text-[13px]">
+              🐞
+            </span>
+            <span className="flex-1">Звіти про баги</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
               setModal({ mode: 'create' });
             }}
             className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm font-medium text-zinc-700 hover:bg-zinc-50"

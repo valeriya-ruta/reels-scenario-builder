@@ -151,3 +151,24 @@ export async function revokeShareLinkAction(projectId: string) {
   revalidatePath('/', 'layout');
   return { ok };
 }
+
+// --- Bug reports (Звіти) ---------------------------------------------------
+
+export async function setBugReportStatusAction(
+  id: string,
+  status: 'new' | 'fixed' | 'wontfix',
+): Promise<{ ok: boolean }> {
+  const { isOperator } = await getOperatorContext();
+  if (!isOperator) return { ok: false };
+  const supabase = await createServerSupabaseClient();
+  const { error } = await supabase
+    .from('pro_bug_reports')
+    .update({ status, fixed_at: status === 'fixed' ? new Date().toISOString() : null })
+    .eq('id', id);
+  if (error) {
+    console.error('[pro] setBugReportStatus failed', error.message);
+    return { ok: false };
+  }
+  revalidatePath('/pro/reports');
+  return { ok: true };
+}

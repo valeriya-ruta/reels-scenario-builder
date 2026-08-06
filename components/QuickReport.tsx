@@ -52,7 +52,7 @@ function describeElement(el: Element | null): { selector: string; text: string }
   return { selector: parts.join(' › '), text };
 }
 
-export default function QuickReport({ userEmail }: { userEmail?: string | null }) {
+export default function QuickReport() {
   const [menu, setMenu] = useState<Target | null>(null);
   const [reporting, setReporting] = useState<Target | null>(null);
   const [comment, setComment] = useState('');
@@ -104,46 +104,28 @@ export default function QuickReport({ userEmail }: { userEmail?: string | null }
     setSending(true);
     const edition = IS_PRO_EDITION ? 'Pro (operator)' : 'Customer';
     const blogger = pro.activeProject ? pro.activeProject.name : IS_PRO_EDITION ? 'All / Dashboard' : '—';
-    const description = [
-      comment.trim(),
-      '',
-      '— — — auto-captured — — —',
-      `Edition: ${edition}`,
-      `Blogger: ${blogger}`,
-      `Element: ${reporting.selector}`,
-      reporting.text ? `Element text: “${reporting.text}”` : null,
-      `Viewport: ${window.innerWidth}×${window.innerHeight}`,
-    ]
-      .filter(Boolean)
-      .join('\n');
-
-    const fd = new FormData();
-    fd.append('description', description);
-    fd.append(
-      'metadata',
-      JSON.stringify({
-        email: userEmail ?? '',
-        route: window.location.pathname + window.location.search,
-        appVersion: process.env.NEXT_PUBLIC_APP_VERSION ?? '—',
-        userAgent: navigator.userAgent,
-        timestamp: new Date().toISOString(),
-      }),
-    );
 
     try {
-      const res = await fetch('/api/support', { method: 'POST', body: fd });
+      const res = await fetch('/api/pro/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          comment: comment.trim(),
+          route: window.location.pathname + window.location.search,
+          edition,
+          blogger,
+          element: reporting.selector,
+          elementText: reporting.text,
+          viewport: `${window.innerWidth}×${window.innerHeight}`,
+          userAgent: navigator.userAgent,
+        }),
+      });
       if (res.ok) {
         toast?.pushToast('Дякую! Баг надіслано 🐛', 'success');
         setReporting(null);
         setComment('');
       } else {
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
-        toast?.pushToast(
-          data.error === 'support_unconfigured'
-            ? 'Звіти не налаштовані (додай CLICKUP_API_TOKEN у Vercel).'
-            : 'Не вдалося надіслати. Спробуй ще раз.',
-          'error',
-        );
+        toast?.pushToast('Не вдалося надіслати. Спробуй ще раз.', 'error');
       }
     } catch {
       toast?.pushToast('Не вдалося надіслати. Спробуй ще раз.', 'error');
