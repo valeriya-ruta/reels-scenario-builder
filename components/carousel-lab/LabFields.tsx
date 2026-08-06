@@ -5,39 +5,38 @@ import type { LabSlide, LabImage } from '@/lib/carousel-lab/types';
 import { LIMITS } from '@/lib/carousel-lab/tokens';
 import { uploadLabImage } from '@/lib/carousel-lab/uploadImage';
 import { resolveImageSrc } from '@/lib/carousel-lab/imageResolve';
+import AccentField from './AccentField';
+
+const FIELD_CLASS = 'w-full rounded-lg border border-neutral-200 px-3 py-2 text-[14px] outline-none focus:border-[#4a6cf7] placeholder:text-neutral-400 placeholder:opacity-50';
+const AREA_CLASS = 'w-full resize-y rounded-lg border border-neutral-200 px-3 py-2 text-[14px] leading-relaxed outline-none focus:border-[#4a6cf7] placeholder:text-neutral-400 placeholder:opacity-50';
 
 function Label({ children }: { children: React.ReactNode }) {
   return <div className="mb-1 text-[12px] font-semibold uppercase tracking-wide text-neutral-400">{children}</div>;
 }
 
-function TextField({ label, value, onChange, maxLength, placeholder }: { label: string; value: string; onChange: (v: string) => void; maxLength?: number; placeholder?: string }) {
+function TextField({ label, value, onChange, maxLength, placeholder, accent = true }: { label: string; value: string; onChange: (v: string) => void; maxLength?: number; placeholder?: string; accent?: boolean }) {
   return (
     <div>
       <Label>{label}</Label>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        maxLength={maxLength}
-        placeholder={placeholder}
-        className="w-full rounded-lg border border-neutral-200 px-3 py-2 text-[14px] outline-none focus:border-[#4a6cf7] placeholder:text-neutral-400 placeholder:opacity-50"
-      />
+      {accent ? (
+        <AccentField value={value} onChange={onChange} maxLength={maxLength} placeholder={placeholder} inputClassName={FIELD_CLASS} />
+      ) : (
+        <input value={value} onChange={(e) => onChange(e.target.value)} maxLength={maxLength} placeholder={placeholder} className={FIELD_CLASS} />
+      )}
       {maxLength ? <div className="mt-0.5 text-right text-[11px] text-neutral-400">{value.length}/{maxLength}</div> : null}
     </div>
   );
 }
 
-function TextArea({ label, value, onChange, maxLength, rows = 4, hint, placeholder }: { label: string; value: string; onChange: (v: string) => void; maxLength?: number; rows?: number; hint?: string; placeholder?: string }) {
+function TextArea({ label, value, onChange, maxLength, rows = 4, hint, placeholder, accent = true }: { label: string; value: string; onChange: (v: string) => void; maxLength?: number; rows?: number; hint?: string; placeholder?: string; accent?: boolean }) {
   return (
     <div>
       <Label>{label}</Label>
-      <textarea
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        maxLength={maxLength}
-        rows={rows}
-        placeholder={placeholder}
-        className="w-full resize-y rounded-lg border border-neutral-200 px-3 py-2 text-[14px] leading-relaxed outline-none focus:border-[#4a6cf7] placeholder:text-neutral-400 placeholder:opacity-50"
-      />
+      {accent ? (
+        <AccentField value={value} onChange={onChange} maxLength={maxLength} placeholder={placeholder} multiline rows={rows} inputClassName={AREA_CLASS} />
+      ) : (
+        <textarea value={value} onChange={(e) => onChange(e.target.value)} maxLength={maxLength} rows={rows} placeholder={placeholder} className={AREA_CLASS} />
+      )}
       <div className="mt-0.5 flex justify-between text-[11px] text-neutral-400">
         <span>{hint}</span>
         {maxLength ? <span>{value.length}/{maxLength}</span> : null}
@@ -209,14 +208,14 @@ export default function LabFields({
       )}
       {slide.type === 'numbers' && (
         <>
-          <TextField label="Показник (напр. 15.000$)" placeholder="15.000$" value={slide.statValue} maxLength={LIMITS.statValue} onChange={(v) => onChange({ statValue: v })} />
+          <TextField label="Показник (напр. 15.000$)" placeholder="15.000$" accent={false} value={slide.statValue} maxLength={LIMITS.statValue} onChange={(v) => onChange({ statValue: v })} />
           <TextArea label="Підпис" placeholder="Що означає ця цифра…" value={slide.body} maxLength={LIMITS.statLabel} rows={3} onChange={(v) => onChange({ body: v })} />
         </>
       )}
       {slide.type === 'cta' && (
         <>
           <TextField label="Заголовок" placeholder="НАПИШИ В КОМЕНТАРІ / ДІРЕКТ…" value={slide.title} maxLength={LIMITS.slideTitle} onChange={(v) => onChange({ title: v })} />
-          {slide.subtype === 'keyword' && <TextField label="Ключове слово (в лапках)" placeholder="ДІЄТА" value={slide.ctaKeyword} maxLength={LIMITS.ctaKeyword} onChange={(v) => onChange({ ctaKeyword: v })} />}
+          {slide.subtype === 'keyword' && <TextField label="Ключове слово (в лапках)" placeholder="ДІЄТА" accent={false} value={slide.ctaKeyword} maxLength={LIMITS.ctaKeyword} onChange={(v) => onChange({ ctaKeyword: v })} />}
           {slide.subtype === 'icons' && <div className="rounded-lg bg-amber-50 px-3 py-2 text-[12px] text-amber-700">Іконки — заглушки (4 кола-плейсхолдери).</div>}
           <TextArea label="Пояснення" placeholder="Щоб отримати безкоштовний гайд…" value={slide.body} maxLength={LIMITS.body} rows={3} onChange={(v) => onChange({ body: v })} />
         </>
