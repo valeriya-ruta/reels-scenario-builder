@@ -13,7 +13,7 @@ const slides = KEYS.map((k) => SAMPLE_SLIDES.find((s) => s.key === k)!.slide);
 
 export default function LabDemoPage() {
   return (
-    <div className="flex flex-col overflow-hidden" style={{ height: '100vh' }}>
+    <div className="mx-auto flex min-h-0 w-full flex-1 flex-col">
       <LabEditor projectId="demo" initialName="Демо карусель" initialStyleId="modern-elegant" initialSlides={slides} />
     </div>
   );

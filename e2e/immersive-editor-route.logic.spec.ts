@@ -20,6 +20,13 @@ test.describe('isImmersiveEditorRoute — navbar hidden on editors only', () => 
     expect(isImmersiveEditorRoute('/projects')).toBe(false);
     expect(isImmersiveEditorRoute('/storytellings')).toBe(false);
     expect(isImmersiveEditorRoute('/carousel')).toBe(false);
+    expect(isImmersiveEditorRoute('/carousel-lab')).toBe(false);
+  });
+
+  test('carousel-lab v2 editor + demo are immersive; its list is not', () => {
+    expect(isImmersiveEditorRoute('/carousel-lab/abc123')).toBe(true);
+    expect(isImmersiveEditorRoute('/lab-demo')).toBe(true);
+    expect(isImmersiveEditorRoute('/carousel-lab')).toBe(false);
   });
 
   test('primary destinations keep the navbar', () => {

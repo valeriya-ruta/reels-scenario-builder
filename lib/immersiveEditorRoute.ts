@@ -14,6 +14,11 @@ export function isImmersiveEditorRoute(pathname: string): boolean {
   return (
     // /carousel/<id> — list lives at /carousel (no trailing id segment).
     (pathname.startsWith('/carousel/') && pathname !== '/carousel') ||
+    // /carousel-lab/<id> — v2 lab editor; list lives at /carousel-lab. NOTE this
+    // must be checked separately because `/carousel-lab/` does NOT start with
+    // `/carousel/`. The public demo editor (/lab-demo) is immersive too.
+    (pathname.startsWith('/carousel-lab/') && pathname !== '/carousel-lab') ||
+    pathname === '/lab-demo' ||
     // /project/<id> — the reels list lives at /projects (no slash collision).
     pathname.startsWith('/project/') ||
     // /storytelling/<id> — the list lives at /storytellings (no slash collision).
