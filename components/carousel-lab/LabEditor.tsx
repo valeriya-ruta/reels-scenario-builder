@@ -15,7 +15,7 @@ import {
 import { rectSortingStrategy, SortableContext, sortableKeyboardCoordinates, useSortable } from '@dnd-kit/sortable';
 import { restrictToHorizontalAxis, restrictToVerticalAxis } from '@dnd-kit/modifiers';
 import { CSS } from '@dnd-kit/utilities';
-import { ChevronLeft, ChevronDown, ChevronRight, Calendar, Download, Loader2, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { ChevronLeft, ChevronDown, ChevronRight, Calendar, Download, Loader2, Pencil, Plus, Trash2, Undo2, Redo2, X } from 'lucide-react';
 import { LAB_CANVAS_W as CW, LAB_CANVAS_H as CH, type LabSlide, type LabStyleId } from '@/lib/carousel-lab/types';
 import { createSlide } from '@/lib/carousel-lab/defaults';
 import { saveLabSlides, updateLabStyle, renameLabProject } from '@/app/carousel-lab/actions';
@@ -70,7 +70,26 @@ function LabSortableThumb({ slide, index, active, onSelect, size, wholeTileDrag 
 export default function LabEditor({ projectId, initialName, initialStyleId, initialSlides }: {
   projectId: string; initialName: string; initialStyleId: LabStyleId; initialSlides: LabSlide[];
 }) {
-  const [slides, setSlides] = useState<LabSlide[]>(initialSlides.length ? initialSlides : [createSlide('cover', 'title_subtext')]);
+  const initial = initialSlides.length ? initialSlides : [createSlide('cover', 'title_subtext')];
+  // Undo/redo history. Rapid edits (typing) within 500ms coalesce into one step.
+  const [hist, setHist] = useState<{ past: LabSlide[][]; present: LabSlide[]; future: LabSlide[][] }>({ past: [], present: initial, future: [] });
+  const slides = hist.present;
+  const lastPush = useRef(0);
+  const setSlides = useCallback((updater: LabSlide[] | ((prev: LabSlide[]) => LabSlide[])) => {
+    setHist((h) => {
+      const next = typeof updater === 'function' ? (updater as (p: LabSlide[]) => LabSlide[])(h.present) : updater;
+      if (next === h.present) return h;
+      const now = Date.now();
+      const coalesce = now - lastPush.current < 500;
+      lastPush.current = now;
+      if (coalesce) return { ...h, present: next };
+      return { past: [...h.past, h.present].slice(-100), present: next, future: [] };
+    });
+  }, []);
+  const undo = useCallback(() => setHist((h) => (h.past.length ? { past: h.past.slice(0, -1), present: h.past[h.past.length - 1], future: [h.present, ...h.future] } : h)), []);
+  const redo = useCallback(() => setHist((h) => (h.future.length ? { past: [...h.past, h.present], present: h.future[0], future: h.future.slice(1) } : h)), []);
+  const canUndo = hist.past.length > 0;
+  const canRedo = hist.future.length > 0;
   const [styleId] = useState<LabStyleId>(initialStyleId);
   const [name, setName] = useState(initialName);
   const [activeSlideId, setActiveSlideId] = useState(slides[0]?.id ?? '');
@@ -171,6 +190,31 @@ export default function LabEditor({ projectId, initialName, initialStyleId, init
     : null
   ) : null;
 
+  // Ctrl/Cmd+Z = undo, Ctrl/Cmd+Shift+Z or Ctrl+Y = redo.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const k = e.key.toLowerCase();
+      if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+      else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); redo(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [undo, redo]);
+
+  const undoRedo = (
+    <div className="flex items-center gap-1">
+      <button type="button" onClick={undo} disabled={!canUndo} aria-label="Скасувати" data-testid="undo"
+        className="inline-flex h-9 w-9 items-center justify-center rounded-full text-zinc-600 disabled:opacity-30 enabled:hover:bg-zinc-100">
+        <Undo2 className="h-[18px] w-[18px]" />
+      </button>
+      <button type="button" onClick={redo} disabled={!canRedo} aria-label="Повторити" data-testid="redo"
+        className="inline-flex h-9 w-9 items-center justify-center rounded-full text-zinc-600 disabled:opacity-30 enabled:hover:bg-zinc-100">
+        <Redo2 className="h-[18px] w-[18px]" />
+      </button>
+    </div>
+  );
+
   const metaChips = (
     <>
       <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[#f1f1f4] px-3 py-1.5 text-[13px] font-medium text-zinc-600">
@@ -202,6 +246,7 @@ export default function LabEditor({ projectId, initialName, initialStyleId, init
               <Pencil className="h-4 w-4 shrink-0 text-[color:var(--text-muted)]" strokeWidth={2} aria-hidden />
             </button>
           )}
+          {undoRedo}
           <button type="button" onClick={exportAll} disabled={exporting} aria-label="Експортувати" data-testid="carousel-export"
             className="ml-1 inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-[13px] font-semibold text-white disabled:opacity-50" style={{ backgroundColor: '#4a6cf7' }}>
             {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" strokeWidth={2.2} />}
@@ -249,6 +294,7 @@ export default function LabEditor({ projectId, initialName, initialStyleId, init
                 )}
                 <div className="ml-2 flex gap-1.5">{metaChips}</div>
                 <div className="ml-auto flex items-center gap-2">
+                  {undoRedo}
                   <span className="text-[12px] text-zinc-400">{saveState === 'saving' ? 'Збереження…' : saveState === 'saved' ? 'Збережено' : ''}</span>
                   <button type="button" onClick={exportAll} disabled={exporting} className="inline-flex items-center gap-1.5 rounded-full bg-[#4a6cf7] px-3.5 py-2 text-[13px] font-semibold text-white disabled:opacity-50">
                     {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} Експорт
@@ -292,7 +338,9 @@ export default function LabEditor({ projectId, initialName, initialStyleId, init
             <div className="border-t" style={{ borderTopWidth: 0.5, borderTopColor: 'rgba(0,0,0,0.06)' }}>
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd} modifiers={dragModifiers}>
                 <SortableContext items={slides.map((s) => s.id)} strategy={rectSortingStrategy}>
-                  <div className="flex shrink-0 flex-row items-center gap-2 overflow-x-auto px-3 pb-1.5 pt-1">
+                  {/* pt/pb give the lifted (translateY/scale) thumb room so its top
+                      isn't clipped by overflow-x's implicit overflow-y during reorder. */}
+                  <div className="flex shrink-0 flex-row items-center gap-2 overflow-x-auto overflow-y-visible px-3 pb-3 pt-4">
                     {slides.map((slide, index) => (
                       <LabSortableThumb key={slide.id} slide={slide} index={index} active={slide.id === activeSlideId} size="sm" wholeTileDrag
                         showTrash={trashForId === slide.id} canDelete={slides.length > 1}

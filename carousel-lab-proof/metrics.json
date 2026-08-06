@@ -17,27 +17,27 @@
   {
     "key": "text-bullets",
     "parity": 0.3411625514403292,
-    "fidelity": 11.824843621399177
+    "fidelity": 11.713658436213992
   },
   {
     "key": "text-numbered",
     "parity": 0.34751234567901235,
-    "fidelity": 12.027117283950616
+    "fidelity": 11.92242181069959
   },
   {
     "key": "numbers-stat",
-    "parity": 0.07246913580246914,
-    "fidelity": 4.821362139917696
+    "parity": 0.07093415637860083,
+    "fidelity": 3.907
   },
   {
     "key": "numbers-stat-small",
-    "parity": 0.07281893004115227,
-    "fidelity": 3.505985596707819
+    "parity": 0.07093415637860083,
+    "fidelity": 4.552508230452675
   },
   {
     "key": "cta-keyword",
-    "parity": 0.07384362139917695,
-    "fidelity": 4.350644032921811
+    "parity": 0.07384156378600823,
+    "fidelity": 4.295053497942387
   },
   {
     "key": "cta-icons",
@@ -47,46 +47,46 @@
   {
     "key": "testimonial-screenshot",
     "parity": 0.07282304526748971,
-    "fidelity": 2.4662283950617283
+    "fidelity": 15.640524691358024
   },
   {
     "key": "testimonial-before-after",
     "parity": 0.0656111111111111,
-    "fidelity": 2.2768024691358026
+    "fidelity": 21.900720164609055
   },
   {
     "key": "testimonial-point-ab",
     "parity": 0.13164197530864197,
-    "fidelity": 2.5460267489711934
+    "fidelity": 11.973944444444445
   },
   {
     "key": "text-paragraph-image-up",
     "parity": 0.16121604938271605,
-    "fidelity": 4.718360082304526
+    "fidelity": 23.717619341563786
   },
   {
     "key": "text-paragraph-image-down",
     "parity": 0.12647119341563787,
-    "fidelity": 4.781393004115226
+    "fidelity": 23.780652263374485
   },
   {
     "key": "text-bullets-image-up",
     "parity": 0.05183950617283951,
-    "fidelity": 3.353271604938272
+    "fidelity": 22.327390946502057
   },
   {
     "key": "text-bullets-image-down",
     "parity": 0.05183950617283951,
-    "fidelity": 4.31783950617284
+    "fidelity": 23.288810699588478
   },
   {
     "key": "text-numbered-image-up",
     "parity": 0.055146090534979424,
-    "fidelity": 3.459738683127572
+    "fidelity": 22.448779835390948
   },
   {
     "key": "text-numbered-image-down",
     "parity": 0.055146090534979424,
-    "fidelity": 3.4597057613168722
+    "fidelity": 22.448763374485598
   }
 ]

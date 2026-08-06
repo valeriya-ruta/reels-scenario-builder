@@ -45,8 +45,8 @@ export type LayoutOpts = {
   lineHeight: number; // px
   maxWidth: number;
   marginX: number;
-  /** 'left' | 'justify' — justify stretches every line except a paragraph's last. */
-  align: 'left' | 'justify';
+  /** 'left' | 'center' | 'justify' — justify stretches every line except a paragraph's last. */
+  align: 'left' | 'center' | 'justify';
 };
 
 /**
@@ -95,7 +95,7 @@ function placeWords(
   spaceW: number,
   maxWidth: number,
   marginX: number,
-  align: 'left' | 'justify',
+  align: 'left' | 'center' | 'justify',
   isLast: boolean,
 ): PlacedWord[] {
   if (words.length === 0) return [];
@@ -106,8 +106,11 @@ function placeWords(
   const doJustify = align === 'justify' && !isLast && words.length > 1;
   const gap = doJustify ? (maxWidth - sum) / (words.length - 1) : spaceW;
 
+  // Center: shift the whole line so it's centered within [marginX, marginX+maxWidth].
+  const lineW = sum + spaceW * (words.length - 1);
+  let x = align === 'center' ? marginX + Math.max(0, (maxWidth - lineW) / 2) : marginX;
+
   const placed: PlacedWord[] = [];
-  let x = marginX;
   words.forEach((w, i) => {
     placed.push({ text: w, x: Math.round(x * 100) / 100 });
     x += widths[i] + gap;

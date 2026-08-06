@@ -96,7 +96,7 @@ function headingBlock(text: string, m: Measurer, size: number, weight: number, m
   }, 0);
 }
 
-function bodyBlock(text: string, m: Measurer, size: number, marginX: number, maxW: number): TextBlock {
+function bodyBlock(text: string, m: Measurer, size: number, marginX: number, maxW: number, align: 'left' | 'center' | 'justify' = 'justify'): TextBlock {
   const lh = Math.round(size * LINE_HEIGHT.body);
   return layoutParagraphs(up(text), {
     measure: bind(m, size, WEIGHT.body),
@@ -104,7 +104,7 @@ function bodyBlock(text: string, m: Measurer, size: number, marginX: number, max
     lineHeight: lh,
     maxWidth: maxW,
     marginX,
-    align: 'justify',
+    align,
   }, Math.round(lh * PARAGRAPH_GAP));
 }
 
@@ -223,7 +223,7 @@ function renderTextList(slide: LabSlide, o: BuildOpts, numbered: boolean): strin
   const bulletLines: { text: string; x: number }[] = [];
   bullets.forEach((item, i) => {
     const prefix = numbered ? `${i + 1}. ` : '• ';
-    wrapBullet(item, prefix, m, size, WEIGHT.chip, L.marginX, L.maxTextW).forEach((ln) => bulletLines.push(ln));
+    wrapBullet(item, prefix, m, size, WEIGHT.chip, L.marginX + CHIP.padX, L.maxTextW - CHIP.padX).forEach((ln) => bulletLines.push(ln));
   });
   if (bulletLines.length) {
     const h = bulletLines.length * advance - CHIP.gap;
@@ -282,6 +282,11 @@ function renderListInRegion(slide: LabSlide, o: BuildOpts, region: [number, numb
   const els: El[] = [];
   const titleB = headingBlock(slide.title, m, SIZE.slideTitle, WEIGHT.title, L.marginX, L.maxTextW);
   els.push({ h: titleB.height, gapAfter: GAP.slideTitleToBody, draw: (y) => emitBlock(titleB, y, SIZE.slideTitle, WEIGHT.title, COLORS.title) });
+  // intro paragraph ("над списком") — was previously dropped for image variants.
+  if (slide.body.trim()) {
+    const intro = bodyBlock(slide.body, m, SIZE.slideBody, L.marginX, L.maxTextW);
+    els.push({ h: intro.height, gapAfter: GAP.titleToBullets, draw: (y) => emitBlock(intro, y, SIZE.slideBody, WEIGHT.body, COLORS.body) });
+  }
   const size = SIZE.bullet;
   const cap = size * CAP;
   const lineH = Math.round(cap + 2 * CHIP.padY);
@@ -290,7 +295,7 @@ function renderListInRegion(slide: LabSlide, o: BuildOpts, region: [number, numb
   const bulletLines: { text: string; x: number }[] = [];
   bullets.forEach((item, i) => {
     const prefix = numbered ? `${i + 1}. ` : '• ';
-    wrapBullet(item, prefix, m, size, WEIGHT.chip, L.marginX, L.maxTextW).forEach((ln) => bulletLines.push(ln));
+    wrapBullet(item, prefix, m, size, WEIGHT.chip, L.marginX + CHIP.padX, L.maxTextW - CHIP.padX).forEach((ln) => bulletLines.push(ln));
   });
   if (bulletLines.length) {
     const h = bulletLines.length * advance - CHIP.gap;
@@ -310,26 +315,33 @@ function renderListInRegion(slide: LabSlide, o: BuildOpts, region: [number, numb
       },
     });
   }
+  // outro paragraph ("під списком") — also previously dropped for image variants.
+  if (slide.bodyAfter.trim()) {
+    const outro = bodyBlock(slide.bodyAfter, m, SIZE.slideBody, L.marginX, L.maxTextW);
+    if (els.length) els[els.length - 1].gapAfter = GAP.bulletsToBody;
+    els.push({ h: outro.height, gapAfter: 0, draw: (y) => emitBlock(outro, y, SIZE.slideBody, WEIGHT.body, COLORS.body) });
+  }
   return stack(els, region[0] + IMAGE_HALF_PAD);
 }
 
 function renderNumbers(slide: LabSlide, o: BuildOpts): string {
-  const L = LAYOUT.numbers;
   const m = o.measure;
   const els: El[] = [];
-  const size = slide.variant === 'stat_small' ? SIZE.statSmall : SIZE.statLarge;
-  // fit the number to width by shrinking if needed
+  // Single centered number + label (only one number layout; no size variant).
   const value = slide.statValue || '0';
-  let fitSize = size;
-  while (fitSize > 60 && m(value, fitSize, WEIGHT.title) > L.maxTextW) fitSize -= 4;
+  const numMaxW = 920;
+  let fitSize = SIZE.statLarge;
+  while (fitSize > 60 && m(value, fitSize, WEIGHT.title) > numMaxW) fitSize -= 4;
   const numBaseline = fitSize * 0.75;
   els.push({
     h: Math.round(fitSize * CAP),
     gapAfter: GAP.statToLabel,
-    draw: (y) => `<text x="${L.marginX}" y="${r2(y + numBaseline)}" font-family="${FONT_FAMILY}" font-size="${fitSize}" font-weight="${WEIGHT.title}" fill="${COLORS.title}">${esc(value)}</text>`,
+    draw: (y) => `<text x="${W / 2}" y="${r2(y + numBaseline)}" text-anchor="middle" font-family="${FONT_FAMILY}" font-size="${fitSize}" font-weight="${WEIGHT.title}" fill="${COLORS.title}">${esc(value)}</text>`,
   });
   if (slide.body.trim()) {
-    const b = bodyBlock(slide.body, m, SIZE.slideBody, L.marginX, L.maxTextW);
+    const labW = 888;
+    const labMargin = Math.round((W - labW) / 2);
+    const b = bodyBlock(slide.body, m, SIZE.slideBody, labMargin, labW, 'center');
     els.push({ h: b.height, gapAfter: 0, draw: (y) => emitBlock(b, y, SIZE.slideBody, WEIGHT.body, COLORS.body) });
   }
   return stack(els, placeStart(els, 'center', 0));
@@ -354,9 +366,10 @@ function renderCta(slide: LabSlide, o: BuildOpts): string {
       gapAfter: GAP.ctaLineGap + 6,
       draw: (y) => {
         const wtext = m(kw, size, WEIGHT.title);
+        // Box left-aligned with the title's left edge (marginX); text inset by padX.
         return (
-          `<rect x="${r2(L.marginX - padX)}" y="${r2(y)}" width="${r2(wtext + 2 * padX)}" height="${h}" rx="${CHIP.radius}" fill="${COLORS.chipFill}"/>` +
-          `<text x="${L.marginX}" y="${r2(y + padY + cap)}" font-family="${FONT_FAMILY}" font-size="${size}" font-weight="${WEIGHT.title}" fill="${COLORS.chipText}">${esc(kw)}</text>`
+          `<rect x="${r2(L.marginX)}" y="${r2(y)}" width="${r2(wtext + 2 * padX)}" height="${h}" rx="${CHIP.radius}" fill="${COLORS.chipFill}"/>` +
+          `<text x="${r2(L.marginX + padX)}" y="${r2(y + padY + cap)}" font-family="${FONT_FAMILY}" font-size="${size}" font-weight="${WEIGHT.title}" fill="${COLORS.chipText}">${esc(kw)}</text>`
         );
       },
     });

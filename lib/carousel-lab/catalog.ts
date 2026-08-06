@@ -39,14 +39,7 @@ export const CATALOG: TypeOption[] = [
     type: 'numbers',
     label: 'Цифри',
     subtypes: [
-      {
-        subtype: 'stat',
-        label: 'Показник + підпис',
-        variants: [
-          { id: 'stat_large', label: 'Велика цифра' },
-          { id: 'stat_small', label: 'Менша цифра' },
-        ],
-      },
+      { subtype: 'stat', label: 'Показник + підпис' },
     ],
   },
   {

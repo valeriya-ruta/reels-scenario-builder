@@ -29,10 +29,7 @@ const CARDS: Record<LabSlideType, Card[]> = {
     { subtype: 'bullets', label: 'Список' },
     { subtype: 'numbered', label: 'Нумерований' },
   ],
-  numbers: [
-    { subtype: 'stat', variant: 'stat_large', label: 'Велика цифра' },
-    { subtype: 'stat', variant: 'stat_small', label: 'Менша цифра' },
-  ],
+  numbers: [{ subtype: 'stat', label: 'Показник' }],
   testimonial: [
     { subtype: 'screenshot', label: 'Текстовий відгук' },
     { subtype: 'before_after', label: 'До / Після' },

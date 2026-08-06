@@ -18,7 +18,8 @@ export const COLORS = {
   chipFill: '#FFFFFF',
   /** Knockout text sitting on a white chip == the background color. */
   chipText: '#BCC7AB',
-  imagePlaceholder: '#D9D9D9',
+  /** Empty image slot: solid white (per feedback — never the old #D9D9D9 gray). */
+  imagePlaceholder: '#FFFFFF',
 } as const;
 
 export const FONT_FAMILY = 'GoogleSansElegant';

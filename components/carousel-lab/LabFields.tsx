@@ -10,7 +10,7 @@ function Label({ children }: { children: React.ReactNode }) {
   return <div className="mb-1 text-[12px] font-semibold uppercase tracking-wide text-neutral-400">{children}</div>;
 }
 
-function TextField({ label, value, onChange, maxLength }: { label: string; value: string; onChange: (v: string) => void; maxLength?: number }) {
+function TextField({ label, value, onChange, maxLength, placeholder }: { label: string; value: string; onChange: (v: string) => void; maxLength?: number; placeholder?: string }) {
   return (
     <div>
       <Label>{label}</Label>
@@ -18,14 +18,15 @@ function TextField({ label, value, onChange, maxLength }: { label: string; value
         value={value}
         onChange={(e) => onChange(e.target.value)}
         maxLength={maxLength}
-        className="w-full rounded-lg border border-neutral-200 px-3 py-2 text-[14px] outline-none focus:border-[#4a6cf7]"
+        placeholder={placeholder}
+        className="w-full rounded-lg border border-neutral-200 px-3 py-2 text-[14px] outline-none focus:border-[#4a6cf7] placeholder:text-neutral-400 placeholder:opacity-50"
       />
       {maxLength ? <div className="mt-0.5 text-right text-[11px] text-neutral-400">{value.length}/{maxLength}</div> : null}
     </div>
   );
 }
 
-function TextArea({ label, value, onChange, maxLength, rows = 4, hint }: { label: string; value: string; onChange: (v: string) => void; maxLength?: number; rows?: number; hint?: string }) {
+function TextArea({ label, value, onChange, maxLength, rows = 4, hint, placeholder }: { label: string; value: string; onChange: (v: string) => void; maxLength?: number; rows?: number; hint?: string; placeholder?: string }) {
   return (
     <div>
       <Label>{label}</Label>
@@ -34,7 +35,8 @@ function TextArea({ label, value, onChange, maxLength, rows = 4, hint }: { label
         onChange={(e) => onChange(e.target.value)}
         maxLength={maxLength}
         rows={rows}
-        className="w-full resize-y rounded-lg border border-neutral-200 px-3 py-2 text-[14px] leading-relaxed outline-none focus:border-[#4a6cf7]"
+        placeholder={placeholder}
+        className="w-full resize-y rounded-lg border border-neutral-200 px-3 py-2 text-[14px] leading-relaxed outline-none focus:border-[#4a6cf7] placeholder:text-neutral-400 placeholder:opacity-50"
       />
       <div className="mt-0.5 flex justify-between text-[11px] text-neutral-400">
         <span>{hint}</span>
@@ -153,42 +155,42 @@ export default function LabFields({
     <div className="space-y-4">
       {slide.type === 'cover' && (
         <>
-          <TextField label="Заголовок" value={slide.title} maxLength={LIMITS.coverTitle} onChange={(v) => onChange({ title: v })} />
-          {slide.subtype === 'title_subtext' && <TextArea label="Підзаголовок" value={slide.body} maxLength={LIMITS.coverSubtext} rows={3} onChange={(v) => onChange({ body: v })} />}
+          <TextField label="Заголовок" placeholder="ЯК Я ОБИРАЮ SPF" value={slide.title} maxLength={LIMITS.coverTitle} onChange={(v) => onChange({ title: v })} />
+          {slide.subtype === 'title_subtext' && <TextArea label="Підзаголовок" placeholder="Короткий підзаголовок для обкладинки…" value={slide.body} maxLength={LIMITS.coverSubtext} rows={3} onChange={(v) => onChange({ body: v })} />}
         </>
       )}
       {slide.type === 'text' && (
         <>
-          <TextField label="Заголовок" value={slide.title} maxLength={LIMITS.slideTitle} onChange={(v) => onChange({ title: v })} />
+          <TextField label="Заголовок" placeholder="Заголовок слайду…" value={slide.title} maxLength={LIMITS.slideTitle} onChange={(v) => onChange({ title: v })} />
           {slide.subtype === 'paragraph' ? (
-            <TextArea label="Текст (абзаци через порожній рядок)" value={slide.body} maxLength={LIMITS.body} rows={6} onChange={(v) => onChange({ body: v })} />
+            <TextArea label="Текст (абзаци через порожній рядок)" placeholder="Основний текст. Порожній рядок = новий абзац." value={slide.body} maxLength={LIMITS.body} rows={6} onChange={(v) => onChange({ body: v })} />
           ) : (
             <>
-              <TextArea label="Вступ (над списком)" value={slide.body} maxLength={LIMITS.body} rows={2} onChange={(v) => onChange({ body: v })} />
+              <TextArea label="Вступ (над списком)" placeholder="Текст над списком…" value={slide.body} maxLength={LIMITS.body} rows={2} onChange={(v) => onChange({ body: v })} />
               <BulletsEditor bullets={slide.bullets} onChange={(b) => onChange({ bullets: b })} />
-              <TextArea label="Завершення (під списком)" value={slide.bodyAfter} maxLength={LIMITS.body} rows={2} onChange={(v) => onChange({ bodyAfter: v })} />
+              <TextArea label="Завершення (під списком)" placeholder="Текст під списком…" value={slide.bodyAfter} maxLength={LIMITS.body} rows={2} onChange={(v) => onChange({ bodyAfter: v })} />
             </>
           )}
         </>
       )}
       {slide.type === 'numbers' && (
         <>
-          <TextField label="Показник (напр. 15.000$)" value={slide.statValue} maxLength={LIMITS.statValue} onChange={(v) => onChange({ statValue: v })} />
-          <TextArea label="Підпис" value={slide.body} maxLength={LIMITS.statLabel} rows={3} onChange={(v) => onChange({ body: v })} />
+          <TextField label="Показник (напр. 15.000$)" placeholder="15.000$" value={slide.statValue} maxLength={LIMITS.statValue} onChange={(v) => onChange({ statValue: v })} />
+          <TextArea label="Підпис" placeholder="Що означає ця цифра…" value={slide.body} maxLength={LIMITS.statLabel} rows={3} onChange={(v) => onChange({ body: v })} />
         </>
       )}
       {slide.type === 'cta' && (
         <>
-          <TextField label="Заголовок" value={slide.title} maxLength={LIMITS.slideTitle} onChange={(v) => onChange({ title: v })} />
-          {slide.subtype === 'keyword' && <TextField label="Ключове слово (в лапках)" value={slide.ctaKeyword} maxLength={LIMITS.ctaKeyword} onChange={(v) => onChange({ ctaKeyword: v })} />}
+          <TextField label="Заголовок" placeholder="НАПИШИ В КОМЕНТАРІ / ДІРЕКТ…" value={slide.title} maxLength={LIMITS.slideTitle} onChange={(v) => onChange({ title: v })} />
+          {slide.subtype === 'keyword' && <TextField label="Ключове слово (в лапках)" placeholder="ДІЄТА" value={slide.ctaKeyword} maxLength={LIMITS.ctaKeyword} onChange={(v) => onChange({ ctaKeyword: v })} />}
           {slide.subtype === 'icons' && <div className="rounded-lg bg-amber-50 px-3 py-2 text-[12px] text-amber-700">Іконки — заглушки (4 кола-плейсхолдери).</div>}
-          <TextArea label="Пояснення" value={slide.body} maxLength={LIMITS.body} rows={3} onChange={(v) => onChange({ body: v })} />
+          <TextArea label="Пояснення" placeholder="Щоб отримати безкоштовний гайд…" value={slide.body} maxLength={LIMITS.body} rows={3} onChange={(v) => onChange({ body: v })} />
         </>
       )}
       {slide.type === 'testimonial' && slide.subtype !== 'point_ab' && (
         <>
-          <TextField label="Заголовок" value={slide.title} maxLength={LIMITS.slideTitle} onChange={(v) => onChange({ title: v })} />
-          <TextArea label="Підпис" value={slide.body} maxLength={LIMITS.body} rows={3} onChange={(v) => onChange({ body: v })} />
+          <TextField label="Заголовок" placeholder={slide.subtype === 'before_after' ? 'До та після:' : 'Відгук клієнтки:'} value={slide.title} maxLength={LIMITS.slideTitle} onChange={(v) => onChange({ title: v })} />
+          <TextArea label="Підпис" placeholder="Підпис до фото…" value={slide.body} maxLength={LIMITS.body} rows={3} onChange={(v) => onChange({ body: v })} />
         </>
       )}
       {slide.subtype === 'point_ab' && (
