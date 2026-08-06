@@ -68,11 +68,11 @@ export const EXTRA_SAMPLES: { key: string; slide: LabSlide; note: string }[] = [
   },
   {
     key: 'accent-demo',
-    note: 'Accent runs {…} render as white chip + green knockout, incl. title',
+    note: 'Accent runs *…* render as white chip + green knockout, incl. title',
     slide: {
       ...createSlide('text', 'paragraph'),
-      title: 'Це {приклад} слайду',
-      body: 'Тут є {акцент} у тексті, і ще {один акцент тут} для прикладу того, як воно переноситься.',
+      title: 'Це *приклад* слайду',
+      body: 'Тут є *акцент* у тексті, і ще *один акцент тут* для прикладу того, як воно переноситься.',
     },
   },
   {

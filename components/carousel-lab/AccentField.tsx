@@ -86,14 +86,14 @@ export default function AccentField({
     let nv: string;
     let ns: number;
     let ne: number;
-    if (v[s - 1] === '{' && v[e] === '}') {
+    if (v[s - 1] === '*' && v[e] === '*') {
       nv = v.slice(0, s - 1) + v.slice(s, e) + v.slice(e + 1);
       ns = s - 1;
       ne = e - 1;
     } else {
-      // strip any stray braces inside the selection, then wrap it
-      const inner = v.slice(s, e).replace(/[{}]/g, '');
-      nv = v.slice(0, s) + '{' + inner + '}' + v.slice(e);
+      // strip any stray asterisks inside the selection, then wrap it
+      const inner = v.slice(s, e).replace(/\*/g, '');
+      nv = v.slice(0, s) + '*' + inner + '*' + v.slice(e);
       ns = s + 1;
       ne = s + 1 + inner.length;
     }

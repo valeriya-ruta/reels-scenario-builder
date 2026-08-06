@@ -18,16 +18,22 @@ type Tok = { text: string; accent: boolean };
 /** Cap height as a fraction of font size (see numbers/gap notes in buildSlideSvg). */
 const CAP_RATIO = 0.72;
 
-/** Split a paragraph into words, tagging each word inside {…} as accent. */
+/** Split a paragraph into words, tagging each word inside *asterisks* as accent.
+ *  Stray/unclosed `*` stays as literal text so typing is never swallowed. */
 function tokenizeAccent(s: string): Tok[] {
   const out: Tok[] = [];
-  const re = /\{([^}]*)\}|([^{}]+)/g;
+  const push = (chunk: string, accent: boolean) => {
+    for (const w of chunk.split(/\s+/).filter(Boolean)) out.push({ text: w, accent });
+  };
+  const re = /\*([^*]+)\*/g;
+  let last = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(s))) {
-    const accent = m[1] !== undefined;
-    const chunk = (accent ? m[1] : m[2]) ?? '';
-    for (const w of chunk.split(/\s+/).filter(Boolean)) out.push({ text: w, accent });
+    if (m.index > last) push(s.slice(last, m.index), false);
+    push(m[1], true);
+    last = m.index + m[0].length;
   }
+  if (last < s.length) push(s.slice(last), false);
   return out;
 }
 
