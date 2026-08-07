@@ -14,6 +14,7 @@ import {
   reorderStorytellingStories,
 } from '@/app/storytelling-actions';
 import StoryCard from './StoryCard';
+import InactivityNudge from '@/components/InactivityNudge';
 import EditorTopBar from '@/components/ui/EditorTopBar';
 import SetNav, { type SetSibling } from '@/components/storytelling/SetNav';
 import { genClientId, nextOrderIndex, makeOptimisticStory } from '@/lib/storytelling/optimistic';
@@ -152,6 +153,7 @@ export default function StorytellingBuilder({
 
   return (
     <div className="app-canvas min-h-screen">
+      <InactivityNudge />
       {toast && (
         <div
           role="status"

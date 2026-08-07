@@ -9,6 +9,7 @@ import SceneList from './SceneList';
 import CopyReferencePanel from './CopyReferencePanel';
 import ReelModeSwitch, { type ReelMode } from '@/components/reels/ReelModeSwitch';
 import Teleprompter from '@/components/reels/Teleprompter';
+import InactivityNudge from '@/components/InactivityNudge';
 import { reelHasWriting } from '@/lib/content/reelStructure';
 
 interface ProjectBuilderProps {
@@ -51,6 +52,7 @@ export default function ProjectBuilder({
 
   return (
     <div className="app-canvas">
+      <InactivityNudge />
       <div className="mx-auto max-w-7xl px-4 pb-28 pt-5">
         <ProjectHeader
           project={project}
