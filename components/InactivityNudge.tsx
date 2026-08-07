@@ -133,7 +133,7 @@ export default function InactivityNudge({ idleMs = DEFAULT_IDLE_MS }: Inactivity
           id="inactivity-nudge-title"
           className="font-display text-xl font-bold leading-snug tracking-tight text-zinc-900 sm:text-[1.4rem]"
         >
-          Гей, я помітила, що ти вже давненько дивишся на цю сторінку 👀
+          Ти вже давненько дивишся на цю сторінку 👀
         </h2>
         <p className="mt-4 text-[15px] leading-relaxed text-[color:var(--text-secondary)]">
           Просто нагадую: найкращий контент — це той, який ти реально опублікувала,
