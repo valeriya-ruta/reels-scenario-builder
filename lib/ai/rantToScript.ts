@@ -18,16 +18,16 @@ interface RantResponse {
   }>;
 }
 
-type OutputLanguage = 'uk' | 'en';
+export type OutputLanguage = 'uk' | 'en';
 
-function detectOutputLanguage(rant: string): OutputLanguage {
+export function detectOutputLanguage(rant: string): OutputLanguage {
   const cyr = (rant.match(/[А-Яа-яІіЇїЄєҐґ]/g) ?? []).length;
   const latin = (rant.match(/[A-Za-z]/g) ?? []).length;
   if (latin >= 20 && latin >= cyr * 1.2) return 'en';
   return 'uk';
 }
 
-function buildSystemPrompt(outputLanguage: OutputLanguage): string {
+export function buildSystemPrompt(outputLanguage: OutputLanguage): string {
   const languageRule =
     outputLanguage === 'en'
       ? '- Language: natural conversational English. Keep the creator voice and emotional tone.'
@@ -109,7 +109,7 @@ ${languageRule}
 }`;
 }
 
-function buildUserContent(rant: string, outputLanguage: OutputLanguage): string {
+export function buildUserContent(rant: string, outputLanguage: OutputLanguage): string {
   const languageHint =
     outputLanguage === 'en'
       ? 'Write all output fields in English.'
