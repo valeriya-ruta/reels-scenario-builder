@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Bake-off каруселей</title>
+<!--
+  Standalone carousel bake-off. Open this file by double-clicking it — it runs
+  entirely in your browser and calls OpenRouter directly. Your API key stays in
+  this page, goes only to openrouter.ai, and is never sent to us or saved to the
+  project.
+
+  The two carousel prompts and the scorer below are copied from the repo
+  (lib/ai/carouselPrompt.ts, scripts/bakeoff/prompts/carouselRuta.mjs,
+  scripts/bakeoff/rules.mjs). Source of truth is the repo; regenerate this file
+  if those change.
+-->
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --ink: #14161a; --muted: #6b7280;
+    --line: #e5e7eb; --accent: #004BA8; --good: #15803d; --goodbg: #dcfce7;
+    --bad: #b91c1c; --badbg: #fee2e2; --hook: #7c3aed; --hookbg: #f3e8ff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 18px 80px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 18px; margin-bottom: 16px; }
+  label { display: block; font-weight: 600; margin: 0 0 6px; font-size: 13px; }
+  input[type=password], textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--line);
+    border-radius: 10px; font: inherit; background: #fff; color: var(--ink); }
+  textarea { min-height: 130px; resize: vertical; }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .row > div { flex: 1; min-width: 240px; }
+  .models { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 4px; }
+  .models label { font-weight: 400; display: flex; align-items: center; gap: 7px; margin: 0; }
+  .hint { color: var(--muted); font-size: 12.5px; margin-top: 8px; }
+  button.run { background: var(--accent); color: #fff; border: 0; border-radius: 10px;
+    padding: 12px 22px; font: 600 15px inherit; cursor: pointer; margin-top: 4px; }
+  button.run:disabled { opacity: .5; cursor: default; }
+  .grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
+  .cell { background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  .cell h3 { margin: 0; padding: 12px 16px; border-bottom: 1px solid var(--line); font-size: 14px;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .cell h3 .meta { font-weight: 400; color: var(--muted); font-size: 12.5px; }
+  .cellbody { padding: 14px 16px; }
+  .score { font-weight: 700; }
+  .score.ok { color: var(--good); } .score.mid { color: #b45309; } .score.bad { color: var(--bad); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 14px; }
+  .chip { font-size: 11.5px; padding: 3px 8px; border-radius: 999px; }
+  .chip.pass { background: var(--goodbg); color: var(--good); }
+  .chip.fail { background: var(--badbg); color: var(--bad); }
+  .slides { display: flex; flex-direction: column; gap: 8px; }
+  .slide { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .badge { font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; font-weight: 700;
+    color: var(--muted); }
+  .badge.cover { color: var(--hook); }
+  .slide.hook { background: var(--hookbg); border-color: #e9d5ff; }
+  .slide .t { font-weight: 600; margin: 2px 0; }
+  .slide .b { color: #374151; font-size: 14px; }
+  .slide ul { margin: 4px 0 0; padding-left: 18px; }
+  details { margin-top: 10px; } summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
+  pre { background: #0f172a; color: #e2e8f0; padding: 12px; border-radius: 10px; overflow: auto;
+    font-size: 12px; max-height: 320px; }
+  .err { color: var(--bad); background: var(--badbg); padding: 10px 12px; border-radius: 10px; }
+  .pending { color: var(--muted); }
+  .legend { font-size: 12.5px; color: var(--muted); margin: 6px 0 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Bake-off каруселей</h1>
+  <p class="sub">Проганяє твій брандамп через кілька моделей двома промптами — теперішнім (production) і новим (Ruta method) — і рахує, наскільки кожна дотримується твоїх правил.</p>
+
+  <div class="panel">
+    <label for="key">OpenRouter API ключ</label>
+    <input id="key" type="password" placeholder="sk-or-v1-..." autocomplete="off" />
+    <p class="hint">Ключ живе тільки в цій сторінці й іде напряму на openrouter.ai. Ми його не бачимо, у проєкт він не зберігається. Взяти ключ: openrouter.ai/keys (поповни балансом ~$5).</p>
+  </div>
+
+  <div class="panel">
+    <div class="row">
+      <div>
+        <label for="rant">Брандамп</label>
+        <textarea id="rant"></textarea>
+      </div>
+    </div>
+    <label style="margin-top:16px">Моделі</label>
+    <div class="models" id="models"></div>
+    <label style="margin-top:16px">Промпти</label>
+    <div class="models" id="prompts"></div>
+    <label style="margin-top:16px" for="tuned">Промпт «Ruta method» — редагований (сюди вставляй мої оновлення з чату, тисни Запустити знову)</label>
+    <textarea id="tuned" style="min-height:220px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12.5px"></textarea>
+    <div style="margin-top:16px; display:flex; gap:10px; align-items:center; flex-wrap:wrap">
+      <button class="run" id="run">Запустити</button>
+      <button class="run" id="export" style="background:#334155">📋 Скопіювати все для чату</button>
+      <span class="legend" id="copied" style="margin:0"></span>
+    </div>
+    <p class="legend" id="progress"></p>
+  </div>
+
+  <div class="grid" id="results"></div>
+</div>
+
+<script>
+// ─────────────────────────────── candidates
+const MODELS = [
+  { id: "meta-llama/llama-3.3-70b-instruct", label: "Llama 3.3 70B (теперішня)", on: true },
+  { id: "deepseek/deepseek-chat", label: "DeepSeek", on: true },
+  { id: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro", on: true },
+  { id: "anthropic/claude-sonnet-4.5", label: "Claude Sonnet 4.5", on: true },
+  { id: "x-ai/grok-4.3", label: "Grok 4.3 (xAI)", on: true },
+];
+
+const DEFAULT_RANT = "Як робити аналіз конкуренції, щоб себе не деморалізувати? І чому це було дуже важливо для вайп-кодингу і як я це роблю? Взагалі, робити аналіз конкуренції - це дуже важливо, тому що ми маємо знати, що відбувається у нас на ринку. ми маємо знати, кого нам боятись, кого нам не боятись і на хаті кого можна скопіювати. І взагалі нам треба розуміти, що взагалі відбувається у нас на ринку, щоб знати свого ворога. Але я персонально ненавиджу це робити, тому що кожен раз, коли я починаю ан це займає реально дуже багато часу. І плюс десь посередині цього аналізу я починаю реально сомніватися в собі, тому що 100% ми всі не унікальні, і я знайду людину, яка схожа на мене максимально, яка краще за мене, яка має або додаток, який краще за мене. Мене це супер деморалізує. Але це все одно треба зробити. Так от, найкращий спосіб, як на мене, це я використовую Cloud Cowork, який працює прямо на десктопі. Я відкриваю його і кажу йому проаналізувати конкурентів, знайди плюси і мінуси і на основі цього напиши мені план. І таким чином в мене є класний аналіз, який показує market gap, дира в ринку, яку я буду закривати своїм продуктом, і в мене є actionable items, задачі, які я можу використати, щоб далі просто працювати.";
+
+// ─────────────────────────────── language detect (from lib/ai/carouselPrompt.ts)
+function detectOutputLanguage(rant) {
+  const cyr = (rant.match(/[А-Яа-яІіЇїЄєҐґ]/g) || []).length;
+  const latin = (rant.match(/[A-Za-z]/g) || []).length;
+  if (latin >= 20 && latin >= cyr * 1.2) return "en";
+  return "uk";
+}
+
+// ─────────────────────────────── production prompt (lib/ai/carouselPrompt.ts)
+function prodPrompt(lang) {
+  const languageRule = lang === "en"
+    ? "Усі текстові поля (title/body/label/items) пиши англійською."
+    : "Усі текстові поля (title/body/label/items) пиши українською.";
+  return `Ти — досвідчений копірайтер каруселей для Instagram. Перетворюєш сирий рент на серію слайдів для візуального шаблону з типами слайдів.
+
+ПРИНЦИП: одна думка — один слайд. Не перевантажуй текст.
+
+ТИПИ СЛАЙДІВ (type): cover, content, statement, bullets, cta
+- cover — обкладинка (сильний заголовок теми)
+- content — пояснення / крок / контекст
+- statement — коротке ударне твердження (1–2 на карусель; НІКОЛИ не став два statement підряд)
+- bullets — список тез (поле items — масив рядків)
+- cta — заклик до дії (останній слайд)
+ПЕРШИЙ слайд завжди type=cover. ОСТАННІЙ завжди type=cta.
+
+ІКОНКИ (icon, або null): image, lightning, star, check, arrow-right, clock, calendar, fire, sparkle, target, camera, pen, chart, heart, globe
+
+Щоб виділити фрагмент під акцент — обгорни у {фігурні дужки}. accent_spans зазвичай [].
+Поля: title, body, label, items (лише для bullets), icon.
+Мінімум 5 слайдів, максимум 12.
+
+Лише JSON, без markdown. ${languageRule}
+
+{"total_slides":5,"slides":[{"type":"cover","title":"...","body":null,"label":null,"items":null,"icon":null,"accent_spans":[]}]}`;
+}
+
+// ─────────────────────────────── refined prompt (scripts/bakeoff/prompts/carouselRuta.mjs)
+function rutaPrompt(lang) {
+  const languageRule = lang === "en"
+    ? "МОВА ВІДПОВІДІ: англійська. Усі текстові поля — англійською."
+    : "МОВА ВІДПОВІДІ: українська. Усі текстові поля — українською. НІКОЛИ не російська.";
+  return `Ти пишеш карусель для Instagram для ОСОБИСТОГО бренду. Ти НЕ копірайтер-агенція і не коуч. Ти — голос самого автора: він ділиться власним досвідом, як воно було в нього і як він це пережив. Жваво, чесно, з самоіронією.
+
+${languageRule}
+
+ТON OF VOICE — НАЙВАЖЛИВІШЕ:
+- ГОЛОВНЕ: пиши ГОЛОСОМ АВТОРА З БРАНДАМПУ. Це voice-to-text САМЕ ДЛЯ ЦЬОГО — злови його реальні слова, вирази, емоцію, розмовні слівця й пиши так, як говорить ВІН. НЕ причісуй у гладкий рекламний копірайт. НЕ вигадуй обрубані фрази, якими ніхто не говорить.
+- ВИЗНАЧ ТИП КОНТЕНТУ: особиста історія → від першої особи, історія про себе, не урок. Експертне пояснення (біохімія, метод, процес) → НАВЧАЙ, але живим розмовним голосом (як подрузі за кавою, не як підручник), досі релейтбл, без сухих академічних формулювань.
+- У будь-якому типі: ніколи не пафосно/корпоративно/повчально («ти мусиш»). Голос живий і людський.
+- Будь вразливим де доречно. Читай ЕМОЦІЮ з брандампу і збережи її ЖИВОЮ у повну силу.
+- БЕЗ фальшивих осяянь («і тут до мене дійшло»). Кажи буденно, у своєму формулюванні.
+
+ГОЛОВНИЙ ПРИНЦИП: ОДИН слайд — ОДНА думка. Сумніваєшся — РОЗБИЙ на два. (Можна розтягнути одну думку на 2 слайди як «далі буде», якщо тримає увагу.)
+
+СТРУКТУРА: 3 хуки + тіло + 1 CTA.
+▸ ПЕРШІ 3 СЛАЙДИ ВСІЄЇ КАРУСЕЛІ — ЦЕ ТРИ ХУКИ (type="cover"). Обкладинка = хук 1 (тобто хуки = слайди 1,2,3, а не «обкладинка + ще 3»). ЖОДНОГО 4-го розігрівального слайда: слайд 4 — вже повноцінне тіло. Instagram показує слайд 1 АБО 2 АБО 3 випадково, тому КОЖЕН хук: (а) САМОДОСТАТНІЙ ЗА КОНТЕКСТОМ — зрозумілий без попередніх слайдів, назви тему прямо в ньому (це про зміст, не вигляд: хук може бути title АБО title+body); (б) РОЗМОВНИЙ — витягни реальні внутрішні думки/сумніви автора з брандампу і, де доречно, поверни до читача: «знайомо?», «тобі теж?». НІКОЛИ не розбивай одну думку на два хуки — три РІЗНІ думки, у кожній читач впізнає СЕБЕ. Наростають: хук 1 найсильніший; хук 2 глибше в біль; хук 3 пік напруги. Копай ГЛИБОКО в справжню емоцію з брандампу, у ЙОГО словах. НЕ вигадуй фальшиво-релейтбл зачини ("просто зайшла глянути").
+▸ СЛАЙД 1 має КОРОТКИЙ ПІДЗАГОЛОВОК (body) — обіцянку/причину читати, КОРОТКУ як приклади: "і як це зробити, не вбиваючи мотивацію", "5 лайфхаків". Є лід-магніт? Додай: "+ мій промпт".
+▸ БЕЗ пафосу і фальшивих осяянь («і тут до мене дійшло»). Кажи буденно. НЕ тягни, не моралізуй, ріж такі слайди. НЕ дроби зайве: два слайди — один рух → об'єднай.
+▸ ХУКИ КОГЕРЕНТНІ: три кути на ОДИН стрижень (заяву хука 1), не стрибай на іншу підтему (хуки про «детокс — міф» → і хук 3 про детокс/приклади фейкового детоксу, а не раптом симптоми). Симптоми/релейтбл — у тілі. Уся карусель тримає стрижень і виконує обіцянку хука.
+▸ Перед покроковим фіналом — короткий слайд-підводка з інтригою («є 2 кроки, що реально лагодять»), не падай у «Крок 1» з нізвідки. Кожен слайд «м'ясний», без порожніх анонсів. НЕ витрачай слайд на очевидне («алкоголь шкідливий») — давай неочевидне.
+▸ МОВА ДЛЯ ЧИТАЧА, не для експерта: прибирай/пояснюй жаргон (барбітурати, кофактори, цитохроми) простими словами. Тільки природні фрази — жодних кострубатих зворотів («нарешті тягне»). ПРОПОРЦІЙНА увага: не роздувай дрібницю лише тому, що вона в брандампі.
+▸ СИЛА ВПЕРЕД: найхайповіші/вісцеральні хуки — першими («стаєш ще ОТРУЄНІШОЮ» сильніше за «це не детокс»; сухий факт лиши для тіла).
+▸ ХУК НЕСЕ УДАР, не анонсує: кожен із трьох — повноцінний самодостатній удар (за потреби title+текст), а не кинутий заголовок. Хуки 2–3 не слабші за хук 1.
+▸ ТІЛО РУХАЄ ВПЕРЕД, не повторює хуки: слайди 4–6 НЕ переказують те, що вже сказали хуки 2–3. Одразу поворот → метод → результат. Якщо думка сильна — вона живе в ХУКУ повністю, а не ледь названа тут і розкрита аж у тілі.
+▸ ГОЛОС і в тілі — стиль не провисає в середині. НЕ пересеквенсуй: слайд лише продовжує без нового удару/кроку → прибери.
+▸ ФОРМА: слайди тіла краще title+текст, а не голий абзац. Будь-який перелік (симптоми/приклади/кроки) → окремий слайд type="bullets", не прозою.
+▸ ЛОГІЧНИЙ МІСТОК: не кидай «ось цього й бракує» без пояснення чого і чому. Хистка логіка з брандампу → зайди з міцного боку («не факт, що засвоїш») або [пустографка], не тягни шаткий місток.
+▸ ФІНАЛ на вже закладеному ґрунті — без нових метафор/цифр з нізвідки («сто хвороб»); перегукуйся з тим, що вже сказано (симптоми з початку).
+▸ ТІЛО (після 3-го) — історія за зростанням цінності. Одна думка на слайд, але слайди можуть бути ПОВНІШИМИ і пояснювальними. ЧЕРГУЙ content / bullets. ВИКОРИСТОВУЙ КОНКРЕТИКУ З БРАНДАМПУ: якщо автор описав свій метод/промпт/схему — ПОКАЖИ це конкретно (окремий слайд, що САМ Є шаблоном промпту, з [пустографками]). НЕ узагальнюй до "зробіть аналіз". Прив'язуй користь назад до ЕМОЦІЇ.
+▸ ОСТАННІЙ слайд — РІВНО ОДИН CTA (type="cta"), одна дія. За замовчуванням = зберегти / лайк / коментар. Є очевидний лід-магніт (напр. власний промпт)? Можна проактивно: "напиши СЛОВО в директ".
+
+ГЛИБИНА: 5–20 слайдів. Йди ГЛИБШЕ, якщо в брандампі є матеріал (краще повніше на 12–16, ніж поверхнево на 7). ВИКОНУЙ ОБІЦЯНКУ ХУКА: якщо обіцяв «як / що робити» — дай це по суті (конкретні кроки з брандампу), не 3 загальні буліти.
+ЧЕСНІСТЬ: НЕ вигадуй цифр/фактів/імен. Дрібний факт → [квадратні дужки]: [твоя цифра]. Цілий розділ, якого нема в брандампі → слайд-шаблон у [дужках]: "[тут детально: як саме це робити]". Краще чесний шаблон, ніж вигадана порада. {Фігурні} — лише для акценту, не для пустографок.
+БЕЗ ВОДИ: жодних привітань/вступів/підсумків. Тільки слайди. Коротко, придатно до публікації.
+
+ТИПИ (type): cover | content | bullets | cta. НЕ використовуй "statement".
+- cover — хук (слайди 1–3; body лише в слайда 1 = підзаголовок)
+- content — розповідь / крок (title, body, опц. label, icon)
+- bullets — список тез (items — масив)
+- cta — лише останній слайд
+ІКОНКИ (icon, або null): image, lightning, star, check, arrow-right, clock, calendar, fire, sparkle, target, camera, pen, chart, heart, globe
+Поля: title, body, label, items (лише bullets), icon, accent_spans ([]).
+
+Лише JSON, без markdown:
+{"total_slides":10,"slides":[{"type":"cover","title":"Хук 1","body":"підзаголовок-обіцянка","label":null,"items":null,"icon":null,"accent_spans":[]}]}`;
+}
+
+const PROMPTS = [
+  { id: "prod", label: "Теперішній (production)", build: prodPrompt, on: true },
+  { id: "ruta", label: "Новий (Ruta method, редагований)", build: null, on: true },
+];
+
+// ─────────────────────────────── scorer (scripts/bakeoff/rules.mjs, carousel)
+const SLIDE_TYPES = new Set(["cover","content","statement","bullets","cta"]);
+const ICONS = new Set(["image","lightning","star","check","arrow-right","clock","calendar","fire","sparkle","target","camera","pen","chart","heart","globe"]);
+const RUSSIAN = /[ыэъё]/i;
+
+function collectText(v, out=[]) {
+  if (typeof v === "string") out.push(v);
+  else if (Array.isArray(v)) v.forEach(x => collectText(x, out));
+  else if (v && typeof v === "object") Object.values(v).forEach(x => collectText(x, out));
+  return out;
+}
+
+function checkCarousel(parsed) {
+  const r = [];
+  const P = (ok, label, detail) => r.push({ ok, label, detail: ok ? null : (detail||null) });
+  const slides = Array.isArray(parsed && parsed.slides) ? parsed.slides : [];
+  const types = slides.map(s => s && s.type);
+
+  P(slides.length >= 5 && slides.length <= 20, "Слайдів 5–20", slides.length + " слайдів");
+  P(types[0] === "cover", "Перший = cover", "перший: " + types[0]);
+  P(types[types.length-1] === "cta", "Останній = cta", "останній: " + types[types.length-1]);
+
+  const firstThree = types.slice(0,3);
+  const hooks = firstThree.filter(t => t === "cover").length;
+  P(slides.length >= 4 && hooks === 3, "3 хуки спереду (cover)", hooks + "/3 cover: [" + firstThree.join(", ") + "]");
+
+  P(!!String((slides[0]&&slides[0].body)||"").trim(), "Слайд 1 має підзаголовок-обіцянку", "нема підзаголовка на слайді 1");
+
+  const ctas = types.filter(t => t === "cta").length;
+  P(ctas === 1, "Рівно один CTA", ctas + " cta");
+
+  const stmt = types.filter(t => t==="statement").length;
+  P(stmt === 0, "Без statement (Рута їх не юзає)", stmt + " statement");
+
+  const badBullets = slides.filter(s => s && s.type==="bullets" && !(Array.isArray(s.items)&&s.items.length)).length;
+  P(badBullets === 0, "bullets мають items", badBullets + " без items");
+
+  const unknown = types.filter(t => !SLIDE_TYPES.has(t));
+  P(unknown.length === 0, "Валідні типи", "невідомі: " + [...new Set(unknown)].join(", "));
+
+  const badIcons = slides.map(s=>s&&s.icon).filter(i=>i!=null && !ICONS.has(i));
+  P(badIcons.length === 0, "Валідні іконки", "невідомі: " + [...new Set(badIcons)].join(", "));
+
+  const stars = collectText(parsed).join(" ").match(/\*[^*]+\*/g);
+  P(!stars, "Пустографки у [дужках], не *зірочках*", (stars?stars.length:0) + " *...*");
+
+  const ru = collectText(parsed).filter(t => RUSSIAN.test(t));
+  P(ru.length === 0, "Без російської", ru.length + " полів з ы/э/ъ/ё");
+
+  return r;
+}
+
+// ─────────────────────────────── JSON extraction (openrouter.mjs)
+function extractJson(text) {
+  const raw = (text||"").trim();
+  if (!raw) return null;
+  const fence = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const cand = fence ? fence[1].trim() : raw;
+  try { return JSON.parse(cand); } catch (e) {}
+  const a = cand.indexOf("{"), b = cand.lastIndexOf("}");
+  if (a>=0 && b>a) { try { return JSON.parse(cand.slice(a,b+1)); } catch(e){} }
+  return null;
+}
+
+// ─────────────────────────────── OpenRouter call
+async function callModel(key, model, messages) {
+  const started = performance.now();
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "authorization": "Bearer " + key,
+      "HTTP-Referer": "https://github.com/valeriya-ruta/reels-scenario-builder",
+      "X-Title": "Ruta bake-off",
+    },
+    body: JSON.stringify({
+      model, messages, temperature: 0.7, max_tokens: 8000,
+      response_format: { type: "json_object" },
+    }),
+  });
+  const latency = Math.round(performance.now() - started);
+  if (!res.ok) {
+    let body = ""; try { body = await res.text(); } catch(e){}
+    throw new Error("HTTP " + res.status + ": " + body.slice(0, 300));
+  }
+  const payload = await res.json();
+  return {
+    text: (payload.choices && payload.choices[0] && payload.choices[0].message && payload.choices[0].message.content) || "",
+    latency,
+    usage: payload.usage || null,
+  };
+}
+
+// ─────────────────────────────── UI
+const $ = s => document.querySelector(s);
+$("#rant").value = DEFAULT_RANT;
+// The EXACT locked carousel prompt (round 7), extracted from
+// scripts/bakeoff/prompts/carouselRuta.mjs. The box is editable — tweak + re-run.
+const LOCKED_RUTA_PROMPT = "Ти пишеш карусель для Instagram для ОСОБИСТОГО бренду. Ти НЕ копірайтер-агенція і не коуч. Ти — голос самого автора: він ділиться власним досвідом, як воно було в нього і як він це пережив. Жваво, чесно, з самоіронією.\n\nМОВА ВІДПОВІДІ: українська. Усі текстові поля — українською. НІКОЛИ не російська.\n\n═══════════════════════════════════\nТON OF VOICE — НАЙВАЖЛИВІШЕ\n═══════════════════════════════════\n- ГОЛОВНЕ: пиши ГОЛОСОМ АВТОРА З БРАНДАМПУ. Брандамп — це voice-to-text САМЕ ДЛЯ ЦЬОГО:\n  щоб ти зловив його реальні слова, вирази, емоцію, розмовні слівця й ритм. Тягни його ЖИВІ\n  фрази прямо з тексту («блін», «супер деморалізує», «ну все, вже зробили», «пісить»,\n  «100%», «руки опускаються») і пиши так, як говорить ВІН. НЕ причісуй у гладкий рекламний\n  копірайт. НЕ вигадуй обрубані «ударні» фрази, якими ніхто не говорить у житті.\n- ВИЗНАЧ ТИП КОНТЕНТУ з брандампу і під нього обери подачу:\n   • ОСОБИСТА ІСТОРІЯ (автор ділиться власним досвідом) → від ПЕРШОЇ особи: «в мене було…»,\n     «я думала…», «а потім зрозуміла…». Це історія про себе, а не урок; не повчай.\n   • ЕКСПЕРТНЕ ПОЯСНЕННЯ (автор пояснює тему — біохімію, метод, процес) → НАВЧАЙ, але ЖИВИМ\n     розмовним голосом автора: як пояснюєш подрузі за кавою, а не як підручник. Досі релейтбл\n     («знайомо?»), досі БЕЗ сухих академічних формулювань.\n- У БУДЬ-ЯКОМУ типі: ніколи не будь пафосним, корпоративним чи занудно-повчальним («ти мусиш»).\n  Голос завжди живий і людський.\n- Будь вразливим: чесно назви свій біль/сумнів/провал. Вразливість = довіра.\n- БЕЗ пафосу і фальшивих осяянь («і тут до мене дійшло», «я нарешті зрозуміла», «і ось у чому\n  секрет»). Кажи, що реально сталося — приземлено, буденно, у СВОЄМУ формулюванні. Часто це не\n  «велике прозріння», а простий практичний хід («я знайшла спосіб робити це, по суті не дивлячись»).\n- Читай ЕМОЦІЮ з брандампу і збережи її ЖИВОЮ. Якщо там самокопання, страх, злість — вони\n  мають бути в тексті у ПОВНУ силу, а не згладжені й не «підсушені».\n\n═══════════════════════════════════\nГОЛОВНИЙ ПРИНЦИП\n═══════════════════════════════════\nОДИН слайд — ОДНА думка. Сумніваєшся — РОЗБИЙ на два. (Виняток: можна розтягнути одну думку на 2 слайди як «далі буде», якщо це тримає увагу.) АЛЕ й НЕ дроби зайве: якщо два слайди — це насправді один рух/думка, ОБ'ЄДНАЙ їх в один. Кожен слайд має додавати нове, а не переливати з пустого.\n\n═══════════════════════════════════\nСТРУКТУРА: 3 хуки + тіло + 1 CTA\n═══════════════════════════════════\n▸ ПЕРШІ 3 СЛАЙДИ ВСІЄЇ КАРУСЕЛІ — ЦЕ ТРИ ХУКИ (type=\"cover\"). Обкладинка = хук 1.\n  Тобто хуки — це слайди 1, 2, 3, а не «обкладинка + ще 3». ЖОДНОГО 4-го «розігрівального»\n  слайда: слайд 4 — це вже повноцінне ТІЛО, яке рухає історію, а не ще одна підводка.\n  Instagram показує в стрічці слайд 1 АБО 2 АБО 3 — випадково. Тому КОЖЕН хук:\n    • САМОДОСТАТНІЙ ЗА КОНТЕКСТОМ — його можна зрозуміти БЕЗ попередніх слайдів. Назви тему\n      прямо в ньому; не посилайся на те, чого ще не було на екрані. (Це про ЗМІСТ, а не вигляд:\n      хук може бути title АБО title+body.)\n    • РОЗМОВНИЙ, як жива мова. Витягни РЕАЛЬНІ внутрішні думки/сумніви автора з брандампу\n      (його «внутрішній голос», справжні фрази) і, де доречно, поверни це до читача для\n      впізнавання: «знайомо?», «тобі теж?», «знаєш той момент, коли…».\n  НІКОЛИ не розбивай одну думку на два хуки — це три РІЗНІ думки, у кожній читач має ВПІЗНАТИ\n  СЕБЕ. АЛЕ всі три — ПРО ОДНЕ: три кути на ОДИН стрижень (заяву хука 1), а НЕ стрибки на різні\n  підтеми. Якщо хук 1 «детокс — це міф» — то й хуки 2–3 про детокс (напр. конкретні приклади\n  фейкового детоксу), а не раптом про симптоми. Релейтбл/симптоми, якщо треба, — у ТІЛІ, не в\n  хуках. Уся карусель далі ТРИМАЄ цей стрижень і виконує заяву хука. Три кути:\n    • Хук 1 — найсильніший, максимальний хайп.\n    • Хук 2 — ще один сильний кут, глибше в біль.\n    • Хук 3 — ще інший кут, пік напруги / конкретика.\n  СИЛА ВПЕРЕД: найхайповіші, найвісцеральніші формулювання став ПЕРШИМИ. Вісцеральне/емоційне\n  («стаєш ще ОТРУЄНІШОЮ») сильніше за пласко-фактичне («це не детокс») — сухий факт лиши для тіла,\n  а в хук винеси емоційний заряд.\n  ХУК НЕСЕ УДАР, а не анонсує його. Кожен із трьох — ПОВНОЦІННИЙ, самодостатній удар (сильний\n  рядок, за потреби + короткий текст під ним), а НЕ кинутий заголовок-тизер. Хуки 2 і 3 НЕ можуть\n  бути слабшими чи «порожнішими» за хук 1. Якщо думка достатньо сильна для хука — вона МАЄ жити в\n  хуку повністю, а не бути ледь названою тут і по-справжньому розкритою аж у слайдах 4–6.\n  НЕ фейкуй хайп ОБРУБАННЯМ. Хуки 2–3 не роби штучно короткими/рубаними «щоб звучало ударно» —\n  хай ДИХАЮТЬ у голосі автора (експресивно, title + текст, що виражає емоцію). Сила — від слів\n  і живої емоції, а не від куцості.\n  ФОРМА ХУКІВ: хук 1 може бути голий сильний заголовок (найпотужніший панч), за бажанням + короткий\n  підзаголовок. АЛЕ хуки 2 і 3 — це TITLE + ТЕКСТ (1–2 речення), а НЕ голі заголовки-панчлайни:\n  текст під заголовком уже несе РЕАЛЬНУ глибину болю (конкретну емоцію/ситуацію з брандампу), а не\n  просто дражнить темою.\n  ⚠ НАЙБІЛЬША ПОМИЛКА (не роби так): тонкі хуки-однорядківці 2–3, а справжня глибина болю аж у\n  слайдах 4–6. Біль розкривається ПОВНІСТЮ вже у слайдах 1–3. Слайди 4+ НЕ переказують страждання —\n  вони ведуть до повороту/рішення. САМОПЕРЕВІРКА: якщо зміст слайда 4, 5 чи 6 можна поставити на\n  місце хука 2 або 3 без втрати — ти поклав глибину НЕ ТУДИ. Її місце — В ХУКУ. Перенеси цей зміст\n  у хуки 2–3, а тіло почни вже з повороту.\n  Копай ГЛИБОКО в реальну емоцію з брандампу (справжній сором/сумнів/страх, названий там),\n  у ЙОГО словах. НЕ вигадуй фальшиво-релейтбл зачини (\"просто зайшла глянути\"), якщо так\n  насправді не буває.\n\n▸ СЛАЙД 1 має КОРОТКИЙ ПІДЗАГОЛОВОК (у полі body) — обіцянку / причину читати далі. КОРОТКИЙ,\n  як приклади, не довге речення: \"і як це зробити, не вбиваючи мотивацію\", \"5 лайфхаків\". Якщо\n  є лід-магніт (безкоштовний промпт/шаблон/гайд) — додай його тут: \"+ мій промпт\".\n\n▸ ТІЛО (слайди після 3-го) — розкриває історію за зростанням цінності / логічно.\n  Одна думка на слайд, але слайди можуть бути ПОВНІШИМИ і пояснювальними, де це допомагає\n  зрозуміти. ЧЕРГУЙ формат сусідніх слайдів (content / bullets).\n  ВИКОРИСТОВУЙ КОНКРЕТИКУ З БРАНДАМПУ. Якщо автор описав свій метод/промпт/схему дій —\n  ПОКАЖИ це конкретно (напр. окремий слайд, який САМ Є шаблоном промпту, з [пустографками]\n  на те, чого не знаєш). НЕ узагальнюй конкретику до \"зробіть аналіз\".\n  Прив'язуй практичну користь назад до ЕМОЦІЇ (напр. чому це рятує від того самого болю).\n  ФОРМА слайдів тіла: краще TITLE + текст (заголовок як опора для ока), а не голий абзац у body.\n  Будь-який ПЕРЕЛІК (симптоми, приклади, кроки-список) роби окремим слайдом type=\"bullets\", не прозою.\n  ТІЛО РУХАЄ ВПЕРЕД, НЕ ПОВТОРЮЄ ХУКИ. Три хуки вже назвали біль/заяву — НЕ переказуй їх знову в\n  слайдах 4–6. Одразу веди далі: поворот → метод → результат/оффер. Погана ознака (не роби так):\n  слайди 4–6 переказують те саме, що хуки 2–3. Якщо ловиш себе на повторі — або поглиби хук, або\n  виріж дубль у тілі.\n  ГОЛОС І В ТІЛІ. Слайди тіла — так само живі й у голосі автора, як хуки. НЕ дай їм «висохнути» в\n  нейтральний прісний переказ. Стиль не має провисати в середині.\n  НЕ ПЕРЕСЕКВЕНСУЙ: якщо слайд лише продовжує попередній, не додаючи нового удару чи кроку — прибери\n  його. Глибина — це БІЛЬШЕ суті, а не більше однакових слайдів поспіль.\n\n▸ ОСТАННІЙ слайд — РІВНО ОДИН CTA (type=\"cta\"), одна дія.\n  За замовчуванням CTA = зберегти / лайк / коментар. АЛЕ якщо є очевидний лід-магніт\n  (напр. власний промпт автора) — можна проактивно запропонувати його за ключовим словом:\n  \"напиши СЛОВО в директ\".\n\n═══════════════════════════════════\nГЛИБИНА І КІЛЬКІСТЬ\n═══════════════════════════════════\n- 5–20 слайдів. НЕ бійся йти ГЛИБШЕ: якщо в брандампі є матеріал — краще повніше й конкретніше\n  на 12–16 слайдах, ніж поверхнево на 7. Не зупиняйся на оглядовому мінімумі.\n- ВИКОНУЙ ОБІЦЯНКУ ХУКА. Якщо хук/підзаголовок обіцяє «як це працює» чи «що робити» — фінал\n  МАЄ це дати ПО СУТІ: конкретні кроки, деталі, «як саме», взяті з брандампу. НЕ зливай кінцівку\n  в 3 загальні буліти й поверхневий огляд. Читач має піти з відповіддю, а не з анонсом відповіді.\n- Перед покроковим фіналом (Крок 1, Крок 2…) дай КОРОТКИЙ слайд-підводку з інтригою («є два кроки,\n  які реально це лагодять»), щоб читач знав: зараз буде рішення. Не падай у «Крок 1» з нізвідки.\n- ЖОДНИХ порожніх слайдів-анонсів. Кожен слайд «м'ясний» — несе зміст, а не лише оголошує наступний.\n  Якщо слайд тільки підводить і сам нічого не дає — з'єднай його з наступним.\n- НЕ витрачай слайд на очевидне, що всі й так знають («алкоголь шкідливий»). Давай неочевидне\n  або показуй несподіваний кут того самого.\n\n═══════════════════════════════════\nЧЕСНІСТЬ І ПУСТОГРАФКИ\n═══════════════════════════════════\nНЕ вигадуй цифр/фактів/імен/історій, яких нема в ренті.\n- Дрібний факт, якого бракує → коротка пустографка у [квадратних дужках]: [твоя цифра], [посилання].\n- ЦІЛИЙ розділ, якого нема в брандампі (напр. хук обіцяє «що робити», а автор цього не наговорив) →\n  залиш СЛАЙД-ШАБЛОН — режисерська нотатка у [квадратних дужках], що там має бути, напр.:\n  \"[тут детально: як саме додавати ці нутрієнти, щоб полагодити детокс]\". Краще чесний шаблон,\n  ніж вигадана порада. (Фігурні {дужки} НЕ використовуй для пустографок — вони лише для\n  брендового акценту.)\n- ЛОГІЧНИЙ МІСТОК: кожне твердження має явний причинно-наслідковий зв'язок. Не кидай «ось цього\n  й бракує», не пояснивши ЧОГО саме і ЧОМУ це випливає. Якщо логіка в брандампі хистка (напр.\n  зв'язок «мало їжі → мало антиоксидантів» не очевидний) — не тягни шаткий місток: або поясни\n  чітко, або зайди з боку, де логіка міцна (напр. «не факт, що ЗАСВОЇШ»), або постав [пустографку].\n\n═══════════════════════════════════\nМОВА — ДЛЯ ЧИТАЧА, НЕ ДЛЯ ЕКСПЕРТА\n═══════════════════════════════════\n- Автор — експерт, але ЧИТАЧ — ні. Прибирай або пояснюй ПРОСТИМИ словами будь-який жаргон\n  (барбітурати, кофактори, цитохроми, метаболіти…). Пиши так, щоб зрозуміла звичайна людина.\n- ТІЛЬКИ природні фрази. Жодних рідкісних/кострубатих зворотів, яких ніхто не каже вголос\n  («і ось чому це болить», «друга фаза нарешті тягне»). Прочитай подумки — не говорять так? Перепиши.\n- ПРОПОРЦІЙНА увага: акцент там, де його ставив АВТОР. Не роздувай дрібницю лише тому, що вона\n  трапилась у брандампі. Якщо все ж акцентуєш — дай достатньо контексту, щоб це було виправдано.\n\n═══════════════════════════════════\nБЕЗ ВОДИ\n═══════════════════════════════════\nЖодних привітань, вступів, підсумків, \"дякую за увагу\". Тільки слайди. Текст короткий,\nпридатний до публікації як є. НЕ тягни думку довше, ніж треба. НЕ додавай моралізаторських\nвисновків у кінці («і ось у цьому весь секрет…»), якщо історія вже все сказала — ріж такі\nслайди. Кожен слайд має рухати, а не підсумовувати.\nФІНАЛ — на ВЖЕ закладеному ґрунті. Не вкидай наприкінці нову метафору/порівняння/цифру, якої не\nбуло раніше («сто окремих хвороб» з нізвідки). Кінцівка має перегукуватися з тим, що вже сказано\n(напр. з симптомами, названими на початку).\n\n═══════════════════════════════════\nЗАГОЛОВКИ — ПІДГЛЯД, А НЕ СПОЙЛЕР\n═══════════════════════════════════\n- title слайда — це ПІДГЛЯД усередину, гачок, що тягне читати далі, АБО сама жива думка в голосі\n  автора. Це НЕ описова назва-етикетка й НЕ заголовок розділу сайту.\n  ✘ спойлер/етикетка (не роби так): «Що я отримую на виході», «Чому я все одно це роблю»,\n    «Як я це робила раніше», «Ознаки порушень».\n  ✔ підгляд/голос: «Раніше це було так…», «І тут почалося найгірше», «Мій промпт (можна красти)»,\n    «Знайомі симптоми?».\n- Заголовок НЕ переказує те, що і так у тексті нижче. Він інтригує або б'є, а не анонсує зміст.\n\n═══════════════════════════════════\nТИПИ (type) — БЕЗ statement\n═══════════════════════════════════\ncover | content | bullets | cta\n- cover — хук (слайди 1–3 завжди cover; body лише в слайда 1 = підзаголовок)\n- content — розповідь / крок / контекст (title, body, опційно label, icon)\n- bullets — список тез (поле items — масив рядків)\n- cta — заклик до дії (лише останній слайд)\nНЕ використовуй type \"statement\".\n\nІКОНКИ (icon, або null): image, lightning, star, check, arrow-right, clock, calendar, fire, sparkle, target, camera, pen, chart, heart, globe\nАкцент: {фігурні дужки} у title/body. accent_spans зазвичай [].\nПоля: title, body, label, items (лише bullets), icon, accent_spans.\n\n═══════════════════════════════════\nФОРМАТ ВІДПОВІДІ\n═══════════════════════════════════\nЛише JSON, без markdown, без тексту поза JSON.\n\n{\n  \"total_slides\": 10,\n  \"slides\": [\n    { \"type\": \"cover\", \"title\": \"Хук 1 — найсильніший\", \"body\": \"підзаголовок-обіцянка (+ лід-магніт якщо є)\", \"label\": null, \"items\": null, \"icon\": null, \"accent_spans\": [] },\n    { \"type\": \"cover\", \"title\": \"Хук 2 — інший кут, глибше в біль\", \"body\": null, \"label\": null, \"items\": null, \"icon\": null, \"accent_spans\": [] },\n    { \"type\": \"cover\", \"title\": \"Хук 3 — пік напруги\", \"body\": null, \"label\": null, \"items\": null, \"icon\": null, \"accent_spans\": [] },\n    { \"type\": \"content\", \"title\": null, \"body\": \"Особиста розповідь від першої особи. Одна думка.\", \"label\": null, \"items\": null, \"icon\": null, \"accent_spans\": [] },\n    { \"type\": \"content\", \"title\": \"Мій промпт\", \"body\": \"«…конкретний шаблон з [пустографками]…»\", \"label\": null, \"items\": null, \"icon\": \"pen\", \"accent_spans\": [] },\n    { \"type\": \"bullets\", \"title\": \"І на виході я маю:\", \"body\": null, \"label\": null, \"items\": [\"…\", \"…\", \"остання теза прив'язана до емоції\"], \"icon\": null, \"accent_spans\": [] },\n    { \"type\": \"cta\", \"title\": \"Одна дія\", \"body\": \"напиши [слово] в директ\", \"label\": null, \"items\": null, \"icon\": null, \"accent_spans\": [] }\n  ]\n}";
+$("#tuned").value = LOCKED_RUTA_PROMPT; // editable; paste refined prompt versions here between runs
+const modelsEl = $("#models");
+MODELS.forEach((m,i) => {
+  modelsEl.insertAdjacentHTML("beforeend",
+    `<label><input type="checkbox" data-model="${i}" ${m.on?"checked":""}/> ${m.label}</label>`);
+});
+const promptsEl = $("#prompts");
+PROMPTS.forEach((p,i) => {
+  promptsEl.insertAdjacentHTML("beforeend",
+    `<label><input type="checkbox" data-prompt="${i}" ${p.on?"checked":""}/> ${p.label}</label>`);
+});
+
+function slideHtml(s, idx) {
+  const type = s && s.type || "?";
+  const isHook = idx < 3 && type === "cover";
+  const items = Array.isArray(s && s.items) && s.items.length
+    ? "<ul>" + s.items.map(x=>`<li>${esc(x)}</li>`).join("") + "</ul>" : "";
+  return `<div class="slide ${isHook?"hook":""}">
+    <span class="badge ${type}">${idx+1} · ${esc(type)}${isHook?" · хук":""}</span>
+    ${s&&s.label?`<div class="b" style="color:#6b7280">${esc(s.label)}</div>`:""}
+    ${s&&s.title?`<div class="t">${esc(s.title)}</div>`:""}
+    ${s&&s.body?`<div class="b">${esc(s.body)}</div>`:""}
+    ${items}
+  </div>`;
+}
+function esc(x){ return String(x==null?"":x).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+
+function scoreClass(pct){ return pct>=90?"ok":pct>=60?"mid":"bad"; }
+
+let RESULTS = [];      // structured results of the last run, for export
+let LAST_RANT = "";
+
+async function run() {
+  // Strip anything that isn't printable ASCII — OpenRouter keys are ASCII, and a
+  // stray invisible/non-Latin-1 char pasted into the field makes fetch() throw
+  // "String contains non ISO-8859-1 code point" when building the auth header.
+  const rawKey = $("#key").value;
+  const key = rawKey.replace(/[^\x20-\x7E]/g, "").trim();
+  if (!key) { alert("Встав OpenRouter ключ."); return; }
+  if (rawKey.trim() !== key) { $("#key").value = key; $("#copied").textContent = "почистила невидимі символи в ключі ✓"; }
+  const rant = $("#rant").value.trim();
+  const models = [...document.querySelectorAll("[data-model]:checked")].map(c => MODELS[c.dataset.model]);
+  const prompts = [...document.querySelectorAll("[data-prompt]:checked")].map(c => PROMPTS[c.dataset.prompt]);
+  if (!models.length || !prompts.length) { alert("Обери хоч одну модель і один промпт."); return; }
+
+  const lang = detectOutputLanguage(rant);
+  const results = $("#results");
+  results.innerHTML = "";
+  RESULTS = [];
+  LAST_RANT = rant;
+  $("#copied").textContent = "";
+  $("#run").disabled = true;
+
+  const jobs = [];
+  for (const p of prompts) for (const m of models) {
+    const id = "c_" + p.id + "_" + m.id.replace(/[^a-z0-9]/gi,"_");
+    results.insertAdjacentHTML("beforeend",
+      `<div class="cell" id="${id}"><h3><span>${m.label} · <span class="meta">${p.label}</span></span><span class="pending">…генерую</span></h3></div>`);
+    jobs.push({ p, m, id });
+  }
+
+  let done = 0;
+  const total = jobs.length;
+  const prog = $("#progress");
+  prog.textContent = `0 / ${total}`;
+
+  await Promise.all(jobs.map(async ({p,m,id}) => {
+    const cell = document.getElementById(id);
+    const systemContent = p.id === "ruta" ? $("#tuned").value.trim() : p.build(lang);
+    const messages = [
+      { role: "system", content: systemContent },
+      { role: "user", content: rant },
+    ];
+    try {
+      const out = await callModel(key, m.id, messages);
+      const parsed = extractJson(out.text);
+      if (!parsed) {
+        RESULTS.push({ model: m.label, prompt: p.label, ok: false, note: "не-JSON", rawText: out.text });
+        cell.innerHTML = `<h3><span>${m.label} · <span class="meta">${p.label}</span></span><span class="meta">${out.latency}ms</span></h3>
+          <div class="cellbody"><div class="err">Модель повернула не-JSON.</div>
+          <details><summary>сирий текст</summary><pre>${esc(out.text.slice(0,4000))}</pre></details></div>`;
+        return;
+      }
+      const rules = checkCarousel(parsed);
+      const passed = rules.filter(r=>r.ok).length;
+      const pct = Math.round(passed/rules.length*100);
+      const slides = Array.isArray(parsed.slides) ? parsed.slides : [];
+      RESULTS.push({ model: m.label, prompt: p.label, ok: true, pct, passed, total: rules.length,
+        failed: rules.filter(r=>!r.ok).map(r=>({label:r.label, detail:r.detail})),
+        latency: out.latency, slides });
+      cell.innerHTML = `
+        <h3><span>${m.label} · <span class="meta">${p.label}</span></span>
+          <span class="meta"><span class="score ${scoreClass(pct)}">${pct}% правил (${passed}/${rules.length})</span> · ${out.latency}ms</span></h3>
+        <div class="cellbody">
+          <div class="chips">${rules.map(r=>`<span class="chip ${r.ok?"pass":"fail"}" title="${esc(r.detail||"")}">${r.ok?"✓":"✕"} ${esc(r.label)}</span>`).join("")}</div>
+          <div class="slides">${slides.map((s,i)=>slideHtml(s,i)).join("")}</div>
+          <details><summary>сирий JSON</summary><pre>${esc(JSON.stringify(parsed,null,2))}</pre></details>
+        </div>`;
+    } catch (e) {
+      RESULTS.push({ model: m.label, prompt: p.label, ok: false, note: e.message });
+      cell.innerHTML = `<h3><span>${m.label} · <span class="meta">${p.label}</span></span></h3>
+        <div class="cellbody"><div class="err">${esc(e.message)}</div></div>`;
+    } finally {
+      done++; prog.textContent = `${done} / ${total}`;
+      if (done === total) $("#run").disabled = false;
+    }
+  }));
+}
+
+// ─────────────────────────────── export everything as one pasteable block
+function slideToText(s, i) {
+  const type = (s && s.type) || "?";
+  const parts = [`  [${i + 1}] ${type}`];
+  if (s && s.label) parts.push(`      label: ${s.label}`);
+  if (s && s.title) parts.push(`      title: ${s.title}`);
+  if (s && s.body) parts.push(`      text: ${s.body}`);
+  if (s && Array.isArray(s.items) && s.items.length) {
+    for (const it of s.items) parts.push(`      • ${it}`);
+  }
+  return parts.join("\n");
+}
+
+function buildExport() {
+  const lines = [];
+  lines.push("=== BAKE-OFF RESULTS ===");
+  lines.push("BRAINDUMP: " + LAST_RANT);
+  lines.push("");
+  for (const r of RESULTS) {
+    lines.push("──────────────────────────────────────");
+    lines.push(`MODEL: ${r.model}  |  PROMPT: ${r.prompt}`);
+    if (!r.ok) {
+      lines.push(`  ERROR/${r.note || "fail"}` + (r.rawText ? `\n  RAW: ${String(r.rawText).slice(0, 800)}` : ""));
+      lines.push("");
+      continue;
+    }
+    lines.push(`  RULES: ${r.pct}% (${r.passed}/${r.total})`
+      + (r.failed.length ? `  |  FAILED: ${r.failed.map(f => f.label + (f.detail ? ` (${f.detail})` : "")).join("; ")}` : "  |  all rules passed")
+      + `  |  ${r.latency}ms`);
+    (r.slides || []).forEach((s, i) => lines.push(slideToText(s, i)));
+    lines.push("");
+  }
+  return lines.join("\n");
+}
+
+async function exportAll() {
+  if (!RESULTS.length) { alert("Спершу запусти (Запустити)."); return; }
+  const text = buildExport();
+  try {
+    await navigator.clipboard.writeText(text);
+    $("#copied").textContent = "✓ Скопійовано — встав у чат";
+  } catch (e) {
+    // Fallback: drop it in a textarea the user can select+copy manually.
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.cssText = "width:100%;min-height:240px;margin-top:10px";
+    $("#results").prepend(ta);
+    ta.select();
+    $("#copied").textContent = "Не вдалося авто-скопіювати — виділи текст вище і скопіюй вручну";
+  }
+}
+
+$("#run").addEventListener("click", run);
+$("#export").addEventListener("click", exportAll);
+</script>
+</body>
+</html>

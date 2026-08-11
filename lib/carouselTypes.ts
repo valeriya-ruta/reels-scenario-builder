@@ -135,3 +135,36 @@ export function resolveSlideType(slide: Slide, index: number, total: number): Sl
   if (kind === 'cta') return 'final';
   return 'slide';
 }
+
+/**
+ * Map an AI rant slide's `type` (SlideKind) to the stored structural fields
+ * (`slideType` + `layoutPreset`) the editor and renderer branch on.
+ *
+ * ONLY slide 1 is a full cover (the pure-title punch). Hooks 2-3 and every body
+ * slide render as title+text — Ruta doesn't want three giant covers, and a bare
+ * title can't carry the depth hooks 2-3 need. A `bullets` slide still becomes a
+ * `list`, and the last slide is the CTA (`final`). `postProcess` already pins
+ * slide[0]=cover and the last=cta, so position is reliable for those.
+ *
+ * `kind` drives only the middle slide's layout (list/quote/text). Shared by both
+ * the server action (`app/carousel-actions.ts`) and the in-editor builder
+ * (`components/CarouselBuilder.tsx`) so the two never drift.
+ */
+export function deriveRantSlideStructure(
+  kind: SlideKind | undefined,
+  index: number,
+  total: number,
+): { slideType: SlideType; layoutPreset: SlideLayoutPreset | null } {
+  const slideType: SlideType = index === 0 ? 'cover' : index === total - 1 ? 'final' : 'slide';
+  const layoutPreset: SlideLayoutPreset | null =
+    slideType === 'cover'
+      ? null
+      : slideType === 'final'
+        ? 'goal'
+        : kind === 'statement'
+          ? 'quote'
+          : kind === 'bullets'
+            ? 'list'
+            : 'text';
+  return { slideType, layoutPreset };
+}

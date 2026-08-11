@@ -19,9 +19,9 @@ interface GroqResponse {
   }>;
 }
 
-type OutputLanguage = 'uk' | 'en';
+export type OutputLanguage = 'uk' | 'en';
 
-function detectOutputLanguage(rant: string): OutputLanguage {
+export function detectOutputLanguage(rant: string): OutputLanguage {
   const cyr = (rant.match(/[А-Яа-яІіЇїЄєҐґ]/g) ?? []).length;
   const latin = (rant.match(/[A-Za-z]/g) ?? []).length;
   if (latin >= 20 && latin >= cyr * 1.2) return 'en';
@@ -36,7 +36,7 @@ function detectOutputLanguage(rant: string): OutputLanguage {
  * the spec's paste-in text is the output contract (JSON instead of free text);
  * every content rule is preserved verbatim.
  */
-function buildSystemPrompt(outputLanguage: OutputLanguage): string {
+export function buildSystemPrompt(outputLanguage: OutputLanguage): string {
   const languageRule =
     outputLanguage === 'en'
       ? 'Усі текстові поля (title, one_thought, screen_text, notes, reason) пиши природною розмовною англійською.'
@@ -118,7 +118,7 @@ ${languageRule}
 }`;
 }
 
-function buildUserPrompt(rant: string, name: string, outputLanguage: OutputLanguage): string {
+export function buildUserPrompt(rant: string, name: string, outputLanguage: OutputLanguage): string {
   const languageHint =
     outputLanguage === 'en'
       ? 'Виведи текстові поля англійською.'

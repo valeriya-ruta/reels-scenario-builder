@@ -1,0 +1,16 @@
+{
+  "id": "smoke",
+  "label": "Smoke test — plumbing only, NOT a real test set",
+  "braindump": "Я вже десять років працюю колористкою і найбільша помилка яку я бачу це коли дівчата економлять на фарбі а потім платять втричі більше за відновлення волосся. Це болить бо я бачу це щотижня і кожного разу думаю що могла б попередити якби вони запитали раніше. Тому я вирішила зробити курс де розкажу все що знаю про підбір фарби під тип волосся і як не зіпсувати його вдома.",
+  "storytellingName": "експертність",
+  "ideasSignals": [
+    { "kind": "proven", "label": "Рілс про помилки колористів", "ageDays": 3, "type": "reels" },
+    { "kind": "unused-dump", "label": "Думка про економію на фарбі", "ageDays": 5, "type": null }
+  ],
+  "ideal": {},
+  "rules": [
+    "This file exists only to smoke-test the harness plumbing (--dry-run) without an API key.",
+    "It is prefixed with _ so the directory scan skips it. Real test sets have no prefix.",
+    "It carries no ideal results, so it cannot be used for actual scoring."
+  ]
+}

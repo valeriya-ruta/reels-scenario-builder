@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { requireAuth } from '@/lib/auth';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import type { CarouselRantOutput, Slide } from '@/lib/carouselTypes';
+import { deriveRantSlideStructure } from '@/lib/carouselTypes';
 import { createEmptySlide } from '@/lib/carouselSlides';
 import { slidesForDatabase } from '@/lib/carouselSlides';
 
@@ -62,17 +63,11 @@ function mapRantOutputToDbSlides(output: CarouselRantOutput): Slide[] {
       ? raw.items.map((item) => compactWhitespace(String(item))).filter(Boolean)
       : null;
     slide.icon = raw.icon != null ? compactWhitespace(String(raw.icon)) || null : null;
-    slide.slideType = index === 0 ? 'cover' : index === output.slides.length - 1 ? 'final' : 'slide';
-    slide.layoutPreset =
-      slide.slideType === 'cover'
-        ? null
-        : slide.slideType === 'final'
-          ? 'goal'
-          : raw.type === 'statement'
-            ? 'quote'
-            : raw.type === 'bullets'
-              ? 'list'
-              : 'text';
+    // Honor the AI's slide `type` so the refined prompt's THREE cover hooks all
+    // render as covers (shared helper keeps this identical to CarouselBuilder).
+    const structure = deriveRantSlideStructure(raw.type, index, output.slides.length);
+    slide.slideType = structure.slideType;
+    slide.layoutPreset = structure.layoutPreset;
     return slide;
   });
 }

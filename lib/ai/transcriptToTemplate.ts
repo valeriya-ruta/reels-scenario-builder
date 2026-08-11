@@ -23,7 +23,7 @@ function toNonEmptyScenes(parsed: TemplateResponse): TemplateSceneDraft[] {
   );
 }
 
-const SYSTEM_PROMPT = [
+export const SYSTEM_PROMPT = [
   'You convert a spoken video transcript into a REUSABLE SCENARIO TEMPLATE.',
   '',
   '## Rules',
@@ -40,7 +40,7 @@ const SYSTEM_PROMPT = [
   '{"title":"short project name (≤48 chars)","scenes":[{"text":"..."},...]}',
 ].join('\n');
 
-const SYSTEM_PROMPT_BRIEF_ONLY = [
+export const SYSTEM_PROMPT_BRIEF_ONLY = [
   'The spoken transcript is missing or unusable (e.g. meme, format, or music-only reel).',
   'Build a REUSABLE SCENARIO TEMPLATE from the author note and optional reference URL.',
   '',

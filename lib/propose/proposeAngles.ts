@@ -15,7 +15,7 @@ import { daysUk, normalizeTitle } from '@/lib/propose/fallback';
  * dropped, and the caller tops up from the deterministic fallback.
  */
 
-const SYSTEM_PROMPT = `Ти — контент-продюсер української авторки в Instagram. Твоя робота — НЕ питати, про що вона хоче зняти. Твоя робота — приносити готові напрямки.
+export const SYSTEM_PROMPT = `Ти — контент-продюсер української авторки в Instagram. Твоя робота — НЕ питати, про що вона хоче зняти. Твоя робота — приносити готові напрямки.
 
 Тобі дають СИГНАЛИ — факти з її акаунта (що вже опубліковано, які думки вона накидала і не використала, що лежить без дати).
 

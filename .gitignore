@@ -51,3 +51,6 @@ _proofout/
 _proofout_bold/
 _proofout_ux/
 _proofout_r3/
+
+# model bake-off runs (raw model output + reports; regenerate with scripts/bakeoff)
+scripts/bakeoff/out/

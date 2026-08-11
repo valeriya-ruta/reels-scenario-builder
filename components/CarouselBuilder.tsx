@@ -5,7 +5,7 @@ import type { DragEndEvent } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
 import { Download, Loader2 } from 'lucide-react';
 import type { CarouselRantOutput, Slide } from '@/lib/carouselTypes';
-import { CAROUSEL_DEFAULT_BG, resolveSlideType } from '@/lib/carouselTypes';
+import { CAROUSEL_DEFAULT_BG, deriveRantSlideStructure, resolveSlideType } from '@/lib/carouselTypes';
 import { createEmptySlide, normalizeSlidesFromDb } from '@/lib/carouselSlides';
 import { updateCarouselProjectName } from '@/app/carousel-actions';
 import { persistCarouselSlides } from '@/lib/carousel/persistSlides';
@@ -910,17 +910,9 @@ export default function CarouselBuilder({
         slide.optionalLabel = s.label != null ? String(s.label).trim() || '' : '';
         slide.listItems = Array.isArray(s.items) ? s.items.map(String) : null;
         slide.icon = s.icon != null ? String(s.icon).trim() || null : null;
-        slide.slideType = index === 0 ? 'cover' : index === output.slides.length - 1 ? 'final' : 'slide';
-        slide.layoutPreset =
-          slide.slideType === 'cover'
-            ? null
-            : slide.slideType === 'final'
-              ? 'goal'
-              : s.type === 'statement'
-                ? 'quote'
-                : s.type === 'bullets'
-                  ? 'list'
-                  : 'text';
+        const structure = deriveRantSlideStructure(s.type, index, output.slides.length);
+        slide.slideType = structure.slideType;
+        slide.layoutPreset = structure.layoutPreset;
         slide.backgroundColor = defaultBg;
         slide.hasBackgroundOverride = false;
         Object.assign(slide, resolveSlideVisualColors(slide, index, output.slides.length, brandPalette));

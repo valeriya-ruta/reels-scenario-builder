@@ -1,0 +1,29 @@
+{
+  "id": "replace-me",
+  "label": "Short human name for the report",
+
+  "braindump": "Paste the RAW braindump here exactly as it would be pasted into the app. Do not clean it up — the messiness is the test. Minimum ~50 words for the storytelling prompt to behave as designed.",
+
+  "storytellingName": "",
+
+  "ideasSignals": [
+    { "kind": "proven", "label": "What was published", "ageDays": 5, "type": "reels" },
+    { "kind": "unused-dump", "label": "A thought that never became content", "ageDays": 3, "type": null },
+    { "kind": "stale", "label": "Something sitting undated", "ageDays": 12, "type": "carousel" }
+  ],
+
+  "ideasExclude": [],
+
+  "ideal": {
+    "carousel": "Your ideal carousel, slide by slide. Free text is fine — you do not have to write JSON.",
+    "reel": "Your ideal reel script: the hook, the middle beats, the CTA.",
+    "storytelling": "Your ideal storytelling. If it should be a saga, write it day by day.",
+    "ideas": "The three angles you would actually have proposed, with the reason for each."
+  },
+
+  "rules": [
+    "The rule that made your version good — e.g. 'the hook must be a low-stakes personal line, never the topic'",
+    "e.g. 'never invent a number — a *placeholder* always beats a fake figure'",
+    "e.g. 'the CTA has to reference the specific thing in the video, not a generic follow'"
+  ]
+}
