@@ -24,9 +24,40 @@ export const CAROUSEL_MODEL_GEMINI = 'gemini-2.5-pro';
 const MAX_OUTPUT_TOKENS = 8000;
 const TEMPERATURE = 0.7;
 
+// Left unbounded, Gemini 2.5 Pro's dynamic "thinking" can run many thousands of
+// tokens and push a single carousel well past a minute — the "it takes forever /
+// never creates" latency. Cap it so generation reliably finishes inside the 60s
+// serverless window while still leaving ample reasoning for the prompt's voice
+// rules. Env-tunable: raise a little for more polish, lower if still too slow.
+const THINKING_BUDGET = Number(optionalServerEnv('CAROUSEL_THINKING_BUDGET')) || 2048;
+
+// Upstream call timeout. Kept just under the route's maxDuration (60s) so a slow
+// or stuck provider surfaces a clean 502 the client can retry, instead of Vercel
+// hard-killing the function with an opaque 504 and losing the carousel entirely.
+const MODEL_TIMEOUT_MS = Number(optionalServerEnv('CAROUSEL_MODEL_TIMEOUT_MS')) || 55_000;
+
+/**
+ * fetch with a hard timeout. On timeout the AbortController fires and we throw a
+ * labelled error, so the route logs a clear cause instead of an infinite hang.
+ */
+async function fetchModel(url: string, init: RequestInit, provider: string): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), MODEL_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      throw new Error(`${provider} timed out after ${MODEL_TIMEOUT_MS}ms`);
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function callOpenRouter(apiKey: string, systemPrompt: string, userContent: string): Promise<string> {
   const appUrl = optionalServerEnv('NEXT_PUBLIC_APP_URL') ?? 'https://ruta.app';
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  const res = await fetchModel('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -38,13 +69,16 @@ async function callOpenRouter(apiKey: string, systemPrompt: string, userContent:
       model: CAROUSEL_MODEL_OPENROUTER,
       temperature: TEMPERATURE,
       max_tokens: MAX_OUTPUT_TOKENS,
+      // Bound the reasoning budget (maps to Gemini's thinkingBudget) so a run
+      // can't stall on unbounded thinking. See THINKING_BUDGET.
+      reasoning: { max_tokens: THINKING_BUDGET },
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userContent },
       ],
     }),
-  });
+  }, 'OpenRouter');
 
   if (!res.ok) {
     const body = await res.text();
@@ -62,7 +96,7 @@ async function callOpenRouter(apiKey: string, systemPrompt: string, userContent:
 
 async function callGeminiDirect(apiKey: string, systemPrompt: string, userContent: string): Promise<string> {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${CAROUSEL_MODEL_GEMINI}:generateContent`;
-  const res = await fetch(`${endpoint}?key=${encodeURIComponent(apiKey)}`, {
+  const res = await fetchModel(`${endpoint}?key=${encodeURIComponent(apiKey)}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -72,9 +106,12 @@ async function callGeminiDirect(apiKey: string, systemPrompt: string, userConten
         temperature: TEMPERATURE,
         responseMimeType: 'application/json',
         maxOutputTokens: MAX_OUTPUT_TOKENS,
+        // Cap the reasoning tail so a carousel can't run away past the 60s
+        // serverless window. See THINKING_BUDGET.
+        thinkingConfig: { thinkingBudget: THINKING_BUDGET },
       },
     }),
-  });
+  }, 'Gemini');
 
   if (!res.ok) {
     const body = await res.text();

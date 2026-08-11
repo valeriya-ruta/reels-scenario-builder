@@ -9,6 +9,7 @@ import SwipeRow from '@/components/content/SwipeRow';
 import ProposingEmptyState from '@/components/propose/ProposingEmptyState';
 import { setContentScheduledDate } from '@/app/content-actions';
 import { contentHref, opensBraindumpOverlay, type ContentPiece } from '@/lib/content/contentPiece';
+import type { ContentType } from '@/lib/contentTypes';
 import { dispatchOpenBraindumpIdea } from '@/lib/content/braindumpIdeaEvent';
 import {
   useAdvanceContentStatus,
@@ -38,6 +39,15 @@ function vibrate(ms: number) {
 // component (function) prop to this client component.
 const HEADER_ICONS = { carousel: LayoutGrid, reel: Play, story: Film } as const;
 export type ListIconKey = keyof typeof HEADER_ICONS;
+
+// This list is a single content type, so its empty-state suggestions must all
+// wear that type (not the proposal system's per-angle guess). Map the icon key
+// to the content type — the two vocabularies differ (reel↔reels, story↔stories).
+const ICON_KEY_TO_CONTENT_TYPE: Record<ListIconKey, ContentType> = {
+  carousel: 'carousel',
+  reel: 'reels',
+  story: 'stories',
+};
 
 export default function SwipeableContentList({
   pieces,
@@ -186,7 +196,7 @@ export default function SwipeableContentList({
         // Never a dead end: an empty type list proposes concrete angles the user
         // can start from, drawn from their own signals.
         <div className="pt-3">
-          <ProposingEmptyState headline={emptyText} />
+          <ProposingEmptyState headline={emptyText} forceType={ICON_KEY_TO_CONTENT_TYPE[iconKey]} />
         </div>
       ) : (
         <ul className="pt-3">

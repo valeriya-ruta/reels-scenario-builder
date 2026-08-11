@@ -7,6 +7,15 @@ import { aiLimit } from '@/lib/ratelimit';
 
 export const runtime = 'nodejs';
 
+// Carousel generation moved to Gemini 2.5 Pro (#56), a *reasoning* model that
+// routinely takes 30–60s where the old Groq/Llama call took ~2–5s. Without an
+// explicit budget this route ran on the platform default (~10–15s) and Vercel
+// killed the function mid-generation, so the carousel silently never got
+// created. Give it the same headroom as the app's other AI-heavy function
+// (competitor-analysis, 60s in vercel.json). Reels/stories don't need this —
+// they still use fast Groq via server actions, not this route.
+export const maxDuration = 60;
+
 export async function POST(req: NextRequest) {
   let body: { rant?: string };
   try {
