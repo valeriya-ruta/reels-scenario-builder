@@ -152,6 +152,54 @@ export function checkCarousel(parsed) {
     check(types[types.length - 1] === 'cta', 'last-cta', 'Останній слайд = cta', `got "${types[types.length - 1]}"`),
   );
 
+  // ── Ruta's method (her rules), on top of the app's schema contract ──
+
+  // Rule 2: slides 1–3 are three standalone hooks. Encoded as cover-type slides
+  // (the post-processor leaves middle covers alone). This is a proxy: it detects
+  // the STRUCTURE of three front hooks, not whether each actually escalates —
+  // that (hype → worse → worse) is the editorial call in the report.
+  const firstThree = types.slice(0, 3);
+  const hookCount = firstThree.filter((t) => t === 'cover').length;
+  results.push(
+    check(
+      slides.length >= 4 && hookCount === 3,
+      'three-hooks',
+      'Слайди 1–3 — три окремі хуки (type=cover)',
+      `${hookCount}/3 of the first slides are cover; got [${firstThree.join(', ')}]`,
+    ),
+  );
+
+  // Hooks are pure hook lines, not body content: no body text on slides 1–3.
+  const hooksWithBody = slides.slice(0, 3).filter((s) => s?.type === 'cover' && String(s?.body ?? '').trim());
+  results.push(
+    check(
+      hooksWithBody.length === 0,
+      'hooks-are-hooks',
+      'Хуки без тіла (body порожній на слайдах 1–3)',
+      hooksWithBody.length ? `${hooksWithBody.length} hook slide(s) carry body text` : null,
+    ),
+  );
+
+  // Rule 3: exactly one CTA, and it is the last slide.
+  const ctaCount = types.filter((t) => t === 'cta').length;
+  results.push(
+    check(ctaCount === 1, 'single-cta', 'Рівно один CTA на всю карусель', `${ctaCount} cta slide(s)`),
+  );
+
+  // Marked blanks use square brackets [..], never invented specifics. We can't
+  // detect fabrication, but we CAN flag the wrong placeholder syntax (*..*,
+  // {..} is reserved for accents), which is a concrete, checkable drift.
+  const bracketBlanks = collectText(parsed).join(' ').match(/\[[^\]]+\]/g)?.length ?? 0;
+  const starBlanks = collectText(parsed).join(' ').match(/\*[^*]+\*/g)?.length ?? 0;
+  results.push(
+    check(
+      starBlanks === 0,
+      'blank-format',
+      'Пустографки у [квадратних] дужках, не *зірочках*',
+      starBlanks ? `${starBlanks} field(s) use *...* instead of [...]` : null,
+    ),
+  );
+
   const unknown = types.filter((t) => !SLIDE_TYPES.has(t));
   results.push(
     check(unknown.length === 0, 'valid-types', 'Усі type з дозволеного списку',
@@ -194,7 +242,7 @@ export function checkCarousel(parsed) {
   );
 
   results.push(noRussianCheck(parsed));
-  return { results, metrics: { slideCount: slides.length, statementCount } };
+  return { results, metrics: { slideCount: slides.length, statementCount, hookCount, bracketBlanks } };
 }
 
 // ─────────────────────────────────────────────────────────── storytelling

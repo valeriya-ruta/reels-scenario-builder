@@ -1,0 +1,20 @@
+{
+  "id": "competition-analysis",
+  "label": "Аналіз конкуренції без деморалізації",
+
+  "braindump": "Як робити аналіз конкуренції, щоб себе не деморалізувати? І чому це було дуже важливо для вайп-кодингу і як я це роблю? Взагалі, робити аналіз конкуренції - це дуже важливо, тому що ми маємо знати, що відбувається у нас на ринку. ми маємо знати, кого нам боятись, кого нам не боятись і на хаті кого можна скопіювати. І взагалі нам треба розуміти, що взагалі відбувається у нас на ринку, щоб знати свого ворога. Але я персонально ненавиджу це робити, тому що кожен раз, коли я починаю ан це займає реально дуже багато часу. І плюс десь посередині цього аналізу я починаю реально сомніватися в собі, тому що 100% ми всі не унікальні, і я знайду людину, яка схожа на мене максимально, яка краще за мене, яка має або додаток, який краще за мене. Мене це супер деморалізує, тому що я думаю: \"Блін, ну все, вже зробили, чого це я буду раптом намагатися робити краще, ніж за людиною, яка цічно знається?\" І мене це дуже сильно пісить, мене це деморалізує, я не люблю це робити, я в цьому тримаюсь часом. Але це все одно треба зробити, тому що мені треба зрозуміти взагалі, що там за, ну, що відбувається, кого мені копіювати і як мені краще робити. Так от, найкращий спосіб, як на мене, це я використовую Cloud Cowork, який працює прямо на десктопі. Я відкриваю його і надію йому винашу, встигнув проаналізувати конкурентів, знайди плюси і мінуси і на основі цього напиши мені план. ідеї, враховуючи контекст тої ідеї, яка в мене є. Або це мій аккаунт, або це аккаунт конкурентів, або це якийсь продукт, або це додаток, будь-що. І таким чином в мене є класний аналіз, який показує мені чітко, де є те, що називається market gap, тобто дира в ринку, яку я буду закривати своїм продуктом чи додатком, і в мене є абсолютно actionable items, тобто задачі, як би сказати, пункти, які я можу використати, щоб далі просто працювати, Це вже морально і тут чисто перебороти себе.",
+
+  "rules": [
+    "One slide, one thought. Never two thoughts on a slide. When in doubt, split.",
+    "First three slides = three separate hooks. Instagram surfaces slide 1, 2 or 3 randomly, so each must work standalone AND escalate in order: slide 1 = maximum hype / strongest pull; slide 2 = deepen the pain / raise the stakes; slide 3 = peak tension, make it worse again. All high-energy. None is body content yet.",
+    "Last slide is always a single CTA. Exactly one action, never two.",
+    "Process: find the thoughts (atomize, don't summarize) -> find the core thought (the spine) -> build 3 hooks (hype -> worse -> worse) -> order body slides (rising value / logical flow) -> assign layout per slide (vary it) -> write the single CTA.",
+    "Default language Ukrainian (Ukrainian in -> Ukrainian out, never Russian; English in -> English out).",
+    "No padding, no intro/outro - just the slides.",
+    "Slide count flexes, but always exactly 3 hooks + 1 CTA.",
+    "Don't fabricate facts/numbers/stories - use a marked blank like [твоя цифра] instead.",
+    "Keep text short and postable."
+  ],
+
+  "_note_on_ideal": "Ideal result deliberately withheld by Kunj to avoid contaminating the prompt-refinement loop. Scoring for this set compares each model's output against the RULES above, not against a fixed target. Kunj eyeballs the finalists."
+}

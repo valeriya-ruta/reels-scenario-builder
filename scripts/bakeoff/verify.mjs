@@ -85,15 +85,15 @@ const slide = (type, extra = {}) => ({ type, title: 'Т', body: null, label: nul
 const carouselGood = {
   total_slides: 6,
   slides: [
-    slide('cover'),
-    slide('content', { icon: 'image' }),
-    slide('statement'),
-    slide('content'),
+    slide('cover'), // hook 1
+    slide('cover'), // hook 2
+    slide('cover'), // hook 3
+    slide('content', { icon: 'image', body: 'Тіло. Одна думка.' }),
     slide('bullets', { items: ['а', 'б'] }),
-    slide('cta'),
+    slide('cta', { body: 'Напиши [слово] в директ' }),
   ],
 };
-expectClean(checkCarousel(carouselGood), 'compliant carousel');
+expectClean(checkCarousel(carouselGood), 'compliant carousel (Ruta method)');
 
 expectBreaks(checkCarousel({ slides: carouselGood.slides.slice(0, 3) }), 'slide-count', '3 slides');
 expectBreaks(
@@ -125,6 +125,27 @@ expectBreaks(
   checkCarousel({ slides: [slide('cover'), slide('content', { icon: 'banana' }), slide('content'), slide('content'), slide('content'), slide('cta')] }),
   'valid-icons',
   'unknown icon',
+);
+// Ruta's method
+expectBreaks(
+  checkCarousel({ slides: [slide('cover'), slide('content'), slide('content'), slide('content'), slide('bullets', { items: ['а'] }), slide('cta')] }),
+  'three-hooks',
+  'only one hook up front',
+);
+expectBreaks(
+  checkCarousel({ slides: [slide('cover', { body: 'Це вже тіло на хуку' }), slide('cover'), slide('cover'), slide('content'), slide('bullets', { items: ['а'] }), slide('cta')] }),
+  'hooks-are-hooks',
+  'hook slide carries body text',
+);
+expectBreaks(
+  checkCarousel({ slides: [slide('cover'), slide('cover'), slide('cover'), slide('cta'), slide('content'), slide('cta')] }),
+  'single-cta',
+  'two CTA slides',
+);
+expectBreaks(
+  checkCarousel({ slides: [slide('cover'), slide('cover'), slide('cover'), slide('content', { body: 'заробив *твоя цифра* грн' }), slide('bullets', { items: ['а'] }), slide('cta')] }),
+  'blank-format',
+  'placeholder uses *...* instead of [...]',
 );
 
 // ───────────────────────────────────────────── storytelling
@@ -278,6 +299,9 @@ const stSystem = GENERATION_TYPES.storytelling.buildMessages(smokeSet)[0].conten
 assert(stSystem.includes('Заклик в директ'), 'storytelling prompt is the production text');
 const reelSystem = GENERATION_TYPES.reel.buildMessages(smokeSet)[0].content;
 assert(reelSystem.includes('6–11 слів'), 'reel prompt is the production text');
+const rutaSystem = GENERATION_TYPES['carousel-ruta'].buildMessages(smokeSet)[0].content;
+assert(rutaSystem.includes('ТРИ ОКРЕМІ ХУКИ') && rutaSystem.includes('[твоя цифра]'), 'carousel-ruta prompt encodes the 3-hook + marked-blank rules');
+assert(!GENERATION_TYPES.carousel.buildMessages(smokeSet)[0].content.includes('ТРИ ОКРЕМІ ХУКИ'), 'production carousel prompt does NOT have the 3-hook rule (baseline)');
 
 // ───────────────────────────────────────────── report rendering
 

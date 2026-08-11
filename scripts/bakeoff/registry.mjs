@@ -11,6 +11,7 @@
  */
 
 import * as carouselPrompt from '@/lib/ai/carouselPrompt';
+import * as carouselRutaPrompt from './prompts/carouselRuta.mjs';
 import * as reelPrompt from '@/lib/ai/rantToScript';
 import * as storiesPrompt from '@/lib/ai/rantToStories';
 import { SYSTEM_PROMPT as IDEAS_SYSTEM_PROMPT, buildUserContent as buildIdeasUserContent } from '@/lib/propose/proposeAngles';
@@ -47,6 +48,23 @@ export const GENERATION_TYPES = {
       const lang = carouselPrompt.detectOutputLanguage(rant);
       return [
         { role: 'system', content: carouselPrompt.buildSystemPrompt(lang) },
+        { role: 'user', content: rant },
+      ];
+    },
+    check: (parsed) => checkCarousel(parsed),
+    normalize: (parsed) => postProcessCarouselRant(parsed),
+  },
+
+  'carousel-ruta': {
+    label: 'Карусель (Ruta method)',
+    callSite: 'scripts/bakeoff/prompts/carouselRuta.mjs — REFINED candidate, not production',
+    temperature: 0.7,
+    maxTokens: 3000,
+    buildMessages(set) {
+      const rant = set.braindump;
+      const lang = carouselRutaPrompt.detectOutputLanguage(rant);
+      return [
+        { role: 'system', content: carouselRutaPrompt.buildSystemPrompt(lang) },
         { role: 'user', content: rant },
       ];
     },
