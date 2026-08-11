@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireServerEnv } from '@/lib/env';
-import { GROQ_TEXT_MODEL } from '@/lib/ai/groqModel';
+import { openRouterChatJSON, OPENROUTER_TEXT_MODEL } from '@/lib/openrouter';
 import { postProcessCarouselRant } from '@/lib/ai/carouselRantPostProcess';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import { aiLimit } from '@/lib/ratelimit';
@@ -160,37 +159,22 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const apiKey = requireServerEnv('GROQ_API_KEY');
-
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: GROQ_TEXT_MODEL,
-      temperature: 0.7,
-      max_tokens: 3000,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: buildSystemPrompt(outputLanguage) },
-        { role: 'user', content: rant },
-      ],
-    }),
+  const result = await openRouterChatJSON({
+    model: OPENROUTER_TEXT_MODEL,
+    temperature: 0.7,
+    maxTokens: 3000,
+    messages: [
+      { role: 'system', content: buildSystemPrompt(outputLanguage) },
+      { role: 'user', content: rant },
+    ],
   });
 
-  if (!res.ok) {
-    const errText = await res.text();
-    console.error('[carousel/rant-to-slides] Groq error:', res.status, errText);
+  if (!result.ok) {
+    console.error('[carousel/rant-to-slides] OpenRouter error:', result.status, result.bodyText);
     return NextResponse.json({ error: 'Не вдалося згенерувати слайди' }, { status: 502 });
   }
 
-  const payload = (await res.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-
-  const raw = payload.choices?.[0]?.message?.content ?? '';
+  const raw = result.content ?? '';
 
   try {
     const cleaned = raw.replace(/```json|```/g, '').trim();

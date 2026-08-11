@@ -1,5 +1,4 @@
-import { requireServerEnv } from '@/lib/env';
-import { GROQ_TEXT_MODEL } from '@/lib/ai/groqModel';
+import { openRouterChatJSON, OPENROUTER_TEXT_MODEL } from '@/lib/openrouter';
 
 export interface RantSceneDraft {
   text: string;
@@ -186,39 +185,23 @@ function flattenToSceneDrafts(parsed: RantResponse, outputLanguage: OutputLangua
 export async function transformRantToScript(
   rant: string
 ): Promise<{ title: string; scenes: RantSceneDraft[] }> {
-  const apiKey = requireServerEnv('GROQ_API_KEY');
   const outputLanguage = detectOutputLanguage(rant);
 
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: GROQ_TEXT_MODEL,
-      temperature: 0.7,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: buildSystemPrompt(outputLanguage) },
-        { role: 'user', content: buildUserContent(rant, outputLanguage) },
-      ],
-    }),
+  const result = await openRouterChatJSON({
+    model: OPENROUTER_TEXT_MODEL,
+    temperature: 0.7,
+    messages: [
+      { role: 'system', content: buildSystemPrompt(outputLanguage) },
+      { role: 'user', content: buildUserContent(rant, outputLanguage) },
+    ],
   });
 
-  if (!res.ok) {
-    const body = await res.text();
-    console.error('[rant-to-script] Groq HTTP error:', res.status, body);
+  if (!result.ok) {
+    console.error('[rant-to-script] OpenRouter HTTP error:', result.status, result.bodyText);
     throw new Error('Щось пішло не так. Спробуй ще раз.');
   }
 
-  const payload = (await res.json()) as {
-    choices?: Array<{
-      message?: { content?: string };
-    }>;
-  };
-
-  const rawText = payload.choices?.[0]?.message?.content?.trim();
+  const rawText = result.content?.trim();
   if (!rawText) {
     console.error('[rant-to-script] Empty model content');
     throw new Error('Щось пішло не так. Спробуй ще раз.');

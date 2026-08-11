@@ -4,7 +4,7 @@ import { normalizeOutput, type StoriesOutput } from '../lib/ai/storiesNormalize'
 /**
  * Core-logic spec for the storytelling master engine (task 86d3gp8tb).
  *
- * The generation itself is a live Groq call (non-deterministic, needs
+ * The generation itself is a live OpenRouter call (non-deterministic, needs
  * credentials), so the acceptance-relevant *deterministic* contract is the
  * normalization that maps the model's JSON into the app's day/column model:
  *   • single  → exactly one day (→ one column)

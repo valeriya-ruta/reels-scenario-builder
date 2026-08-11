@@ -1,5 +1,4 @@
-import { requireServerEnv } from '@/lib/env';
-import { GROQ_TEXT_MODEL } from '@/lib/ai/groqModel';
+import { openRouterChatJSON, OPENROUTER_TEXT_MODEL } from '@/lib/openrouter';
 
 export interface TemplateSceneDraft {
   text: string;
@@ -74,7 +73,6 @@ export async function templatizeTranscriptToScenes(
   transcript: string,
   context?: TemplatizeReferenceContext
 ): Promise<{ title: string; scenes: TemplateSceneDraft[] }> {
-  const apiKey = requireServerEnv('GROQ_API_KEY');
   const trimmed = transcript.trim();
   const refUrl = context?.referenceUrl?.trim() ?? '';
   const refNote = context?.referenceNote?.trim() ?? '';
@@ -95,38 +93,25 @@ export async function templatizeTranscriptToScenes(
         ? '\n\nIMPORTANT REPAIR: Return JSON with key "scenes" only as an array of objects like {"text":"..."}. Minimum 3 non-empty scenes.'
         : '';
 
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: GROQ_TEXT_MODEL,
-        temperature: 0.45,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: systemContent },
-          {
-            role: 'user',
-            content: `${userBody.slice(0, 20_000)}${repairInstruction}`,
-          },
-        ],
-      }),
+    const result = await openRouterChatJSON({
+      model: OPENROUTER_TEXT_MODEL,
+      temperature: 0.45,
+      messages: [
+        { role: 'system', content: systemContent },
+        {
+          role: 'user',
+          content: `${userBody.slice(0, 20_000)}${repairInstruction}`,
+        },
+      ],
     });
 
-    if (!res.ok) {
-      const body = await res.text();
-      lastReason = `Groq template step failed (${res.status})`;
-      lastRawPreview = body.slice(0, 300);
+    if (!result.ok) {
+      lastReason = `OpenRouter template step failed (${result.status})`;
+      lastRawPreview = result.bodyText.slice(0, 300);
       continue;
     }
 
-    const payload = (await res.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-
-    const rawText = payload.choices?.[0]?.message?.content?.trim();
+    const rawText = result.content?.trim();
     if (!rawText) {
       lastReason = 'AI повернув порожню відповідь.';
       continue;

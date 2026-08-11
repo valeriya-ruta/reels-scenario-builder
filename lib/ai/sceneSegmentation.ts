@@ -1,4 +1,4 @@
-import { requireServerEnv } from '@/lib/env';
+import { openRouterChatJSON, OPENROUTER_GEMINI_MODEL } from '@/lib/openrouter';
 import type { TranscriptSegment } from './sttProvider';
 
 export interface SceneDraft {
@@ -83,9 +83,6 @@ export async function splitTranscriptIntoScenes(
       : [];
   }
 
-  const apiKey = requireServerEnv('GEMINI_API_KEY');
-  const endpoint = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
-
   const prompt = [
     'You are splitting a reel transcript into logical scenes.',
     'Important constraints:',
@@ -105,37 +102,20 @@ export async function splitTranscriptIntoScenes(
     ),
   ].join('\n');
 
-  const res = await fetch(`${endpoint}?key=${encodeURIComponent(apiKey)}`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      generationConfig: {
-        temperature: 0.1,
-        responseMimeType: 'application/json',
-      },
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    }),
+  const result = await openRouterChatJSON({
+    model: OPENROUTER_GEMINI_MODEL,
+    temperature: 0.1,
+    messages: [{ role: 'user', content: prompt }],
   });
 
-  if (!res.ok) {
-    const body = await res.text();
+  if (!result.ok) {
     console.warn(
-      `Gemini scene split failed (${res.status}); using heuristic scene chunks. ${body.slice(0, 500)}`
+      `Gemini scene split failed (${result.status}); using heuristic scene chunks. ${result.bodyText.slice(0, 500)}`
     );
     return fallbackSceneDrafts(segments);
   }
 
-  const payload = (await res.json()) as {
-    candidates?: Array<{
-      content?: {
-        parts?: Array<{ text?: string }>;
-      };
-    }>;
-  };
-
-  const rawText = payload.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+  const rawText = result.content?.trim();
   if (!rawText) {
     return fallbackSceneDrafts(segments);
   }
