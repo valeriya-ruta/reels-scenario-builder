@@ -135,3 +135,43 @@ export function resolveSlideType(slide: Slide, index: number, total: number): Sl
   if (kind === 'cta') return 'final';
   return 'slide';
 }
+
+/**
+ * Map an AI rant slide's `type` (SlideKind) to the stored structural fields
+ * (`slideType` + `layoutPreset`) the editor and renderer branch on.
+ *
+ * Honors the AI's `type`, so the refined prompt's THREE cover hooks all become
+ * covers (not just slide 0), a `bullets` slide becomes a `list`, etc. Falls back
+ * to position only when `type` is absent (legacy clients). Shared by both the
+ * server action (`app/carousel-actions.ts`) and the in-editor builder
+ * (`components/CarouselBuilder.tsx`) so the two never drift.
+ */
+export function deriveRantSlideStructure(
+  kind: SlideKind | undefined,
+  index: number,
+  total: number,
+): { slideType: SlideType; layoutPreset: SlideLayoutPreset | null } {
+  const slideType: SlideType =
+    kind === 'cover'
+      ? 'cover'
+      : kind === 'cta'
+        ? 'final'
+        : kind
+          ? 'slide'
+          : index === 0
+            ? 'cover'
+            : index === total - 1
+              ? 'final'
+              : 'slide';
+  const layoutPreset: SlideLayoutPreset | null =
+    slideType === 'cover'
+      ? null
+      : slideType === 'final'
+        ? 'goal'
+        : kind === 'statement'
+          ? 'quote'
+          : kind === 'bullets'
+            ? 'list'
+            : 'text';
+  return { slideType, layoutPreset };
+}
