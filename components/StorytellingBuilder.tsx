@@ -162,7 +162,15 @@ export default function StorytellingBuilder({
         </div>
       )}
 
-      <div className="app-page pb-28">
+      {/* `.app-page` sets `padding-bottom: 24px` unlayered, which beats any
+          Tailwind `pb-*` utility in the cascade — so a `pb-28` here never took
+          effect and the last card's «Інтерактив» row hid behind the fixed
+          «Додати сторіс» bar. Reserve the bar's height (plus the safe-area
+          inset it adds on mobile) with an inline style, which always wins. */}
+      <div
+        className="app-page"
+        style={{ paddingBottom: 'calc(112px + env(safe-area-inset-bottom, 0px))' }}
+      >
         <EditorTopBar
           backHref="/storytellings"
           title={project.name}
