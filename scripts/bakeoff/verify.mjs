@@ -295,8 +295,8 @@ assert(stSystem.includes('Заклик в директ'), 'storytelling prompt i
 const reelSystem = GENERATION_TYPES.reel.buildMessages(smokeSet)[0].content;
 assert(reelSystem.includes('6–11 слів'), 'reel prompt is the production text');
 const rutaSystem = GENERATION_TYPES['carousel-ruta'].buildMessages(smokeSet)[0].content;
-assert(rutaSystem.includes('ТРИ ОКРЕМІ ХУКИ') && rutaSystem.includes('[твоя цифра]'), 'carousel-ruta prompt encodes the 3-hook + marked-blank rules');
-assert(!GENERATION_TYPES.carousel.buildMessages(smokeSet)[0].content.includes('ТРИ ОКРЕМІ ХУКИ'), 'production carousel prompt does NOT have the 3-hook rule (baseline)');
+assert(rutaSystem.includes('ТРИ ХУКИ') && rutaSystem.includes('[твоя цифра]'), 'carousel-ruta prompt encodes the 3-hook + marked-blank rules');
+assert(!GENERATION_TYPES.carousel.buildMessages(smokeSet)[0].content.includes('ТРИ ХУКИ'), 'production carousel prompt does NOT have the 3-hook rule (baseline)');
 
 // ───────────────────────────────────────────── report rendering
 
