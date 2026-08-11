@@ -10,7 +10,7 @@
  * duplicated — keep them in sync if a call site changes.
  */
 
-import * as carouselPrompt from '@/lib/ai/carouselPrompt';
+import * as carouselBaseline from './prompts/carouselBaseline.mjs';
 import * as carouselRutaPrompt from './prompts/carouselRuta.mjs';
 import * as reelPrompt from '@/lib/ai/rantToScript';
 import * as storiesPrompt from '@/lib/ai/rantToStories';
@@ -39,15 +39,15 @@ export const DEFAULT_MODELS = [
 
 export const GENERATION_TYPES = {
   carousel: {
-    label: 'Карусель',
-    callSite: 'app/api/carousel/rant-to-slides/route.ts → lib/ai/carouselPrompt.ts',
+    label: 'Карусель (baseline)',
+    callSite: 'scripts/bakeoff/prompts/carouselBaseline.mjs — pre-bake-off baseline, no longer production',
     temperature: 0.7,
     maxTokens: 3000,
     buildMessages(set) {
       const rant = set.braindump;
-      const lang = carouselPrompt.detectOutputLanguage(rant);
+      const lang = carouselBaseline.detectOutputLanguage(rant);
       return [
-        { role: 'system', content: carouselPrompt.buildSystemPrompt(lang) },
+        { role: 'system', content: carouselBaseline.buildSystemPrompt(lang) },
         { role: 'user', content: rant },
       ];
     },
@@ -56,8 +56,8 @@ export const GENERATION_TYPES = {
   },
 
   'carousel-ruta': {
-    label: 'Карусель (Ruta method)',
-    callSite: 'scripts/bakeoff/prompts/carouselRuta.mjs — REFINED candidate, not production',
+    label: 'Карусель (Ruta method — PRODUCTION)',
+    callSite: 'lib/ai/carouselPrompt.ts (production) — re-exported via carouselRuta.mjs',
     temperature: 0.7,
     maxTokens: 3000,
     buildMessages(set) {
