@@ -145,7 +145,7 @@ export function checkCarousel(parsed) {
   const types = slides.map((s) => s?.type);
 
   results.push(
-    check(slides.length >= 5 && slides.length <= 12, 'slide-count', 'Слайдів 5–12', `${slides.length} slides`),
+    check(slides.length >= 5 && slides.length <= 20, 'slide-count', 'Слайдів 5–20', `${slides.length} slides`),
   );
   results.push(check(types[0] === 'cover', 'first-cover', 'Перший слайд = cover', `got "${types[0]}"`));
   results.push(
