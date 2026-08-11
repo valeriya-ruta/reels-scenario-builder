@@ -30,10 +30,7 @@ import {
   sortableKeyboardCoordinates,
   useSortable,
 } from '@dnd-kit/sortable';
-import {
-  restrictToHorizontalAxis,
-  restrictToVerticalAxis,
-} from '@dnd-kit/modifiers';
+import { restrictToHorizontalAxis } from '@dnd-kit/modifiers';
 import { CSS } from '@dnd-kit/utilities';
 import {
   ChevronLeft,
@@ -418,8 +415,17 @@ export default function CarouselEditorLayout({
     if (!el) return;
     const update = () => {
       const w = el.clientWidth;
-      if (w <= 0) return;
-      setDesktopPreviewScale(Math.max(0.06, Math.min(w / CANVAS_WIDTH, 1)));
+      const h = el.clientHeight;
+      if (w <= 0 || h <= 0) return;
+      // Fit the 4:5 canvas inside the measured stage on BOTH axes. The old path
+      // scaled by width only (with a 48vh CSS cap), so a short/wide window pushed
+      // the slide past the fold — cut off at the bottom with dead space above it.
+      // Reserve room for the floating prev/next arrows (horizontal) and a little
+      // breathing space (vertical) so the slide never kisses the edges.
+      const availW = Math.max(1, w - 112);
+      const availH = Math.max(1, h - 40);
+      const s = Math.min(availW / CANVAS_WIDTH, availH / CANVAS_HEIGHT);
+      setDesktopPreviewScale(Math.max(0.06, Math.min(s, 1)));
     };
     update();
     const ro = new ResizeObserver(() => update());
@@ -429,7 +435,7 @@ export default function CarouselEditorLayout({
       ro.disconnect();
       window.removeEventListener('resize', update);
     };
-  }, [isDesktopLayout, tab, panelOpen, activeSlideId, slides.length]);
+  }, [isDesktopLayout, tab, panelOpen, activeSlideId, slides.length, viewportHeight]);
 
   const goSlide = useCallback(
     (delta: number) => {
@@ -624,10 +630,9 @@ export default function CarouselEditorLayout({
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
   const sensors = isDesktopLayout ? desktopSensors : mobileSensors;
-  const dragModifiers = useMemo(
-    () => [isDesktopLayout ? restrictToVerticalAxis : restrictToHorizontalAxis],
-    [isDesktopLayout],
-  );
+  // Both the mobile and the desktop thumbnail strips are horizontal, so the
+  // reorder drag is locked to the X axis in both layouts.
+  const dragModifiers = useMemo(() => [restrictToHorizontalAxis], []);
 
   const tabLabel = (t: EditorTab) =>
     t === 'type' ? 'Тип' : t === 'text' ? 'Текст' : t === 'position' ? 'Позиція' : t === 'bg' ? 'Фон' : 'Бренд';
@@ -956,173 +961,186 @@ export default function CarouselEditorLayout({
         }
       >
         {isDesktopLayout ? (
-          <div className="flex min-h-0 flex-1 flex-row px-4 pb-2">
-            <nav
-              className="flex h-full w-[84px] shrink-0 flex-col items-center gap-3 border-r border-black/[0.08] py-4"
-              style={{ background: '#fafaf7' }}
-              aria-label="Панелі редагування"
-            >
-              {(['type', 'text', 'position', 'bg', 'brand'] as const).map((t) => {
-                const active = tab === t;
-                return (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => handleEditorTabIconClick(t)}
-                    className={[
-                      'flex h-[62px] w-[62px] shrink-0 cursor-pointer flex-col items-center justify-center gap-1 rounded-[13px] transition-colors',
-                      active ? 'bg-[#eef1ff]' : 'bg-transparent',
-                    ].join(' ')}
-                    aria-label={tabLabel(t)}
-                    aria-pressed={active}
-                  >
-                    <MobileTabIcon tab={t} active={active} size={29} />
-                    <span
-                      className={
-                        active
-                          ? 'text-[13px] font-medium text-[#4a6cf7]'
-                          : 'text-[13px] font-normal text-[#555]'
-                      }
+          <div className="flex min-h-0 flex-1 flex-row px-4 pb-4">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden rounded-2xl border border-black/[0.07] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+              {/* Left tool rail — full height (Canva-style, mirrors the mobile tab bar) */}
+              <nav
+                className="flex h-full w-[88px] shrink-0 flex-col items-center gap-2 overflow-y-auto border-r border-black/[0.06] py-4"
+                style={{ background: '#fafaf7' }}
+                aria-label="Панелі редагування"
+              >
+                {(['type', 'text', 'position', 'bg', 'brand'] as const).map((t) => {
+                  const active = tab === t;
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => handleEditorTabIconClick(t)}
+                      className={[
+                        'flex h-[62px] w-[64px] shrink-0 cursor-pointer flex-col items-center justify-center gap-1 rounded-[14px] transition-colors',
+                        active ? 'bg-[#eef1ff]' : 'hover:bg-black/[0.04]',
+                      ].join(' ')}
+                      aria-label={tabLabel(t)}
+                      aria-pressed={active}
                     >
-                      {tabLabel(t)}
-                    </span>
-                  </button>
-                );
-              })}
-            </nav>
-
-            <div
-              className="shrink-0 overflow-hidden border-r border-black/[0.08] bg-white"
-              style={{
-                width: panelOpen ? 320 : 0,
-                transition: 'width 0.2s ease',
-              }}
-            >
-              <div className="flex h-full min-h-0 min-w-[320px] flex-col">
-                {panelOpen && tab !== null ? (
-                  <>
-                    <div className="flex shrink-0 items-center justify-between border-b border-black/[0.06] px-5 py-4">
-                      <span className="text-[15px] font-medium text-zinc-900">{tabLabel(tab)}</span>
-                      <button
-                        type="button"
-                        className="rounded-lg p-0.5 text-zinc-500 transition hover:bg-zinc-100"
-                        onClick={() => setTab(null)}
-                        aria-label="Закрити"
+                      <MobileTabIcon tab={t} active={active} size={27} />
+                      <span
+                        className={
+                          active
+                            ? 'text-[12px] font-medium text-[#4a6cf7]'
+                            : 'text-[12px] font-normal text-[#555]'
+                        }
                       >
-                        <X className="h-5 w-5" strokeWidth={1.75} />
-                      </button>
-                    </div>
-                    <div
-                      className="min-h-0 flex-1 overflow-y-auto px-5 py-4"
-                      style={{ overscrollBehavior: 'contain' }}
-                    >
-                      {tabPanelContent}
-                    </div>
-                  </>
-                ) : null}
-              </div>
-            </div>
+                        {tabLabel(t)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </nav>
 
-            <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-              <div className="relative flex min-h-[min(520px,70vh)] flex-1 flex-col">
-                <div className="flex min-h-0 flex-1 items-center justify-center p-4">
-                  <div
-                    ref={desktopPreviewBoxRef}
-                    className="relative w-[min(80%,48vh)] shrink-0 overflow-hidden rounded-xl shadow-lg"
-                    style={{ aspectRatio: `${CANVAS_WIDTH} / ${CANVAS_HEIGHT}` }}
-                  >
-                    {activeSlide ? (
-                      <div className="relative h-full w-full">
-                        <CarouselSlidePreview
-                          slide={activeSlide}
-                          brand={brandSettings}
-                          brandFont={brandFont}
-                          scale={desktopPreviewScale}
-                          slideIndex={activeIndex + 1}
-                          totalSlides={slides.length}
-                          photoTransformOverride={effectivePhotoTransform}
-                          isInteractingPhoto={isPhotoInteracting}
-                        />
-                        {hasActivePhoto ? (
-                          <div
-                            className="absolute inset-0 touch-none"
-                            style={{ cursor: isPhotoInteracting ? 'grabbing' : 'grab' }}
-                            tabIndex={0}
-                            onPointerDown={onPhotoPointerDown}
-                            onPointerMove={onPhotoPointerMove}
-                            onPointerUp={onPhotoPointerUp}
-                            onPointerCancel={onPhotoPointerUp}
-                            onWheel={onPhotoWheel}
-                            onKeyDown={onPhotoLayerKeyDown}
-                          />
-                        ) : null}
+              {/* Sliding tool panel — opens beside the rail when a tab is active */}
+              <div
+                className="h-full shrink-0 overflow-hidden border-r border-black/[0.06] bg-white"
+                style={{
+                  width: panelOpen ? 340 : 0,
+                  transition: 'width 0.2s ease',
+                }}
+              >
+                <div className="flex h-full min-h-0 min-w-[340px] flex-col">
+                  {panelOpen && tab !== null ? (
+                    <>
+                      <div className="flex shrink-0 items-center justify-between border-b border-black/[0.06] px-5 py-4">
+                        <span className="text-[15px] font-medium text-zinc-900">{tabLabel(tab)}</span>
+                        <button
+                          type="button"
+                          className="rounded-lg p-0.5 text-zinc-500 transition hover:bg-zinc-100"
+                          onClick={() => setTab(null)}
+                          aria-label="Закрити"
+                        >
+                          <X className="h-5 w-5" strokeWidth={1.75} />
+                        </button>
                       </div>
-                    ) : null}
-                  </div>
+                      <div
+                        className="min-h-0 flex-1 overflow-y-auto px-5 py-4"
+                        style={{ overscrollBehavior: 'contain' }}
+                      >
+                        {tabPanelContent}
+                      </div>
+                    </>
+                  ) : null}
                 </div>
-
-                <button
-                  type="button"
-                  className="absolute top-1/2 left-3 z-[2] -translate-y-1/2 rounded-full border border-[color:var(--border)] bg-white/90 p-2 shadow"
-                  onClick={() => goSlide(-1)}
-                  disabled={activeIndex <= 0}
-                  aria-label="Попередній слайд"
-                >
-                  <ChevronLeft className="h-5 w-5" />
-                </button>
-                <button
-                  type="button"
-                  className="absolute top-1/2 right-3 z-[2] -translate-y-1/2 rounded-full border border-[color:var(--border)] bg-white/90 p-2 shadow"
-                  onClick={() => goSlide(1)}
-                  disabled={activeIndex >= slides.length - 1}
-                  aria-label="Наступний слайд"
-                >
-                  <ChevronRight className="h-5 w-5" />
-                </button>
               </div>
-            </div>
 
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={onDragEnd}
-              modifiers={dragModifiers}
-            >
-              <SortableContext items={slides.map((s) => s.id)} strategy={rectSortingStrategy}>
-                <div className="flex w-[72px] shrink-0 flex-col items-center gap-2 overflow-y-auto px-1 py-0">
-                  {slides.map((slide, index) => (
-                    <SortableThumb
-                      key={slide.id}
-                      slide={slide}
-                      index={index}
-                      active={slide.id === activeSlideId}
-                      accentColor={accentColor}
-                      onSelect={() => {
-                        setMobilePositioningMode(false);
-                        setIsPhotoInteracting(false);
-                        setLivePhotoTransform(null);
-                        dragRef.current = null;
-                        pinchRef.current = null;
-                        activePointersRef.current.clear();
-                        setActiveSlideId(slide.id);
+              {/* Editing column: canvas stage (fills) + thumbnail strip (bottom) */}
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                {/* Canvas stage — the slide scales to fit this box in BOTH axes */}
+                <div
+                  ref={desktopPreviewBoxRef}
+                  className="relative flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden"
+                  style={{ background: '#f0efeb' }}
+                >
+                  {activeSlide ? (
+                    <div
+                      className="relative shrink-0 overflow-hidden rounded-2xl shadow-[0_10px_34px_rgba(0,0,0,0.16)]"
+                      style={{
+                        width: Math.round(CANVAS_WIDTH * desktopPreviewScale),
+                        height: Math.round(CANVAS_HEIGHT * desktopPreviewScale),
                       }}
-                      size="md"
-                      brandSettings={brandSettings}
-                      brandFont={brandFont}
-                      totalSlides={slides.length}
-                    />
-                  ))}
+                    >
+                      <CarouselSlidePreview
+                        slide={activeSlide}
+                        brand={brandSettings}
+                        brandFont={brandFont}
+                        scale={desktopPreviewScale}
+                        slideIndex={activeIndex + 1}
+                        totalSlides={slides.length}
+                        photoTransformOverride={effectivePhotoTransform}
+                        isInteractingPhoto={isPhotoInteracting}
+                      />
+                      {hasActivePhoto ? (
+                        <div
+                          className="absolute inset-0 touch-none"
+                          style={{ cursor: isPhotoInteracting ? 'grabbing' : 'grab' }}
+                          tabIndex={0}
+                          onPointerDown={onPhotoPointerDown}
+                          onPointerMove={onPhotoPointerMove}
+                          onPointerUp={onPhotoPointerUp}
+                          onPointerCancel={onPhotoPointerUp}
+                          onWheel={onPhotoWheel}
+                          onKeyDown={onPhotoLayerKeyDown}
+                        />
+                      ) : null}
+                    </div>
+                  ) : null}
+
                   <button
                     type="button"
-                    onClick={addSlide}
-                    className="flex h-[78px] w-[62px] shrink-0 items-center justify-center rounded-[5px] border border-dashed border-[color:var(--border)] text-zinc-500 hover:bg-[color:var(--surface)]"
-                    aria-label="Додати слайд"
+                    className="absolute top-1/2 left-3 z-[2] -translate-y-1/2 rounded-full border border-black/10 bg-white/95 p-2 shadow-md transition hover:bg-white disabled:opacity-30"
+                    onClick={() => goSlide(-1)}
+                    disabled={activeIndex <= 0}
+                    aria-label="Попередній слайд"
                   >
-                    <Plus className="h-5 w-5" />
+                    <ChevronLeft className="h-5 w-5" />
+                  </button>
+                  <button
+                    type="button"
+                    className="absolute top-1/2 right-3 z-[2] -translate-y-1/2 rounded-full border border-black/10 bg-white/95 p-2 shadow-md transition hover:bg-white disabled:opacity-30"
+                    onClick={() => goSlide(1)}
+                    disabled={activeIndex >= slides.length - 1}
+                    aria-label="Наступний слайд"
+                  >
+                    <ChevronRight className="h-5 w-5" />
                   </button>
                 </div>
-              </SortableContext>
-            </DndContext>
+
+                {/* Bottom thumbnail strip (horizontal) — pages, Canva/mobile-style */}
+                <div className="shrink-0 border-t border-black/[0.06] bg-white">
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={onDragEnd}
+                    modifiers={dragModifiers}
+                  >
+                    <SortableContext items={slides.map((s) => s.id)} strategy={rectSortingStrategy}>
+                      <div className="overflow-x-auto">
+                        <div className="mx-auto flex w-max flex-row items-center gap-2.5 px-4 py-3">
+                          {slides.map((slide, index) => (
+                            <SortableThumb
+                              key={slide.id}
+                              slide={slide}
+                              index={index}
+                              active={slide.id === activeSlideId}
+                              accentColor={accentColor}
+                              onSelect={() => {
+                                setMobilePositioningMode(false);
+                                setIsPhotoInteracting(false);
+                                setLivePhotoTransform(null);
+                                dragRef.current = null;
+                                pinchRef.current = null;
+                                activePointersRef.current.clear();
+                                setActiveSlideId(slide.id);
+                              }}
+                              size="md"
+                              brandSettings={brandSettings}
+                              brandFont={brandFont}
+                              totalSlides={slides.length}
+                            />
+                          ))}
+                          <button
+                            type="button"
+                            onClick={addSlide}
+                            className="flex h-[78px] w-[62px] shrink-0 items-center justify-center rounded-[6px] border border-dashed border-[color:var(--border)] text-zinc-500 transition hover:bg-[color:var(--surface)] hover:text-zinc-700"
+                            aria-label="Додати слайд"
+                          >
+                            <Plus className="h-5 w-5" />
+                          </button>
+                        </div>
+                      </div>
+                    </SortableContext>
+                  </DndContext>
+                </div>
+              </div>
+            </div>
           </div>
         ) : (
           <div className="flex min-h-0 flex-1 flex-col">
