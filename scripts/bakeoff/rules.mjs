@@ -169,14 +169,15 @@ export function checkCarousel(parsed) {
     ),
   );
 
-  // Hooks are pure hook lines, not body content: no body text on slides 1–3.
-  const hooksWithBody = slides.slice(0, 3).filter((s) => s?.type === 'cover' && String(s?.body ?? '').trim());
+  // Slide 1 carries a subline (in body): a promise / reason-to-read, and it
+  // advertises a lead magnet when there is one. Ruta's rule — a bare hook
+  // headline is weaker than one with a promise under it.
   results.push(
     check(
-      hooksWithBody.length === 0,
-      'hooks-are-hooks',
-      'Хуки без тіла (body порожній на слайдах 1–3)',
-      hooksWithBody.length ? `${hooksWithBody.length} hook slide(s) carry body text` : null,
+      Boolean(String(slides[0]?.body ?? '').trim()),
+      'slide1-subline',
+      'Слайд 1 має підзаголовок-обіцянку (body)',
+      slides[0] ? 'slide 1 has no subline' : 'no slides',
     ),
   );
 
@@ -206,18 +207,10 @@ export function checkCarousel(parsed) {
       unknown.length ? `unknown: ${[...new Set(unknown)].join(', ')}` : null),
   );
 
-  let adjacent = 0;
-  for (let i = 1; i < types.length; i += 1) {
-    if (types[i] === 'statement' && types[i - 1] === 'statement') adjacent += 1;
-  }
-  results.push(
-    check(adjacent === 0, 'no-adjacent-statement', 'Немає двох statement підряд',
-      adjacent ? `${adjacent} adjacent pair(s)` : null),
-  );
-
+  // Ruta doesn't use `statement` slides at all ("statements are dead").
   const statementCount = types.filter((t) => t === 'statement').length;
   results.push(
-    check(statementCount <= 2, 'statement-budget', 'Не більше 2 statement на карусель', `${statementCount} statement slides`),
+    check(statementCount === 0, 'no-statements', 'Без statement-слайдів (Рута їх не використовує)', `${statementCount} statement slides`),
   );
 
   const badBullets = slides.filter(

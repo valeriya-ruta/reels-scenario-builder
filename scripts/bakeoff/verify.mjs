@@ -85,7 +85,7 @@ const slide = (type, extra = {}) => ({ type, title: 'Т', body: null, label: nul
 const carouselGood = {
   total_slides: 6,
   slides: [
-    slide('cover'), // hook 1
+    slide('cover', { body: 'і як я це пережила — + промпт' }), // hook 1 + subline
     slide('cover'), // hook 2
     slide('cover'), // hook 3
     slide('content', { icon: 'image', body: 'Тіло. Одна думка.' }),
@@ -107,14 +107,9 @@ expectBreaks(
   'last slide not cta',
 );
 expectBreaks(
-  checkCarousel({ slides: [slide('cover'), slide('statement'), slide('statement'), slide('content'), slide('content'), slide('cta')] }),
-  'no-adjacent-statement',
-  'adjacent statements',
-);
-expectBreaks(
-  checkCarousel({ slides: [slide('cover'), slide('statement'), slide('content'), slide('statement'), slide('content'), slide('statement'), slide('cta')] }),
-  'statement-budget',
-  '3 statement slides',
+  checkCarousel({ slides: [slide('cover'), slide('cover'), slide('cover'), slide('statement'), slide('content'), slide('cta')] }),
+  'no-statements',
+  'uses a statement slide',
 );
 expectBreaks(
   checkCarousel({ slides: [slide('cover'), slide('bullets'), slide('content'), slide('content'), slide('content'), slide('cta')] }),
@@ -133,9 +128,9 @@ expectBreaks(
   'only one hook up front',
 );
 expectBreaks(
-  checkCarousel({ slides: [slide('cover', { body: 'Це вже тіло на хуку' }), slide('cover'), slide('cover'), slide('content'), slide('bullets', { items: ['а'] }), slide('cta')] }),
-  'hooks-are-hooks',
-  'hook slide carries body text',
+  checkCarousel({ slides: [slide('cover'), slide('cover'), slide('cover'), slide('content'), slide('bullets', { items: ['а'] }), slide('cta')] }),
+  'slide1-subline',
+  'slide 1 has no promise subline',
 );
 expectBreaks(
   checkCarousel({ slides: [slide('cover'), slide('cover'), slide('cover'), slide('cta'), slide('content'), slide('cta')] }),
