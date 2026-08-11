@@ -913,6 +913,8 @@ export default function CarouselBuilder({
         const structure = deriveRantSlideStructure(s.type, index, output.slides.length);
         slide.slideType = structure.slideType;
         slide.layoutPreset = structure.layoutPreset;
+        // Facts/theses, not steps → dots rather than "01. 02. 03.".
+        if (structure.layoutPreset === 'list') slide.bulletStyle = 'dots';
         slide.backgroundColor = defaultBg;
         slide.hasBackgroundOverride = false;
         Object.assign(slide, resolveSlideVisualColors(slide, index, output.slides.length, brandPalette));

@@ -68,6 +68,9 @@ function mapRantOutputToDbSlides(output: CarouselRantOutput): Slide[] {
     const structure = deriveRantSlideStructure(raw.type, index, output.slides.length);
     slide.slideType = structure.slideType;
     slide.layoutPreset = structure.layoutPreset;
+    // A bullets slide is a list of theses/facts, not ordered steps — dots, not
+    // "01. 02. 03." (numbered implies a sequence the content usually isn't).
+    if (structure.layoutPreset === 'list') slide.bulletStyle = 'dots';
     return slide;
   });
 }
