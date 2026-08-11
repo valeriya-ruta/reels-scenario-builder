@@ -340,8 +340,13 @@ let RESULTS = [];      // structured results of the last run, for export
 let LAST_RANT = "";
 
 async function run() {
-  const key = $("#key").value.trim();
+  // Strip anything that isn't printable ASCII — OpenRouter keys are ASCII, and a
+  // stray invisible/non-Latin-1 char pasted into the field makes fetch() throw
+  // "String contains non ISO-8859-1 code point" when building the auth header.
+  const rawKey = $("#key").value;
+  const key = rawKey.replace(/[^\x20-\x7E]/g, "").trim();
   if (!key) { alert("Встав OpenRouter ключ."); return; }
+  if (rawKey.trim() !== key) { $("#key").value = key; $("#copied").textContent = "почистила невидимі символи в ключі ✓"; }
   const rant = $("#rant").value.trim();
   const models = [...document.querySelectorAll("[data-model]:checked")].map(c => MODELS[c.dataset.model]);
   const prompts = [...document.querySelectorAll("[data-prompt]:checked")].map(c => PROMPTS[c.dataset.prompt]);
