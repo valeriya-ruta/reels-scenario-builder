@@ -2,33 +2,38 @@ import 'server-only';
 import { optionalServerEnv, requireServerEnv } from '@/lib/env';
 
 /**
- * Carousel text generation, pointed at the bake-off winner: Gemini 2.5 Pro
- * (ClickUp 86d3ymaw7). It won on voice/style across two very different braindumps.
+ * Carousel text generation on Gemini 2.5 Flash.
+ *
+ * The bake-off picked 2.5 Pro on voice/style, but Pro is a heavy reasoning model:
+ * in production it routinely ran 60s+ and blew the serverless limit (504s), or
+ * returned empty/truncated content when its "thinking" ate the whole budget — so
+ * carousels kept failing to create. Flash produces the same JSON schema in a
+ * fraction of the time, so generation actually completes. If Flash's voice isn't
+ * good enough on the tuned prompt, override CAROUSEL_MODEL (env) back to a Pro id.
  *
  * Provider selection, in order:
- *   1. OPENROUTER_API_KEY set → OpenRouter `google/gemini-2.5-pro`. This is the
- *      target once the OpenRouter billing migration (86d3ymar8) lands — set the
- *      key and this path takes over with zero code change.
+ *   1. OPENROUTER_API_KEY set → OpenRouter (the consolidated-billing target).
  *   2. else GEMINI_API_KEY (already in production for scene splitting) → Gemini's
- *      own API `gemini-2.5-pro`. Ships today with no new env.
+ *      own API directly.
  *
  * Same model either way. Returns the raw JSON string; the caller parses and runs
  * `postProcessCarouselRant`.
  */
 
-export const CAROUSEL_MODEL_OPENROUTER = 'google/gemini-2.5-pro';
-export const CAROUSEL_MODEL_GEMINI = 'gemini-2.5-pro';
+// One env override drives both providers, so the model can be retuned without a
+// deploy. `google/` prefix is added for the OpenRouter path.
+const CAROUSEL_MODEL = optionalServerEnv('CAROUSEL_MODEL') || 'gemini-2.5-flash';
+export const CAROUSEL_MODEL_OPENROUTER = `google/${CAROUSEL_MODEL}`;
+export const CAROUSEL_MODEL_GEMINI = CAROUSEL_MODEL;
 
-// Gemini 2.5 Pro is a reasoning model: internal "thinking" consumes output
-// budget, so give it plenty of headroom or a long carousel truncates mid-JSON.
+// Reasoning models spend output budget on internal "thinking"; keep headroom so a
+// long carousel never truncates mid-JSON.
 const MAX_OUTPUT_TOKENS = 8000;
 const TEMPERATURE = 0.7;
 
-// Left unbounded, Gemini 2.5 Pro's dynamic "thinking" can run many thousands of
-// tokens and push a single carousel well past a minute — the "it takes forever /
-// never creates" latency. Cap it so generation reliably finishes inside the 60s
-// serverless window while still leaving ample reasoning for the prompt's voice
-// rules. Env-tunable: raise a little for more polish, lower if still too slow.
+// Bound the reasoning tail so a run can't stall past the serverless window. Flash
+// is fast enough that a modest budget keeps quality while finishing in seconds.
+// Env-tunable: raise a little for more polish, lower (or 0 on Flash) if too slow.
 const THINKING_BUDGET = Number(optionalServerEnv('CAROUSEL_THINKING_BUDGET')) || 2048;
 
 // Upstream call timeout. Kept just under the route's maxDuration (60s) so a slow
@@ -87,10 +92,16 @@ async function callOpenRouter(apiKey: string, systemPrompt: string, userContent:
   }
 
   const payload = (await res.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
+    choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
   };
-  const text = payload.choices?.[0]?.message?.content?.trim() ?? '';
-  if (!text) throw new Error('OpenRouter returned empty content');
+  const choice = payload.choices?.[0];
+  const text = choice?.message?.content?.trim() ?? '';
+  if (!text) {
+    // finish_reason distinguishes "cut off at token limit" (length) from a
+    // content filter or a model that returned only reasoning — so a recurrence
+    // is diagnosable from the logs instead of an opaque "empty content".
+    throw new Error(`OpenRouter returned empty content (finish_reason=${choice?.finish_reason ?? 'unknown'})`);
+  }
   return text;
 }
 

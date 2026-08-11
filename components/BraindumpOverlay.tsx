@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Mic, Keyboard, Check, X, ArrowLeft, PenLine } from 'lucide-react';
+import { Mic, Keyboard, Check, X, ArrowLeft, PenLine, RotateCw } from 'lucide-react';
 import { pickBraindumpPrompt } from '@/lib/braindumpPrompts';
 import { dayHeaderLabel } from '@/lib/content/calendar';
 import { countWords, BRAINDUMP_WORD_TARGET } from '@/lib/braindump/wordGate';
@@ -1008,19 +1008,28 @@ export default function BraindumpOverlay({
                   const meta = CONTENT_TYPES[type];
                   const status = typeStatus[type];
                   const done = status === 'done';
+                  // An errored generation must NOT look like the idle state — the
+                  // button turns red with a retry affordance, so a failure is
+                  // visible and tappable instead of the spinner silently vanishing.
+                  const errored = status === 'error';
+                  const ERROR_RED = '#dc2626';
                   return (
                     <button
                       key={type}
                       type="button"
-                      onClick={() => void runType(type)}
+                      onClick={() => void runType(type, errored)}
                       data-testid={`braindump-type-${type}`}
                       data-status={status}
                       disabled={status === 'loading'}
                       className="flex flex-col items-center gap-2 rounded-[16px] border-2 px-2 py-4 text-[13px] font-semibold transition-colors"
                       style={{
-                        borderColor: done ? 'var(--success)' : meta.color,
-                        color: done ? 'var(--success)' : meta.color,
-                        backgroundColor: done ? 'rgba(34,197,94,0.08)' : meta.soft,
+                        borderColor: done ? 'var(--success)' : errored ? ERROR_RED : meta.color,
+                        color: done ? 'var(--success)' : errored ? ERROR_RED : meta.color,
+                        backgroundColor: done
+                          ? 'rgba(34,197,94,0.08)'
+                          : errored
+                            ? 'rgba(220,38,38,0.08)'
+                            : meta.soft,
                       }}
                     >
                       {done ? (
@@ -1030,14 +1039,29 @@ export default function BraindumpOverlay({
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                         </svg>
+                      ) : errored ? (
+                        <RotateCw className="h-6 w-6" strokeWidth={2.4} />
                       ) : (
                         <ContentTypeIcon type={type} className="h-6 w-6" inheritColor />
                       )}
-                      <span>{done ? 'Готово' : meta.label}</span>
+                      <span>{done ? 'Готово' : errored ? 'Ще раз?' : meta.label}</span>
                     </button>
                   );
                 })}
               </div>
+
+              {/* Progress / failure feedback — a generation can take a beat, so
+                  never leave the user staring at a spinner (or, on failure, at a
+                  button that silently reverted) with no idea what's happening. */}
+              {CONTENT_TYPE_ORDER.some((t) => typeStatus[t] === 'loading') ? (
+                <p className="mt-3 text-center text-[12px] leading-snug text-[color:var(--text-muted)]">
+                  Генерую слайди… це може зайняти до хвилини.
+                </p>
+              ) : CONTENT_TYPE_ORDER.some((t) => typeStatus[t] === 'error') ? (
+                <p className="mt-3 text-center text-[12px] leading-snug" style={{ color: '#dc2626' }}>
+                  Не вдалося згенерувати. Натисни «Ще раз?», щоб спробувати знову.
+                </p>
+              ) : null}
 
               {/* Inline receipt — created pieces, tappable. A saga lists every
                   dated day, so multi-day generation is never invisible. */}
