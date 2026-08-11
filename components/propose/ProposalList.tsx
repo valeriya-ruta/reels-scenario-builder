@@ -2,7 +2,7 @@
 
 import { Sparkles } from 'lucide-react';
 import ContentTypeIcon from '@/components/ContentTypeIcon';
-import { CONTENT_TYPES } from '@/lib/contentTypes';
+import { CONTENT_TYPES, type ContentType } from '@/lib/contentTypes';
 import { useTapGuard } from '@/lib/ui/tapGuard';
 import type { Proposal } from '@/lib/propose/types';
 
@@ -19,11 +19,16 @@ export default function ProposalList({
   loading,
   onPick,
   disabled,
+  forceType,
 }: {
   proposals: Proposal[];
   loading?: boolean;
   onPick: (proposal: Proposal) => void;
   disabled?: boolean;
+  /** On a single-type surface (e.g. the carousel tab's empty state), render
+   *  every proposal with THIS type's icon/tint instead of the proposal's own
+   *  `suggestedType` — a carousel tab must not suggest a reel. */
+  forceType?: ContentType;
 }) {
   if (loading) {
     return (
@@ -45,7 +50,13 @@ export default function ProposalList({
   return (
     <ul className="space-y-2" data-testid="proposal-list">
       {proposals.map((proposal) => (
-        <ProposalCard key={proposal.id} proposal={proposal} disabled={disabled} onPick={onPick} />
+        <ProposalCard
+          key={proposal.id}
+          proposal={proposal}
+          disabled={disabled}
+          onPick={onPick}
+          forceType={forceType}
+        />
       ))}
     </ul>
   );
@@ -56,12 +67,15 @@ function ProposalCard({
   proposal,
   disabled,
   onPick,
+  forceType,
 }: {
   proposal: Proposal;
   disabled?: boolean;
   onPick: (proposal: Proposal) => void;
+  forceType?: ContentType;
 }) {
-  const meta = proposal.suggestedType ? CONTENT_TYPES[proposal.suggestedType] : null;
+  const effectiveType = forceType ?? proposal.suggestedType;
+  const meta = effectiveType ? CONTENT_TYPES[effectiveType] : null;
   // The deck sits in the braindump's scroll region, so a scroll that starts on a
   // card must not confirm that angle.
   const tap = useTapGuard(() => onPick(proposal));
