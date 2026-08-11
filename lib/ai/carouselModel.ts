@@ -2,14 +2,15 @@ import 'server-only';
 import { optionalServerEnv, requireServerEnv } from '@/lib/env';
 
 /**
- * Carousel text generation on Gemini 2.5 Flash.
+ * Carousel text generation on Gemini 2.5 Pro.
  *
- * The bake-off picked 2.5 Pro on voice/style, but Pro is a heavy reasoning model:
- * in production it routinely ran 60s+ and blew the serverless limit (504s), or
- * returned empty/truncated content when its "thinking" ate the whole budget — so
- * carousels kept failing to create. Flash produces the same JSON schema in a
- * fraction of the time, so generation actually completes. If Flash's voice isn't
- * good enough on the tuned prompt, override CAROUSEL_MODEL (env) back to a Pro id.
+ * Pro is the bake-off winner on voice/style, and it's the chosen default despite
+ * being a heavy reasoning model: on long carousels it can run close to the 60s
+ * serverless limit and occasionally time out. That's an accepted quality/latency
+ * tradeoff — a timeout now surfaces a visible, retryable error in the braindump
+ * UI rather than a silent freeze, and the whole latency safety net below stays on
+ * (bounded thinking + a hard fetch timeout). To trade quality for speed, set
+ * CAROUSEL_MODEL=gemini-2.5-flash — no deploy needed.
  *
  * Provider selection, in order:
  *   1. OPENROUTER_API_KEY set → OpenRouter (the consolidated-billing target).
@@ -20,9 +21,9 @@ import { optionalServerEnv, requireServerEnv } from '@/lib/env';
  * `postProcessCarouselRant`.
  */
 
-// One env override drives both providers, so the model can be retuned without a
-// deploy. `google/` prefix is added for the OpenRouter path.
-const CAROUSEL_MODEL = optionalServerEnv('CAROUSEL_MODEL') || 'gemini-2.5-flash';
+// One env override drives both providers, so the model can be retuned (e.g. to
+// gemini-2.5-flash for speed) without a deploy. `google/` prefix added for OpenRouter.
+const CAROUSEL_MODEL = optionalServerEnv('CAROUSEL_MODEL') || 'gemini-2.5-pro';
 export const CAROUSEL_MODEL_OPENROUTER = `google/${CAROUSEL_MODEL}`;
 export const CAROUSEL_MODEL_GEMINI = CAROUSEL_MODEL;
 
