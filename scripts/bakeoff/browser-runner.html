@@ -94,8 +94,10 @@
     <div class="models" id="prompts"></div>
     <label style="margin-top:16px" for="tuned">Промпт «Ruta method» — редагований (сюди вставляй мої оновлення з чату, тисни Запустити знову)</label>
     <textarea id="tuned" style="min-height:220px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12.5px"></textarea>
-    <div style="margin-top:16px">
+    <div style="margin-top:16px; display:flex; gap:10px; align-items:center; flex-wrap:wrap">
       <button class="run" id="run">Запустити</button>
+      <button class="run" id="export" style="background:#334155">📋 Скопіювати все для чату</button>
+      <span class="legend" id="copied" style="margin:0"></span>
     </div>
     <p class="legend" id="progress"></p>
   </div>
@@ -331,6 +333,9 @@ function esc(x){ return String(x==null?"":x).replace(/[&<>]/g,c=>({"&":"&amp;","
 
 function scoreClass(pct){ return pct>=90?"ok":pct>=60?"mid":"bad"; }
 
+let RESULTS = [];      // structured results of the last run, for export
+let LAST_RANT = "";
+
 async function run() {
   const key = $("#key").value.trim();
   if (!key) { alert("Встав OpenRouter ключ."); return; }
@@ -342,6 +347,9 @@ async function run() {
   const lang = detectOutputLanguage(rant);
   const results = $("#results");
   results.innerHTML = "";
+  RESULTS = [];
+  LAST_RANT = rant;
+  $("#copied").textContent = "";
   $("#run").disabled = true;
 
   const jobs = [];
@@ -368,6 +376,7 @@ async function run() {
       const out = await callModel(key, m.id, messages);
       const parsed = extractJson(out.text);
       if (!parsed) {
+        RESULTS.push({ model: m.label, prompt: p.label, ok: false, note: "не-JSON", rawText: out.text });
         cell.innerHTML = `<h3><span>${m.label} · <span class="meta">${p.label}</span></span><span class="meta">${out.latency}ms</span></h3>
           <div class="cellbody"><div class="err">Модель повернула не-JSON.</div>
           <details><summary>сирий текст</summary><pre>${esc(out.text.slice(0,4000))}</pre></details></div>`;
@@ -377,6 +386,9 @@ async function run() {
       const passed = rules.filter(r=>r.ok).length;
       const pct = Math.round(passed/rules.length*100);
       const slides = Array.isArray(parsed.slides) ? parsed.slides : [];
+      RESULTS.push({ model: m.label, prompt: p.label, ok: true, pct, passed, total: rules.length,
+        failed: rules.filter(r=>!r.ok).map(r=>({label:r.label, detail:r.detail})),
+        latency: out.latency, slides });
       cell.innerHTML = `
         <h3><span>${m.label} · <span class="meta">${p.label}</span></span>
           <span class="meta"><span class="score ${scoreClass(pct)}">${pct}% правил (${passed}/${rules.length})</span> · ${out.latency}ms</span></h3>
@@ -386,6 +398,7 @@ async function run() {
           <details><summary>сирий JSON</summary><pre>${esc(JSON.stringify(parsed,null,2))}</pre></details>
         </div>`;
     } catch (e) {
+      RESULTS.push({ model: m.label, prompt: p.label, ok: false, note: e.message });
       cell.innerHTML = `<h3><span>${m.label} · <span class="meta">${p.label}</span></span></h3>
         <div class="cellbody"><div class="err">${esc(e.message)}</div></div>`;
     } finally {
@@ -395,7 +408,60 @@ async function run() {
   }));
 }
 
+// ─────────────────────────────── export everything as one pasteable block
+function slideToText(s, i) {
+  const type = (s && s.type) || "?";
+  const parts = [`  [${i + 1}] ${type}`];
+  if (s && s.label) parts.push(`      label: ${s.label}`);
+  if (s && s.title) parts.push(`      title: ${s.title}`);
+  if (s && s.body) parts.push(`      text: ${s.body}`);
+  if (s && Array.isArray(s.items) && s.items.length) {
+    for (const it of s.items) parts.push(`      • ${it}`);
+  }
+  return parts.join("\n");
+}
+
+function buildExport() {
+  const lines = [];
+  lines.push("=== BAKE-OFF RESULTS ===");
+  lines.push("BRAINDUMP: " + LAST_RANT);
+  lines.push("");
+  for (const r of RESULTS) {
+    lines.push("──────────────────────────────────────");
+    lines.push(`MODEL: ${r.model}  |  PROMPT: ${r.prompt}`);
+    if (!r.ok) {
+      lines.push(`  ERROR/${r.note || "fail"}` + (r.rawText ? `\n  RAW: ${String(r.rawText).slice(0, 800)}` : ""));
+      lines.push("");
+      continue;
+    }
+    lines.push(`  RULES: ${r.pct}% (${r.passed}/${r.total})`
+      + (r.failed.length ? `  |  FAILED: ${r.failed.map(f => f.label + (f.detail ? ` (${f.detail})` : "")).join("; ")}` : "  |  all rules passed")
+      + `  |  ${r.latency}ms`);
+    (r.slides || []).forEach((s, i) => lines.push(slideToText(s, i)));
+    lines.push("");
+  }
+  return lines.join("\n");
+}
+
+async function exportAll() {
+  if (!RESULTS.length) { alert("Спершу запусти (Запустити)."); return; }
+  const text = buildExport();
+  try {
+    await navigator.clipboard.writeText(text);
+    $("#copied").textContent = "✓ Скопійовано — встав у чат";
+  } catch (e) {
+    // Fallback: drop it in a textarea the user can select+copy manually.
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.cssText = "width:100%;min-height:240px;margin-top:10px";
+    $("#results").prepend(ta);
+    ta.select();
+    $("#copied").textContent = "Не вдалося авто-скопіювати — виділи текст вище і скопіюй вручну";
+  }
+}
+
 $("#run").addEventListener("click", run);
+$("#export").addEventListener("click", exportAll);
 </script>
 </body>
 </html>
