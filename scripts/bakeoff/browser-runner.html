@@ -92,6 +92,8 @@
     <div class="models" id="models"></div>
     <label style="margin-top:16px">Промпти</label>
     <div class="models" id="prompts"></div>
+    <label style="margin-top:16px" for="tuned">Промпт «Ruta method» — редагований (сюди вставляй мої оновлення з чату, тисни Запустити знову)</label>
+    <textarea id="tuned" style="min-height:220px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12.5px"></textarea>
     <div style="margin-top:16px">
       <button class="run" id="run">Запустити</button>
     </div>
@@ -182,7 +184,7 @@ ${languageRule}
 
 const PROMPTS = [
   { id: "prod", label: "Теперішній (production)", build: prodPrompt, on: true },
-  { id: "ruta", label: "Новий (Ruta method)", build: rutaPrompt, on: true },
+  { id: "ruta", label: "Новий (Ruta method, редагований)", build: null, on: true },
 ];
 
 // ─────────────────────────────── scorer (scripts/bakeoff/rules.mjs, carousel)
@@ -286,6 +288,7 @@ async function callModel(key, model, messages) {
 // ─────────────────────────────── UI
 const $ = s => document.querySelector(s);
 $("#rant").value = DEFAULT_RANT;
+$("#tuned").value = rutaPrompt("uk"); // editable; paste refined prompt versions here between runs
 const modelsEl = $("#models");
 MODELS.forEach((m,i) => {
   modelsEl.insertAdjacentHTML("beforeend",
@@ -342,8 +345,9 @@ async function run() {
 
   await Promise.all(jobs.map(async ({p,m,id}) => {
     const cell = document.getElementById(id);
+    const systemContent = p.id === "ruta" ? $("#tuned").value.trim() : p.build(lang);
     const messages = [
-      { role: "system", content: p.build(lang) },
+      { role: "system", content: systemContent },
       { role: "user", content: rant },
     ];
     try {
