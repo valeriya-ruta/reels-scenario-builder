@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Bake-off каруселей</title>
+<!--
+  Standalone carousel bake-off. Open this file by double-clicking it — it runs
+  entirely in your browser and calls OpenRouter directly. Your API key stays in
+  this page, goes only to openrouter.ai, and is never sent to us or saved to the
+  project.
+
+  The two carousel prompts and the scorer below are copied from the repo
+  (lib/ai/carouselPrompt.ts, scripts/bakeoff/prompts/carouselRuta.mjs,
+  scripts/bakeoff/rules.mjs). Source of truth is the repo; regenerate this file
+  if those change.
+-->
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --ink: #14161a; --muted: #6b7280;
+    --line: #e5e7eb; --accent: #004BA8; --good: #15803d; --goodbg: #dcfce7;
+    --bad: #b91c1c; --badbg: #fee2e2; --hook: #7c3aed; --hookbg: #f3e8ff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 18px 80px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 18px; margin-bottom: 16px; }
+  label { display: block; font-weight: 600; margin: 0 0 6px; font-size: 13px; }
+  input[type=password], textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--line);
+    border-radius: 10px; font: inherit; background: #fff; color: var(--ink); }
+  textarea { min-height: 130px; resize: vertical; }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .row > div { flex: 1; min-width: 240px; }
+  .models { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 4px; }
+  .models label { font-weight: 400; display: flex; align-items: center; gap: 7px; margin: 0; }
+  .hint { color: var(--muted); font-size: 12.5px; margin-top: 8px; }
+  button.run { background: var(--accent); color: #fff; border: 0; border-radius: 10px;
+    padding: 12px 22px; font: 600 15px inherit; cursor: pointer; margin-top: 4px; }
+  button.run:disabled { opacity: .5; cursor: default; }
+  .grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
+  .cell { background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  .cell h3 { margin: 0; padding: 12px 16px; border-bottom: 1px solid var(--line); font-size: 14px;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .cell h3 .meta { font-weight: 400; color: var(--muted); font-size: 12.5px; }
+  .cellbody { padding: 14px 16px; }
+  .score { font-weight: 700; }
+  .score.ok { color: var(--good); } .score.mid { color: #b45309; } .score.bad { color: var(--bad); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 14px; }
+  .chip { font-size: 11.5px; padding: 3px 8px; border-radius: 999px; }
+  .chip.pass { background: var(--goodbg); color: var(--good); }
+  .chip.fail { background: var(--badbg); color: var(--bad); }
+  .slides { display: flex; flex-direction: column; gap: 8px; }
+  .slide { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .badge { font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; font-weight: 700;
+    color: var(--muted); }
+  .badge.cover { color: var(--hook); }
+  .slide.hook { background: var(--hookbg); border-color: #e9d5ff; }
+  .slide .t { font-weight: 600; margin: 2px 0; }
+  .slide .b { color: #374151; font-size: 14px; }
+  .slide ul { margin: 4px 0 0; padding-left: 18px; }
+  details { margin-top: 10px; } summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
+  pre { background: #0f172a; color: #e2e8f0; padding: 12px; border-radius: 10px; overflow: auto;
+    font-size: 12px; max-height: 320px; }
+  .err { color: var(--bad); background: var(--badbg); padding: 10px 12px; border-radius: 10px; }
+  .pending { color: var(--muted); }
+  .legend { font-size: 12.5px; color: var(--muted); margin: 6px 0 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Bake-off каруселей</h1>
+  <p class="sub">Проганяє твій брандамп через кілька моделей двома промптами — теперішнім (production) і новим (Ruta method) — і рахує, наскільки кожна дотримується твоїх правил.</p>
+
+  <div class="panel">
+    <label for="key">OpenRouter API ключ</label>
+    <input id="key" type="password" placeholder="sk-or-v1-..." autocomplete="off" />
+    <p class="hint">Ключ живе тільки в цій сторінці й іде напряму на openrouter.ai. Ми його не бачимо, у проєкт він не зберігається. Взяти ключ: openrouter.ai/keys (поповни балансом ~$5).</p>
+  </div>
+
+  <div class="panel">
+    <div class="row">
+      <div>
+        <label for="rant">Брандамп</label>
+        <textarea id="rant"></textarea>
+      </div>
+    </div>
+    <label style="margin-top:16px">Моделі</label>
+    <div class="models" id="models"></div>
+    <label style="margin-top:16px">Промпти</label>
+    <div class="models" id="prompts"></div>
+    <div style="margin-top:16px">
+      <button class="run" id="run">Запустити</button>
+    </div>
+    <p class="legend" id="progress"></p>
+  </div>
+
+  <div class="grid" id="results"></div>
+</div>
+
+<script>
+// ─────────────────────────────── candidates
+const MODELS = [
+  { id: "meta-llama/llama-3.3-70b-instruct", label: "Llama 3.3 70B (теперішня)", on: true },
+  { id: "deepseek/deepseek-chat", label: "DeepSeek", on: true },
+  { id: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro", on: true },
+  { id: "anthropic/claude-sonnet-4.5", label: "Claude Sonnet 4.5", on: true },
+];
+
+const DEFAULT_RANT = "Як робити аналіз конкуренції, щоб себе не деморалізувати? І чому це було дуже важливо для вайп-кодингу і як я це роблю? Взагалі, робити аналіз конкуренції - це дуже важливо, тому що ми маємо знати, що відбувається у нас на ринку. ми маємо знати, кого нам боятись, кого нам не боятись і на хаті кого можна скопіювати. І взагалі нам треба розуміти, що взагалі відбувається у нас на ринку, щоб знати свого ворога. Але я персонально ненавиджу це робити, тому що кожен раз, коли я починаю ан це займає реально дуже багато часу. І плюс десь посередині цього аналізу я починаю реально сомніватися в собі, тому що 100% ми всі не унікальні, і я знайду людину, яка схожа на мене максимально, яка краще за мене, яка має або додаток, який краще за мене. Мене це супер деморалізує. Але це все одно треба зробити. Так от, найкращий спосіб, як на мене, це я використовую Cloud Cowork, який працює прямо на десктопі. Я відкриваю його і кажу йому проаналізувати конкурентів, знайди плюси і мінуси і на основі цього напиши мені план. І таким чином в мене є класний аналіз, який показує market gap, дира в ринку, яку я буду закривати своїм продуктом, і в мене є actionable items, задачі, які я можу використати, щоб далі просто працювати.";
+
+// ─────────────────────────────── language detect (from lib/ai/carouselPrompt.ts)
+function detectOutputLanguage(rant) {
+  const cyr = (rant.match(/[А-Яа-яІіЇїЄєҐґ]/g) || []).length;
+  const latin = (rant.match(/[A-Za-z]/g) || []).length;
+  if (latin >= 20 && latin >= cyr * 1.2) return "en";
+  return "uk";
+}
+
+// ─────────────────────────────── production prompt (lib/ai/carouselPrompt.ts)
+function prodPrompt(lang) {
+  const languageRule = lang === "en"
+    ? "Усі текстові поля (title/body/label/items) пиши англійською."
+    : "Усі текстові поля (title/body/label/items) пиши українською.";
+  return `Ти — досвідчений копірайтер каруселей для Instagram. Перетворюєш сирий рент на серію слайдів для візуального шаблону з типами слайдів.
+
+ПРИНЦИП: одна думка — один слайд. Не перевантажуй текст.
+
+ТИПИ СЛАЙДІВ (type): cover, content, statement, bullets, cta
+- cover — обкладинка (сильний заголовок теми)
+- content — пояснення / крок / контекст
+- statement — коротке ударне твердження (1–2 на карусель; НІКОЛИ не став два statement підряд)
+- bullets — список тез (поле items — масив рядків)
+- cta — заклик до дії (останній слайд)
+ПЕРШИЙ слайд завжди type=cover. ОСТАННІЙ завжди type=cta.
+
+ІКОНКИ (icon, або null): image, lightning, star, check, arrow-right, clock, calendar, fire, sparkle, target, camera, pen, chart, heart, globe
+
+Щоб виділити фрагмент під акцент — обгорни у {фігурні дужки}. accent_spans зазвичай [].
+Поля: title, body, label, items (лише для bullets), icon.
+Мінімум 5 слайдів, максимум 12.
+
+Лише JSON, без markdown. ${languageRule}
+
+{"total_slides":5,"slides":[{"type":"cover","title":"...","body":null,"label":null,"items":null,"icon":null,"accent_spans":[]}]}`;
+}
+
+// ─────────────────────────────── refined prompt (scripts/bakeoff/prompts/carouselRuta.mjs)
+function rutaPrompt(lang) {
+  const languageRule = lang === "en"
+    ? "МОВА ВІДПОВІДІ: англійська. Усі текстові поля — англійською."
+    : "МОВА ВІДПОВІДІ: українська. Усі текстові поля — українською. НІКОЛИ не використовуй російську.";
+  return `Ти — топовий копірайтер каруселей для Instagram для особистого бренду. Ти перетворюєш сирий рент на карусель у впізнаваному, живому стилі автора — не корпоративно, не як ШІ.
+
+${languageRule}
+
+ГОЛОВНИЙ ПРИНЦИП: ОДИН слайд — ОДНА думка. Якщо сумніваєшся — РОЗБИЙ на два.
+
+ЗАЛІЗНА СТРУКТУРА: РІВНО 3 хуки + тіло + РІВНО 1 CTA.
+▸ СЛАЙДИ 1, 2, 3 — ЦЕ ТРИ ОКРЕМІ ХУКИ (type="cover" у кожного). Instagram показує в стрічці слайд 1 АБО 2 АБО 3 випадково. Кожен має чіпляти сам по собі І наростати по порядку:
+   • Слайд 1 — МАКСИМАЛЬНИЙ хайп, найсильніше твердження/біль.
+   • Слайд 2 — ПОГЛИБ біль / підвищ ставки. Гірше, ніж слайд 1.
+   • Слайд 3 — ПІК напруги. Ще гірше. Кульмінація.
+   Усі три — висока енергія, короткий ударний title, body=null. Це ще НЕ тіло.
+▸ ТІЛО (після 3-го) — розкриває суть, порядок за зростанням цінності, одна думка на слайд. ЧЕРГУЙ формат сусідніх слайдів: content / statement / bullets.
+▸ ОСТАННІЙ слайд — РІВНО ОДИН CTA (type="cta"). Одна дія.
+
+ЧЕСНІСТЬ: НЕ вигадуй цифр/фактів/історій. Якщо треба конкретика, якої нема в ренті — встав пустографку у [квадратних дужках]: [твоя цифра], [назва інструмента].
+
+БЕЗ ВОДИ: жодних привітань, вступів, підсумків. Тільки слайди. Текст короткий, придатний до публікації.
+
+ТИПИ (type): cover | content | statement | bullets | cta (слайди 1–3 завжди cover; cta лише останній; не став два statement підряд).
+ІКОНКИ (icon, або null): image, lightning, star, check, arrow-right, clock, calendar, fire, sparkle, target, camera, pen, chart, heart, globe
+Поля: title, body, label, items (лише bullets), icon, accent_spans ([]).
+
+Лише JSON, без markdown:
+{"total_slides":6,"slides":[{"type":"cover","title":"Хук 1","body":null,"label":null,"items":null,"icon":null,"accent_spans":[]}]}`;
+}
+
+const PROMPTS = [
+  { id: "prod", label: "Теперішній (production)", build: prodPrompt, on: true },
+  { id: "ruta", label: "Новий (Ruta method)", build: rutaPrompt, on: true },
+];
+
+// ─────────────────────────────── scorer (scripts/bakeoff/rules.mjs, carousel)
+const SLIDE_TYPES = new Set(["cover","content","statement","bullets","cta"]);
+const ICONS = new Set(["image","lightning","star","check","arrow-right","clock","calendar","fire","sparkle","target","camera","pen","chart","heart","globe"]);
+const RUSSIAN = /[ыэъё]/i;
+
+function collectText(v, out=[]) {
+  if (typeof v === "string") out.push(v);
+  else if (Array.isArray(v)) v.forEach(x => collectText(x, out));
+  else if (v && typeof v === "object") Object.values(v).forEach(x => collectText(x, out));
+  return out;
+}
+
+function checkCarousel(parsed) {
+  const r = [];
+  const P = (ok, label, detail) => r.push({ ok, label, detail: ok ? null : (detail||null) });
+  const slides = Array.isArray(parsed && parsed.slides) ? parsed.slides : [];
+  const types = slides.map(s => s && s.type);
+
+  P(slides.length >= 5 && slides.length <= 12, "Слайдів 5–12", slides.length + " слайдів");
+  P(types[0] === "cover", "Перший = cover", "перший: " + types[0]);
+  P(types[types.length-1] === "cta", "Останній = cta", "останній: " + types[types.length-1]);
+
+  const firstThree = types.slice(0,3);
+  const hooks = firstThree.filter(t => t === "cover").length;
+  P(slides.length >= 4 && hooks === 3, "3 хуки спереду (cover)", hooks + "/3 cover: [" + firstThree.join(", ") + "]");
+
+  const hookBody = slides.slice(0,3).filter(s => s && s.type === "cover" && String(s.body||"").trim());
+  P(hookBody.length === 0, "Хуки без тіла", hookBody.length + " хуків із body");
+
+  const ctas = types.filter(t => t === "cta").length;
+  P(ctas === 1, "Рівно один CTA", ctas + " cta");
+
+  let adj = 0;
+  for (let i=1;i<types.length;i++) if (types[i]==="statement" && types[i-1]==="statement") adj++;
+  P(adj === 0, "Немає двох statement підряд", adj + " пар");
+
+  const stmt = types.filter(t => t==="statement").length;
+  P(stmt <= 2, "≤ 2 statement", stmt + " statement");
+
+  const badBullets = slides.filter(s => s && s.type==="bullets" && !(Array.isArray(s.items)&&s.items.length)).length;
+  P(badBullets === 0, "bullets мають items", badBullets + " без items");
+
+  const unknown = types.filter(t => !SLIDE_TYPES.has(t));
+  P(unknown.length === 0, "Валідні типи", "невідомі: " + [...new Set(unknown)].join(", "));
+
+  const badIcons = slides.map(s=>s&&s.icon).filter(i=>i!=null && !ICONS.has(i));
+  P(badIcons.length === 0, "Валідні іконки", "невідомі: " + [...new Set(badIcons)].join(", "));
+
+  const stars = collectText(parsed).join(" ").match(/\*[^*]+\*/g);
+  P(!stars, "Пустографки у [дужках], не *зірочках*", (stars?stars.length:0) + " *...*");
+
+  const ru = collectText(parsed).filter(t => RUSSIAN.test(t));
+  P(ru.length === 0, "Без російської", ru.length + " полів з ы/э/ъ/ё");
+
+  return r;
+}
+
+// ─────────────────────────────── JSON extraction (openrouter.mjs)
+function extractJson(text) {
+  const raw = (text||"").trim();
+  if (!raw) return null;
+  const fence = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const cand = fence ? fence[1].trim() : raw;
+  try { return JSON.parse(cand); } catch (e) {}
+  const a = cand.indexOf("{"), b = cand.lastIndexOf("}");
+  if (a>=0 && b>a) { try { return JSON.parse(cand.slice(a,b+1)); } catch(e){} }
+  return null;
+}
+
+// ─────────────────────────────── OpenRouter call
+async function callModel(key, model, messages) {
+  const started = performance.now();
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "authorization": "Bearer " + key,
+      "HTTP-Referer": "https://github.com/valeriya-ruta/reels-scenario-builder",
+      "X-Title": "Ruta bake-off",
+    },
+    body: JSON.stringify({
+      model, messages, temperature: 0.7, max_tokens: 3000,
+      response_format: { type: "json_object" },
+    }),
+  });
+  const latency = Math.round(performance.now() - started);
+  if (!res.ok) {
+    let body = ""; try { body = await res.text(); } catch(e){}
+    throw new Error("HTTP " + res.status + ": " + body.slice(0, 300));
+  }
+  const payload = await res.json();
+  return {
+    text: (payload.choices && payload.choices[0] && payload.choices[0].message && payload.choices[0].message.content) || "",
+    latency,
+    usage: payload.usage || null,
+  };
+}
+
+// ─────────────────────────────── UI
+const $ = s => document.querySelector(s);
+$("#rant").value = DEFAULT_RANT;
+const modelsEl = $("#models");
+MODELS.forEach((m,i) => {
+  modelsEl.insertAdjacentHTML("beforeend",
+    `<label><input type="checkbox" data-model="${i}" ${m.on?"checked":""}/> ${m.label}</label>`);
+});
+const promptsEl = $("#prompts");
+PROMPTS.forEach((p,i) => {
+  promptsEl.insertAdjacentHTML("beforeend",
+    `<label><input type="checkbox" data-prompt="${i}" ${p.on?"checked":""}/> ${p.label}</label>`);
+});
+
+function slideHtml(s, idx) {
+  const type = s && s.type || "?";
+  const isHook = idx < 3 && type === "cover";
+  const items = Array.isArray(s && s.items) && s.items.length
+    ? "<ul>" + s.items.map(x=>`<li>${esc(x)}</li>`).join("") + "</ul>" : "";
+  return `<div class="slide ${isHook?"hook":""}">
+    <span class="badge ${type}">${idx+1} · ${esc(type)}${isHook?" · хук":""}</span>
+    ${s&&s.label?`<div class="b" style="color:#6b7280">${esc(s.label)}</div>`:""}
+    ${s&&s.title?`<div class="t">${esc(s.title)}</div>`:""}
+    ${s&&s.body?`<div class="b">${esc(s.body)}</div>`:""}
+    ${items}
+  </div>`;
+}
+function esc(x){ return String(x==null?"":x).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+
+function scoreClass(pct){ return pct>=90?"ok":pct>=60?"mid":"bad"; }
+
+async function run() {
+  const key = $("#key").value.trim();
+  if (!key) { alert("Встав OpenRouter ключ."); return; }
+  const rant = $("#rant").value.trim();
+  const models = [...document.querySelectorAll("[data-model]:checked")].map(c => MODELS[c.dataset.model]);
+  const prompts = [...document.querySelectorAll("[data-prompt]:checked")].map(c => PROMPTS[c.dataset.prompt]);
+  if (!models.length || !prompts.length) { alert("Обери хоч одну модель і один промпт."); return; }
+
+  const lang = detectOutputLanguage(rant);
+  const results = $("#results");
+  results.innerHTML = "";
+  $("#run").disabled = true;
+
+  const jobs = [];
+  for (const p of prompts) for (const m of models) {
+    const id = "c_" + p.id + "_" + m.id.replace(/[^a-z0-9]/gi,"_");
+    results.insertAdjacentHTML("beforeend",
+      `<div class="cell" id="${id}"><h3><span>${m.label} · <span class="meta">${p.label}</span></span><span class="pending">…генерую</span></h3></div>`);
+    jobs.push({ p, m, id });
+  }
+
+  let done = 0;
+  const total = jobs.length;
+  const prog = $("#progress");
+  prog.textContent = `0 / ${total}`;
+
+  await Promise.all(jobs.map(async ({p,m,id}) => {
+    const cell = document.getElementById(id);
+    const messages = [
+      { role: "system", content: p.build(lang) },
+      { role: "user", content: rant },
+    ];
+    try {
+      const out = await callModel(key, m.id, messages);
+      const parsed = extractJson(out.text);
+      if (!parsed) {
+        cell.innerHTML = `<h3><span>${m.label} · <span class="meta">${p.label}</span></span><span class="meta">${out.latency}ms</span></h3>
+          <div class="cellbody"><div class="err">Модель повернула не-JSON.</div>
+          <details><summary>сирий текст</summary><pre>${esc(out.text.slice(0,4000))}</pre></details></div>`;
+        return;
+      }
+      const rules = checkCarousel(parsed);
+      const passed = rules.filter(r=>r.ok).length;
+      const pct = Math.round(passed/rules.length*100);
+      const slides = Array.isArray(parsed.slides) ? parsed.slides : [];
+      cell.innerHTML = `
+        <h3><span>${m.label} · <span class="meta">${p.label}</span></span>
+          <span class="meta"><span class="score ${scoreClass(pct)}">${pct}% правил (${passed}/${rules.length})</span> · ${out.latency}ms</span></h3>
+        <div class="cellbody">
+          <div class="chips">${rules.map(r=>`<span class="chip ${r.ok?"pass":"fail"}" title="${esc(r.detail||"")}">${r.ok?"✓":"✕"} ${esc(r.label)}</span>`).join("")}</div>
+          <div class="slides">${slides.map((s,i)=>slideHtml(s,i)).join("")}</div>
+          <details><summary>сирий JSON</summary><pre>${esc(JSON.stringify(parsed,null,2))}</pre></details>
+        </div>`;
+    } catch (e) {
+      cell.innerHTML = `<h3><span>${m.label} · <span class="meta">${p.label}</span></span></h3>
+        <div class="cellbody"><div class="err">${esc(e.message)}</div></div>`;
+    } finally {
+      done++; prog.textContent = `${done} / ${total}`;
+      if (done === total) $("#run").disabled = false;
+    }
+  }));
+}
+
+$("#run").addEventListener("click", run);
+</script>
+</body>
+</html>
