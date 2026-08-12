@@ -61,9 +61,36 @@ function pickMediaUrl(item: Record<string, unknown>): string | null {
   return null;
 }
 
+/** The post's own caption text, wherever this actor keeps it. */
+function pickCaption(item: Record<string, unknown>): string | null {
+  for (const key of ['text', 'desc', 'description', 'title']) {
+    const value = item[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+/** @handle of the author, when the scrape carried one. */
+function pickAuthorHandle(item: Record<string, unknown>): string | null {
+  const authorMeta = item.authorMeta;
+  if (authorMeta && typeof authorMeta === 'object') {
+    const value = (authorMeta as { name?: unknown; nickName?: unknown }).name;
+    if (typeof value === 'string' && value.trim()) return `@${value.trim().replace(/^@/, '')}`;
+  }
+  for (const key of ['authorName', 'username', 'author']) {
+    const value = item[key];
+    if (typeof value === 'string' && value.trim()) return `@${value.trim().replace(/^@/, '')}`;
+  }
+  return null;
+}
+
 export interface TiktokMediaResult {
   normalizedUrl: string;
   mediaUrl: string;
+  /** Caption text, when the scrape carried one (repurposing reads it). */
+  caption: string | null;
+  /** @handle of the author, when the scrape carried one. */
+  authorHandle: string | null;
 }
 
 export async function resolveTiktokMediaUrl(postUrl: string): Promise<TiktokMediaResult> {
@@ -111,5 +138,7 @@ export async function resolveTiktokMediaUrl(postUrl: string): Promise<TiktokMedi
   return {
     normalizedUrl: normalized.toString(),
     mediaUrl,
+    caption: pickCaption(row),
+    authorHandle: pickAuthorHandle(row),
   };
 }

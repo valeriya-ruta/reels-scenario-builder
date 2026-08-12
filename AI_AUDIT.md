@@ -23,6 +23,7 @@ Nothing here is a proposal. It documents what runs in production **today**.
 | 7 | Whisper — braindump voice capture | `lib/ai/sttProvider.ts` | `transcribeAudioFile` | Groq | `whisper-large-v3-turbo` | 0 | `verbose_json`, 25 MB cap |
 | 8 | Whisper — reel URL transcription | `lib/ai/sttProvider.ts` | `transcribeMediaFromUrl` | Groq | `whisper-large-v3-turbo` | 0 | `verbose_json`, 25 MB cap |
 | 9 | Whisper — competitor reel transcription | `app/competitor-analysis-actions.ts` | `transcribeCompetitorMediaFromUrl` | Groq | `whisper-large-v3-turbo` | 0 | `verbose_json`, 25 MB cap, 3 attempts, concurrency 3 |
+| 10 | Repurpose → Threads post | `lib/ai/repurposeToThread.ts` | `generateThreadFromBrief` | Groq | `GROQ_TEXT_MODEL` | 0.7 | `response_format: json_object` |
 
 `GROQ_TEXT_MODEL` is defined in `lib/ai/groqModel.ts`:
 
@@ -30,25 +31,49 @@ Nothing here is a proposal. It documents what runs in production **today**.
 export const GROQ_TEXT_MODEL = process.env.GROQ_MODEL?.trim() || 'llama-3.3-70b-versatile';
 ```
 
-So **one env var (`GROQ_MODEL`) currently controls call sites 1–5 together.** There is no
+So **one env var (`GROQ_MODEL`) currently controls call sites 1–5 and 10 together.** There is no
 per-call-site model override today — the bake-off's per-type winners will need one.
+
+### Repurposing reuses call sites, it does not add them
+
+Content repurposing (paste a published post → make another format out of it) runs through the
+generators that already exist. It adds exactly **one** new model call — #10, the Threads output,
+which is the only target format the app had no generator for. Everything else is call sites 1–3
+with a different user message:
+
+| Repurpose target | Model call it uses | Entry point |
+|---|---|---|
+| Карусель | #1, unchanged | `app/api/carousel/rant-to-slides` (same route the braindump posts to) |
+| Рілс | #2, unchanged | `generateReelFromRant` |
+| Сторітелінг | #3, unchanged | `createStorytellingProjectFromRant` |
+| Threads | **#10 (new)** | `generateThreadPost` in `app/repurpose-actions.ts` |
+
+The user message for 1–3 is built by `composeRepurposeBrief` (`lib/repurpose/compose.ts`), which
+frames the source post and appends its text — the same shape as the braindump's «Кут подачі: …»
+prefix. **That function is the one place the repurposing framing lives**, so when dedicated
+repurposing prompts land, all four targets inherit them together.
+
+Source extraction is scraping + Whisper, not new inference: Instagram/TikTok reuse
+`resolveReferenceMediaUrl` → `transcribeMediaFromUrl` (call site 8), and Threads posts are read by
+a new Apify actor (see below).
 
 ### Explicitly out of scope (do not touch)
 
 | Thing | Where | Why |
 |---|---|---|
 | Deepgram | `app/api/ideas/live-count/route.ts` | Live word counter only. Task 86d3ymar8 says leave intact. Note: no Deepgram key is provisioned yet — the route documents this. |
-| Apify | `lib/ai/competitorReelsApify.ts`, `lib/ai/instagramMedia.ts`, `lib/ai/tiktokMedia.ts`, `lib/insights/apifyInsights.ts` | Scraping, not inference. Leave intact. |
+| Apify | `lib/ai/competitorReelsApify.ts`, `lib/ai/instagramMedia.ts`, `lib/ai/tiktokMedia.ts`, `lib/ai/threadsPost.ts`, `lib/insights/apifyInsights.ts` | Scraping, not inference. Leave intact. |
 
 ### Env vars in play
 
 | Var | Used by | Status |
 |---|---|---|
-| `GROQ_API_KEY` | call sites 1–5, 7–9 | live |
-| `GROQ_MODEL` | optional override for 1–5 | optional |
+| `GROQ_API_KEY` | call sites 1–5, 7–10 | live |
+| `GROQ_MODEL` | optional override for 1–5, 10 | optional |
 | `GEMINI_API_KEY` | call site 6 | live |
 | `OPENROUTER_API_KEY` | *nothing yet* | to be added |
 | `APIFY_TOKEN` | Apify (out of scope) | live |
+| `APIFY_THREADS_ACTOR_ID` | Threads post scraping (repurposing) | optional — defaults to `logical_scrapers/threads-post-scraper` |
 
 ---
 
@@ -63,6 +88,7 @@ still produce a valid-looking app result, because the normalizer silently fixes 
 | Carousel | `lib/ai/carouselRantPostProcess.ts` | Forces slide 1 → `cover`, last → `cta`; rewrites adjacent `statement` → `content`; caps `statement` at 2; drops unknown types/icons |
 | Reel | `flattenToSceneDrafts` in `lib/ai/rantToScript.ts` | Drops middle scenes that duplicate the hook/CTA or are labelled as one |
 | Storytelling | `lib/ai/storiesNormalize.ts` | Clamps to 10 slides/day and 7 days; forces slide 1 visual + no CTA; force-plants `Стікер` on slide 2 if missing; strips `Заклик в директ` everywhere then plants it on the final slide only; substitutes placeholder text for empty fields |
+| Threads (repurpose) | `lib/ai/threadNormalize.ts` | Strips "1/7"-style counters the prompt bans; clamps every post to Threads' 500-char limit; drops empty/non-string entries; caps the chain at 8 posts |
 
 **Therefore the bake-off scores RAW model output, not normalized output.** Post-normalization
 everything looks compliant; the raw JSON is where the drift is visible. The harness records both.
@@ -561,6 +587,113 @@ file=<binary>
 **Migration risk:** call site 9 records the provider string `groq:whisper-large-v3-turbo` into
 `idea_scans` rows. Changing the provider changes that stored value — check whether anything
 reads it before swapping.
+
+Call site 8 is also what repurposing uses for Instagram/TikTok sources, and for a Threads post
+that turns out to be a text-free video.
+
+---
+
+### 10. Repurpose → Threads post
+
+- **File:** `lib/ai/repurposeToThread.ts` (`buildThreadSystemPrompt`, `buildThreadUserContent`)
+- **Language:** same `detectOutputLanguage` heuristic as 1–3 (imported from `carouselPrompt`).
+- Output is clamped by `lib/ai/threadNormalize.ts` before it reaches the UI.
+
+`${languageRule}` is one of:
+- `uk` → `МОВА ВІДПОВІДІ: українська. Усі пости — українською. НІКОЛИ не російська.`
+- `en` → `МОВА ВІДПОВІДІ: англійська. Усі пости — англійською.`
+
+**System prompt:**
+
+```
+Ти пишеш тред у Threads для ОСОБИСТОГО бренду. Ти — голос самого автора: він ділиться власним досвідом, живо, чесно, з самоіронією. Не копірайтер-агенція, не коуч, не ШІ-асистент.
+
+${languageRule}
+
+══════════════════════════════
+ЩО ТАКЕ ТРЕД
+══════════════════════════════
+
+Тред — це ЛАНЦЮЖОК коротких постів. Кожен пост — максимум 500 символів (жорсткий ліміт платформи), у нормі 150–350.
+
+- ПОСТ 1 — тримає сам по собі. Це не «зараз розкажу» і не заголовок: це вже думка, з якої видно, про що мова, і яку хочеться дочитати. Ніяких «тред 🧵», «1/7», «поїхали».
+- ПОСТИ 2…N — кожен несе ОДНУ думку і заробляє наступний тап. Не переказуй попередній пост, рухай далі.
+- ОСТАННІЙ — м'яко замикає: висновок + одне живе запитання до читача (а не «підписуйся, якщо сподобалось»).
+
+══════════════════════════════
+ЯК ПИСАТИ
+══════════════════════════════
+
+- Коротко, розмовно, від першої особи. Так, як людина пише в телефоні, а не як пишуть у блозі.
+- Абзаци всередині поста — можна, через порожній рядок. Довгих полотен — ні.
+- Емодзі — рідко й доречно. Хештеги — не більше одного, і лише якщо він справді щось означає.
+- Нумерацію постів («1/5») НЕ пиши: у Threads пости і так ідуть по черзі.
+- НЕ вигадуй фактів, цифр, кейсів та імен, яких немає в оригіналі. Чого не знаєш — залиш у [квадратних дужках] як чесний плейсхолдер.
+
+══════════════════════════════
+КІЛЬКІСТЬ
+══════════════════════════════
+
+Від 2 до 8 постів. Стільки, скільки треба думці — не більше.
+
+══════════════════════════════
+ФОРМАТ ВІДПОВІДІ
+══════════════════════════════
+
+Лише JSON, без markdown і без тексту поза JSON:
+
+{
+  "title": "коротка назва треду (до 60 символів, для списку в застосунку)",
+  "posts": ["текст першого поста", "текст другого поста"]
+}
+```
+
+**User message** (`${brief}` = the output of `composeRepurposeBrief`, `${languageHint}` =
+`Пиши пости українською.` / `Write the posts in English.`):
+
+```
+${brief}
+
+Зроби з цього тред у Threads за правилами вище. ${languageHint}
+```
+
+---
+
+### The repurposing brief (shared by call sites 1–3 and 10)
+
+Built by `composeRepurposeBrief` in `lib/repurpose/compose.ts`. The transcript is clipped to
+12 000 chars and the caption to 1 200.
+
+```
+РЕПУРПОСИНГ: нижче — вже опублікований пост (${sourceLabel}). Перероби його в новий формат.
+${targetLine}
+
+ПРАВИЛА:
+- Це НЕ переклад і не переказ слово в слово. Візьми головну думку, аргументи й голос автора — і збери їх заново під новий формат.
+- Не вигадуй фактів, цифр, імен і кейсів, яких немає в оригіналі. Якщо чогось бракує — залиш чесний плейсхолдер у [дужках].
+- Пиши мовою оригіналу.
+- Те, що працювало лише у старому форматі (звертання «дивись на екран», музика, монтажні підказки), — прибирай.
+- Нижче автоматична транскрипція мовлення: дрібні помилки розпізнавання ігноруй, орієнтуйся на зміст.   ← video sources only
+
+Джерело: ${sourceUrl}
+Автор оригіналу: @${handle}                                                                              ← when the scrape returned one
+
+ОРИГІНАЛ:
+"""
+${text}
+"""
+
+ПІДПИС ПІД ОРИГІНАЛОМ:                                                                                   ← when a video had a caption
+"""
+${caption}
+"""
+```
+
+`${targetLine}` is one of:
+- `Новий формат: КАРУСЕЛЬ для Instagram.`
+- `Новий формат: СЦЕНАРІЙ РІЛСУ (відео на 30–90 секунд).`
+- `Новий формат: СТОРІТЕЛІНГ у сторіс.`
+- `Новий формат: ТЕКСТОВИЙ ПОСТ (тред) у Threads.`
 
 ---
 

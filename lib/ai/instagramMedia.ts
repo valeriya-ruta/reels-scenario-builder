@@ -84,6 +84,35 @@ function pickMediaUrl(item: Record<string, unknown>): string | null {
   return pickBestMediaUrl(collectFromKeys(item, ['displayUrl', 'display_url']));
 }
 
+/** The reel's caption, wherever this actor's item shape happens to keep it. */
+function pickCaption(item: Record<string, unknown>): string | null {
+  const caption = item.caption;
+  if (typeof caption === 'string' && caption.trim()) return caption.trim();
+  if (caption && typeof caption === 'object' && 'text' in caption) {
+    const text = (caption as { text?: unknown }).text;
+    if (typeof text === 'string' && text.trim()) return text.trim();
+  }
+  for (const key of ['title', 'text', 'description']) {
+    const value = item[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+/** @handle of the reel's owner, when the actor returned one. */
+function pickAuthorHandle(item: Record<string, unknown>): string | null {
+  for (const key of ['ownerUsername', 'owner_username', 'username', 'authorName']) {
+    const value = item[key];
+    if (typeof value === 'string' && value.trim()) return `@${value.trim().replace(/^@/, '')}`;
+  }
+  const owner = item.owner ?? item.user;
+  if (owner && typeof owner === 'object') {
+    const value = (owner as { username?: unknown }).username;
+    if (typeof value === 'string' && value.trim()) return `@${value.trim().replace(/^@/, '')}`;
+  }
+  return null;
+}
+
 export interface InstagramMediaResult {
   normalizedUrl: string;
   mediaUrl: string;
@@ -91,6 +120,10 @@ export interface InstagramMediaResult {
   attemptCount: number;
   firstAttemptAt: string;
   lastAttemptAt: string;
+  /** Caption text, when the scrape carried one (repurposing reads it). */
+  caption: string | null;
+  /** @handle of the author, when the scrape carried one. */
+  authorHandle: string | null;
 }
 
 export class InstagramReferenceInputError extends Error {}
@@ -229,7 +262,8 @@ export async function resolveInstagramMediaUrl(reelUrl: string): Promise<Instagr
     throw new InstagramReferenceNoVideoError(REFERENCE_NO_VIDEO_MESSAGE);
   }
 
-  const mediaUrl = pickMediaUrl(data[0] as Record<string, unknown>);
+  const item = data[0] as Record<string, unknown>;
+  const mediaUrl = pickMediaUrl(item);
   if (!mediaUrl) {
     throw new InstagramReferenceNoVideoError(REFERENCE_NO_VIDEO_MESSAGE);
   }
@@ -241,5 +275,7 @@ export async function resolveInstagramMediaUrl(reelUrl: string): Promise<Instagr
     attemptCount,
     firstAttemptAt,
     lastAttemptAt: new Date().toISOString(),
+    caption: pickCaption(item),
+    authorHandle: pickAuthorHandle(item),
   };
 }

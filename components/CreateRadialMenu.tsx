@@ -11,9 +11,14 @@ import BlurScrim from '@/components/BlurScrim';
  * unchanged; only the button positions changed (see `bubblePositions`).
  *
  * Layout:
- *      [Сторіс]                ← rises directly above Карусель
+ *      [Переробити] [Сторіс]   ← upper row: above Рілс and above Карусель
  *   [Ідея] [Рілс] [Карусель]   ← horizontal row just above the FAB
  *            [ + ]             ← FAB (centred)
+ *
+ * Переробити (repurposing an existing post) joined the upper row rather than
+ * extending the bottom one: the bottom row is the "make something new" row and
+ * is already as wide as a phone allows, while the upper row had a free slot
+ * directly above Рілс at the same rise as Сторіс.
  *
  * Interaction is owned by the parent (BottomNav): this component is presentational.
  * It reports taps / backdrop dismiss back up and reflects the glide-armed bubble
@@ -21,7 +26,7 @@ import BlurScrim from '@/components/BlurScrim';
  * component the braindump / export overlays use) — no parallel scrim.
  */
 
-export type RadialOptionId = 'reels' | 'carousel' | 'stories' | 'ideas';
+export type RadialOptionId = 'reels' | 'carousel' | 'stories' | 'ideas' | 'repurpose';
 
 export interface RadialOption {
   id: RadialOptionId;
@@ -31,13 +36,16 @@ export interface RadialOption {
   color: string;
 }
 
-/** Menu order, FAB-nearest → far: Ідея → Рілс → Карусель → Сторіс. Bubble
- *  colours / icons / labels are each type's existing values — unchanged. */
+/** Menu order, FAB-nearest → far: Ідея → Рілс → Карусель → Сторіс → Переробити.
+ *  Bubble colours / icons / labels are each type's existing values — unchanged.
+ *  Переробити is last (it acts on something that already exists, so it is never
+ *  the first thing offered) and carries the app's neutral accent. */
 export const RADIAL_OPTIONS: RadialOption[] = [
   { id: 'ideas', label: 'Ідея', icon: 'lightbulb_2', color: '#5F5E5A' },
   { id: 'reels', label: 'Рілс', icon: 'movie', color: '#534AB7' },
   { id: 'carousel', label: 'Карусель', icon: 'view_carousel', color: '#185FA5' },
   { id: 'stories', label: 'Сторіс', icon: 'auto_stories', color: '#D85A30' },
+  { id: 'repurpose', label: 'Переробити', icon: 'autorenew', color: '#2F7D6B' },
 ];
 
 /** Bubble = 46px circle; the column is wider so the label can sit centred above. */
@@ -53,7 +61,7 @@ const CLOSE_MS = 200;
  * L-shape geometry (anchor = FAB centre), task 86d3cqd67 — POSITIONS ONLY.
  *   bottom arm: Ідея · Рілс · Карусель in a horizontal row just above the FAB
  *               (Ідея ~15px left of the FAB centre);
- *   vertical arm: Сторіс rises directly above Карусель.
+ *   upper arm:  Сторіс above Карусель, Переробити above Рілс (same rise).
  * The stepped corner points back at the + so the menu reads as growing from it.
  */
 const ROW_GAP_PX = 67; // horizontal centre-to-centre between row bubbles
@@ -78,9 +86,16 @@ export interface BubblePos {
 /** Computes the on-screen center of each bubble for a given FAB anchor point. */
 export function bubblePositions(anchor: { x: number; y: number }): BubblePos[] {
   const vw = typeof window === 'undefined' ? 390 : window.innerWidth;
-  // dx/dy per menu index: [Ідея, Рілс, Карусель, Сторіс].
-  const dx = [IDEA_DX, IDEA_DX + ROW_GAP_PX, IDEA_DX + 2 * ROW_GAP_PX, IDEA_DX + 2 * ROW_GAP_PX];
-  const dy = [ROW_DY, ROW_DY, ROW_DY, ROW_DY - STORIS_RISE];
+  // dx/dy per menu index: [Ідея, Рілс, Карусель, Сторіс, Переробити] — same
+  // order as RADIAL_OPTIONS, which is what indexes into these.
+  const dx = [
+    IDEA_DX,
+    IDEA_DX + ROW_GAP_PX,
+    IDEA_DX + 2 * ROW_GAP_PX,
+    IDEA_DX + 2 * ROW_GAP_PX,
+    IDEA_DX + ROW_GAP_PX,
+  ];
+  const dy = [ROW_DY, ROW_DY, ROW_DY, ROW_DY - STORIS_RISE, ROW_DY - STORIS_RISE];
   // Keep the right column (Карусель/Сторіс) on-screen: shift the whole L left if it would overflow.
   // The +30px nudge is part of the on-screen position, so include it here too.
   const rightMostX = anchor.x + MENU_NUDGE_X + IDEA_DX + 2 * ROW_GAP_PX + BUBBLE_PX / 2;

@@ -8,12 +8,14 @@ import MaterialIcon from '@/components/ui/MaterialIcon';
 import { RADIAL_OPTIONS, type RadialOptionId } from '@/components/CreateRadialMenu';
 import { CONTENT_TYPES } from '@/lib/contentTypes';
 import { OPEN_BRAINDUMP_FRESH_EVENT } from '@/lib/content/braindumpIdeaEvent';
+import { dispatchOpenRepurpose } from '@/lib/content/repurposeEvent';
 
 /**
  * "＋ Створити" for the План calendar detail panel (task 86d3d23nj). Opens a
- * bottom sheet with the same four create options as the FAB (Ідея → braindump,
- * Рілс / Карусель / Сторіс → their create flow), matching the app-wide sheet
- * language. Shown on any selected day, full or empty.
+ * bottom sheet with the same create options as the FAB (Ідея → braindump,
+ * Переробити → repurpose overlay, Рілс / Карусель / Сторіс → their create
+ * flow), matching the app-wide sheet language. Shown on any selected day, full
+ * or empty.
  */
 export default function PlanCreateMenu() {
   const [open, setOpen] = useState(false);
@@ -23,6 +25,10 @@ export default function PlanCreateMenu() {
     setOpen(false);
     if (id === 'ideas') {
       window.dispatchEvent(new CustomEvent(OPEN_BRAINDUMP_FRESH_EVENT));
+      return;
+    }
+    if (id === 'repurpose') {
+      dispatchOpenRepurpose();
       return;
     }
     router.push(CONTENT_TYPES[id].createHref);

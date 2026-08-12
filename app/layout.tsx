@@ -42,7 +42,7 @@ export default async function RootLayout({
         {/* Material Symbols, subset to the icons the app actually renders. */}
         <link
           rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:FILL@0..1&icon_names=view_carousel,movie,auto_stories,lightbulb_2&display=block"
+          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:FILL@0..1&icon_names=view_carousel,movie,auto_stories,lightbulb_2,autorenew,alternate_email&display=block"
         />
       </head>
       <body className="antialiased" style={{ background: 'var(--canvas)', color: 'var(--foreground)' }}>

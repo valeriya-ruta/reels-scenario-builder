@@ -2,11 +2,12 @@
 
 import { useState, useRef, useEffect, type ComponentType } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { Plus, ChevronDown, Mic, Play, LayoutGrid, Circle, type LucideIcon } from 'lucide-react';
+import { Plus, ChevronDown, Mic, Play, LayoutGrid, Circle, RefreshCw, type LucideIcon } from 'lucide-react';
 import { createClient } from '@/lib/supabaseClient';
 import { useNavBadges, type NavBadgeKey } from '@/components/NavBadgeContext';
 import { CONTENT_TYPES } from '@/lib/contentTypes';
 import { OPEN_BRAINDUMP_FRESH_EVENT } from '@/lib/content/braindumpIdeaEvent';
+import { dispatchOpenRepurpose } from '@/lib/content/repurposeEvent';
 
 interface SidebarProps {
   userName?: string | null;
@@ -49,15 +50,17 @@ const navItems: NavItem[] = [
 ];
 
 /**
- * Desktop equivalent of the mobile ➕ FAB radial menu (task 86d3d2t4j): the 4
+ * Desktop equivalent of the mobile ➕ FAB radial menu (task 86d3d2t4j): the
  * create options, expressed as children of a collapsible "Створювати" sidebar
  * group. Each reuses the EXACT flow the mobile FAB launches — Наговорити opens
- * the shared braindump overlay (via OPEN_BRAINDUMP_FRESH_EVENT), the other three
+ * the shared braindump overlay (via OPEN_BRAINDUMP_FRESH_EVENT), Переробити the
+ * shared repurpose overlay (via OPEN_REPURPOSE_EVENT), and the other three
  * navigate to their existing create routes (CONTENT_TYPES[*].createHref). No new
  * create logic. Icons/colours mirror the radial menu options.
  */
 type CreateOption = { id: string; label: string; Icon: LucideIcon; color: string } & (
   | { kind: 'braindump' }
+  | { kind: 'repurpose' }
   | { kind: 'route'; href: string }
 );
 
@@ -87,6 +90,9 @@ const createOptions: CreateOption[] = [
     kind: 'route',
     href: CONTENT_TYPES.stories.createHref,
   },
+  // Last, like in the radial menu: it acts on a post that already exists, so it
+  // is never the first thing offered.
+  { id: 'repurpose', label: 'Переробити пост', Icon: RefreshCw, color: '#2F7D6B', kind: 'repurpose' },
 ];
 
 export default function Sidebar({ userName, userEmail }: SidebarProps) {
@@ -112,6 +118,11 @@ export default function Sidebar({ userName, userEmail }: SidebarProps) {
     if (opt.kind === 'braindump') {
       // Opens the shared braindump overlay owned by BottomNav (same as mobile FAB).
       window.dispatchEvent(new Event(OPEN_BRAINDUMP_FRESH_EVENT));
+      return;
+    }
+    if (opt.kind === 'repurpose') {
+      // Same overlay the mobile FAB's Переробити opens, also owned by BottomNav.
+      dispatchOpenRepurpose();
       return;
     }
     router.push(opt.href);
