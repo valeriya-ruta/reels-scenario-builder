@@ -2,6 +2,7 @@ import 'server-only';
 
 import { optionalServerEnv, requireServerEnv } from '@/lib/env';
 import { isAbsoluteHttpUrlString } from '@/lib/isAbsoluteHttpUrl';
+import { extractThreadsPostUrl, isThreadsShortLink } from '@/lib/repurpose/sourceUrl';
 
 /**
  * Threads post → text, via Apify (the SAME token/pattern the Instagram and
@@ -28,6 +29,14 @@ const THREADS_NOT_FOUND_MESSAGE =
   'Не вдалося прочитати цей пост у Threads. Можливо, він видалений, акаунт закритий, або посилання неповне.';
 const THREADS_EMPTY_MESSAGE =
   'У цьому пості немає тексту, який можна переробити. Спробуй пост із текстом.';
+const THREADS_SHARE_UNRESOLVED_MESSAGE =
+  'Не вдалося розгорнути це коротке посилання Threads. Відкрий пост і скопіюй повне посилання — те, що містить @нік і /post/.';
+
+/** Following a share link is one hop; it must not eat the request budget. */
+const SHARE_RESOLVE_TIMEOUT_MS = 15_000;
+/** Meta serves short links differently to obvious bots. */
+const BROWSER_UA =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
 
 export class ThreadsPostNotFoundError extends Error {}
 export class ThreadsPostEmptyError extends Error {}
@@ -108,6 +117,46 @@ function selfContinuation(item: unknown, authorHandle: string): string[] {
   return rows.map((r) => str(r.text)).filter(Boolean);
 }
 
+/**
+ * Turn a short Threads link into the post URL the scraper can actually read.
+ *
+ * `/share/CODE` is what the Threads Share button produces, so it is the link
+ * people paste — and the scraper returns nothing for it (verified: zero dataset
+ * items for a share URL, a full post for the canonical one it redirects to).
+ * So follow the hop ourselves before spending an actor run.
+ *
+ * Two ways to read the answer, because Meta may serve either: the HTTP redirect
+ * chain (`res.url`), or an interstitial page whose `<link rel="canonical">` /
+ * `og:url` still names the post. A full post URL passes straight through
+ * untouched, so this costs nothing in the normal case.
+ */
+export async function resolveThreadsPostUrl(postUrl: string): Promise<string> {
+  if (!isThreadsShortLink(postUrl)) return postUrl;
+
+  try {
+    const res = await fetch(postUrl, {
+      redirect: 'follow',
+      headers: { 'user-agent': BROWSER_UA, 'accept-language': 'uk,en;q=0.8' },
+      signal: AbortSignal.timeout(SHARE_RESOLVE_TIMEOUT_MS),
+    });
+
+    const fromRedirect = extractThreadsPostUrl(res.url);
+    if (fromRedirect) return fromRedirect;
+
+    const body = await res.text();
+    const canonical = body.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i)?.[1];
+    const ogUrl = body.match(/<meta[^>]+property=["']og:url["'][^>]+content=["']([^"']+)["']/i)?.[1];
+    for (const candidate of [canonical, ogUrl, body]) {
+      const found = candidate ? extractThreadsPostUrl(candidate) : null;
+      if (found) return found;
+    }
+  } catch (error) {
+    console.error('[threads] share link resolve failed', error);
+  }
+
+  throw new ThreadsPostNotFoundError(THREADS_SHARE_UNRESOLVED_MESSAGE);
+}
+
 async function runActor(postUrl: string): Promise<unknown> {
   const token = requireServerEnv('APIFY_TOKEN');
   const actorId = optionalServerEnv('APIFY_THREADS_ACTOR_ID') || DEFAULT_THREADS_POST_ACTOR;
@@ -153,7 +202,8 @@ async function runActor(postUrl: string): Promise<unknown> {
  * repurposable (the caller transcribes it), so it is not an error here.
  */
 export async function fetchThreadsPost(postUrl: string): Promise<ThreadsPostResult> {
-  const data = await runActor(postUrl);
+  const resolvedUrl = await resolveThreadsPostUrl(postUrl);
+  const data = await runActor(resolvedUrl);
 
   const items = Array.isArray(data) ? data : [data];
   const item = items.find((entry) => pickThread(entry) !== null);
@@ -175,6 +225,8 @@ export async function fetchThreadsPost(postUrl: string): Promise<ThreadsPostResu
     text,
     authorHandle: authorHandle ? `@${authorHandle}` : null,
     videoUrl,
-    normalizedUrl: str(thread.url) || postUrl,
+    // Never hand back the short link: what gets stored with the generated piece
+    // should be the post itself.
+    normalizedUrl: str(thread.url) || resolvedUrl,
   };
 }

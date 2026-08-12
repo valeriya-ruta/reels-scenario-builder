@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test';
-import { detectRepurposeSource } from '../lib/repurpose/sourceUrl';
+import {
+  detectRepurposeSource,
+  extractThreadsPostUrl,
+  isThreadsShortLink,
+} from '../lib/repurpose/sourceUrl';
 import { composeRepurposeBrief, repurposeSourceTitle } from '../lib/repurpose/compose';
 import {
   TARGETS_BY_SOURCE,
@@ -61,6 +65,47 @@ test.describe('repurpose — link detection', () => {
       expect(result.kind).toBe('threads');
       expect(result.canonicalUrl).toBe(canonical);
     }
+  });
+
+  test('the Threads Share button link (/share/CODE) is accepted', () => {
+    // This is the form the Threads app's own Share button produces, so it is the
+    // one people actually paste. Verified against the live post it points at:
+    // https://www.threads.com/share/E5EFVECg0/ → @kristinagalinich/post/Db6SakDkdz7
+    for (const url of [
+      'https://www.threads.com/share/E5EFVECg0/',
+      'https://www.threads.net/share/E5EFVECg0',
+      'threads.com/share/E5EFVECg0/?xmt=abc',
+    ]) {
+      const result = detectRepurposeSource(url);
+      expect(result.ok, url).toBe(true);
+      if (!result.ok) continue;
+      expect(result.kind).toBe('threads');
+      // The short link is kept as-is: only the server can follow the redirect.
+      expect(result.canonicalUrl).toBe('https://www.threads.com/share/E5EFVECg0');
+      expect(isThreadsShortLink(result.canonicalUrl)).toBe(true);
+    }
+  });
+
+  test('short links are flagged for server-side resolution; full posts are not', () => {
+    expect(isThreadsShortLink('https://www.threads.com/share/E5EFVECg0/')).toBe(true);
+    expect(isThreadsShortLink('https://www.threads.net/t/DFa1b2C')).toBe(true);
+    expect(isThreadsShortLink('https://www.threads.com/@ruta/post/DFa1b2C')).toBe(false);
+    expect(isThreadsShortLink('https://www.instagram.com/reel/Cxyz123/')).toBe(false);
+    expect(isThreadsShortLink('не посилання')).toBe(false);
+  });
+
+  test('the canonical post URL is recovered from a redirect target or page markup', () => {
+    expect(
+      extractThreadsPostUrl(
+        'https://www.threads.com/@kristinagalinich/post/Db6SakDkdz7?xmt=AQG0yZWrsGONMJ3Q',
+      ),
+    ).toBe('https://www.threads.com/@kristinagalinich/post/Db6SakDkdz7');
+    // threads.net markup still yields a threads.com URL, which is what the scraper wants.
+    expect(
+      extractThreadsPostUrl('<link rel="canonical" href="https://www.threads.net/@ruta/post/DFa1b2C" />'),
+    ).toBe('https://www.threads.com/@ruta/post/DFa1b2C');
+    expect(extractThreadsPostUrl('https://www.threads.com/share/E5EFVECg0/')).toBeNull();
+    expect(extractThreadsPostUrl('')).toBeNull();
   });
 
   test('TikTok videos are read as a tiktok source', () => {

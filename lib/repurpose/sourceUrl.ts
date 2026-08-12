@@ -48,17 +48,47 @@ function isTiktokHost(hostname: string): boolean {
   return TIKTOK_EXACT_HOSTS.has(h) || h.endsWith('.tiktok.com');
 }
 
+/** A full Threads post path — the only form the scraper can read directly. */
+const THREADS_POST_PATH_RE = /\/(@[A-Za-z0-9._]+)\/post\/([A-Za-z0-9_-]+)/;
+/** Short forms that only REDIRECT to a post: `/share/CODE` and `/t/CODE`. */
+const THREADS_SHORT_PATH_RE = /^\/(?:share|t)\/([A-Za-z0-9_-]+)/;
+
 /**
- * Threads post paths: `/@handle/post/CODE` (the shared form) and `/t/CODE` (the
- * short form). A bare `/@handle` is a profile, which is NOT a repurposable post.
+ * Threads post paths.
+ *
+ * Three shapes reach us, and the difference matters downstream: `/@handle/post/CODE`
+ * is what the scraper can read as-is, while `/share/CODE` (what the app's own
+ * Share button produces, so it is the one people actually paste) and the older
+ * `/t/CODE` are short links that only redirect to it — those are resolved
+ * server-side before scraping. A bare `/@handle` is a profile, not a post.
  */
 function parseThreadsPath(pathname: string): { canonicalPath: string } | null {
   const path = pathname.replace(/\/+/g, '/').replace(/\/$/, '');
-  const full = path.match(/^\/(@[^/]+)\/post\/([A-Za-z0-9_-]+)/);
+  const full = path.match(THREADS_POST_PATH_RE);
   if (full) return { canonicalPath: `/${full[1]}/post/${full[2]}` };
-  const short = path.match(/^\/t\/([A-Za-z0-9_-]+)/);
-  if (short) return { canonicalPath: `/t/${short[1]}` };
+  const short = path.match(THREADS_SHORT_PATH_RE);
+  if (short) return { canonicalPath: path };
   return null;
+}
+
+/** True when this Threads URL still has to be followed to reach the real post. */
+export function isThreadsShortLink(url: string): boolean {
+  try {
+    return THREADS_SHORT_PATH_RE.test(new URL(withProtocol(cleanupPastedUrl(url))).pathname);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Pull the canonical `https://www.threads.com/@handle/post/CODE` out of anything
+ * that contains one — a redirect target, a `<link rel="canonical">`, an `og:url`.
+ * Used to turn a followed share link back into a URL the scraper accepts.
+ */
+export function extractThreadsPostUrl(text: string): string | null {
+  const match = text.match(THREADS_POST_PATH_RE);
+  if (!match) return null;
+  return `https://www.threads.com/${match[1]}/post/${match[2]}`;
 }
 
 /** TikTok post paths: `/@handle/video/ID`, `/v/ID`, or a vm/vt short link. */
