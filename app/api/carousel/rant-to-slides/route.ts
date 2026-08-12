@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireServerEnv } from '@/lib/env';
-import { GROQ_TEXT_MODEL } from '@/lib/ai/groqModel';
+import {
+  OPENROUTER_CHAT_URL,
+  OPENROUTER_TEXT_MODEL,
+  openRouterJsonHeaders,
+  requireOpenRouterKey,
+} from '@/lib/ai/openrouter';
 import { postProcessCarouselRant } from '@/lib/ai/carouselRantPostProcess';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import { aiLimit } from '@/lib/ratelimit';
@@ -160,16 +164,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const apiKey = requireServerEnv('GROQ_API_KEY');
+  const apiKey = requireOpenRouterKey();
 
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+  const res = await fetch(OPENROUTER_CHAT_URL, {
     method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${apiKey}`,
-    },
+    headers: openRouterJsonHeaders(apiKey),
     body: JSON.stringify({
-      model: GROQ_TEXT_MODEL,
+      model: OPENROUTER_TEXT_MODEL,
       temperature: 0.7,
       max_tokens: 3000,
       response_format: { type: 'json_object' },
@@ -182,7 +183,7 @@ export async function POST(req: NextRequest) {
 
   if (!res.ok) {
     const errText = await res.text();
-    console.error('[carousel/rant-to-slides] Groq error:', res.status, errText);
+    console.error('[carousel/rant-to-slides] OpenRouter error:', res.status, errText);
     return NextResponse.json({ error: 'Не вдалося згенерувати слайди' }, { status: 502 });
   }
 

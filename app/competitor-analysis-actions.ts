@@ -14,6 +14,8 @@ import {
   getActorRun,
   startCompetitorActorRun,
 } from '@/lib/ai/competitorReelsApify';
+import { OPENROUTER_STT_MODEL, requireOpenRouterKey } from '@/lib/ai/openrouter';
+import { postTranscription } from '@/lib/ai/sttProvider';
 import { splitTranscriptIntoScenes } from '@/lib/ai/sceneSegmentation';
 import { templatizeTranscriptToScenes } from '@/lib/ai/transcriptToTemplate';
 import {
@@ -36,11 +38,11 @@ const TRANSCRIPTION_MAX_ATTEMPTS = 3;
 const TRANSCRIPTION_TIMEOUT_MS = 60_000;
 const TRANSCRIPTION_BACKOFF_MS = [1_000, 3_000, 7_000] as const;
 const TRANSCRIPTION_CONCURRENCY = 3;
-const IDEAS_TRANSCRIPTION_PROVIDER = 'groq:whisper-large-v3-turbo';
+const IDEAS_TRANSCRIPTION_PROVIDER = `openrouter:${OPENROUTER_STT_MODEL}`;
 const FALLBACK_TRANSCRIPT_MESSAGE =
   'Йой, щось пішло не так! Рута вже знає про це і біжить виправляти. А поки ти чекаєш — ось текст під відео:';
 
-interface GroqTranscriptionResponse {
+interface SttTranscriptionResponse {
   text?: string;
 }
 
@@ -66,29 +68,16 @@ async function transcribeCompetitorMediaFromUrl(url: string): Promise<string> {
   }
 
   const videoBuffer = Buffer.from(videoArrayBuffer);
-  const apiKey = requireServerEnv('GROQ_API_KEY');
-  const formData = new FormData();
-  formData.append('model', 'whisper-large-v3-turbo');
-  formData.append('response_format', 'verbose_json');
-  formData.append('temperature', '0');
-  formData.append(
-    'file',
-    new File([new Uint8Array(videoBuffer)], 'reel.mp4', { type: contentType })
-  );
+  const apiKey = requireOpenRouterKey();
+  const upload = new File([new Uint8Array(videoBuffer)], 'reel.mp4', { type: contentType });
 
-  const sttRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: formData,
-  });
+  const sttRes = await postTranscription(apiKey, upload);
   if (!sttRes.ok) {
     const body = await sttRes.text();
     throw new Error(`Помилка транскрипції (${sttRes.status}): ${body.slice(0, 500)}`);
   }
 
-  const parsed = (await sttRes.json()) as GroqTranscriptionResponse;
+  const parsed = (await sttRes.json()) as SttTranscriptionResponse;
   const transcript = (parsed.text ?? '').trim();
   if (!transcript) {
     throw new Error('Transcript is empty. Try another reel URL.');

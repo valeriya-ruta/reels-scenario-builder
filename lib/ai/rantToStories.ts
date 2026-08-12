@@ -1,5 +1,9 @@
-import { requireServerEnv } from '@/lib/env';
-import { GROQ_TEXT_MODEL } from '@/lib/ai/groqModel';
+import {
+  OPENROUTER_CHAT_URL,
+  OPENROUTER_TEXT_MODEL,
+  openRouterJsonHeaders,
+  requireOpenRouterKey,
+} from '@/lib/ai/openrouter';
 import { normalizeOutput } from '@/lib/ai/storiesNormalize';
 import type { StoriesOutput } from '@/lib/ai/storiesNormalize';
 
@@ -13,7 +17,7 @@ export type {
   StoriesOutput,
 } from '@/lib/ai/storiesNormalize';
 
-interface GroqResponse {
+interface ChatCompletionResponse {
   choices?: Array<{
     message?: { content?: string };
   }>;
@@ -149,15 +153,12 @@ export async function generateStoriesFromRant(rant: string, name = ''): Promise<
   }
   const outputLanguage = detectOutputLanguage(trimmed);
 
-  const apiKey = requireServerEnv('GROQ_API_KEY');
-  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+  const apiKey = requireOpenRouterKey();
+  const response = await fetch(OPENROUTER_CHAT_URL, {
     method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${apiKey}`,
-    },
+    headers: openRouterJsonHeaders(apiKey),
     body: JSON.stringify({
-      model: GROQ_TEXT_MODEL,
+      model: OPENROUTER_TEXT_MODEL,
       temperature: 0.7,
       response_format: { type: 'json_object' },
       messages: [
@@ -169,11 +170,11 @@ export async function generateStoriesFromRant(rant: string, name = ''): Promise<
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('[rantToStories] Groq error:', response.status, errorText);
+    console.error('[rantToStories] OpenRouter error:', response.status, errorText);
     throw new Error('Не вдалося згенерувати сценарій. Спробуй ще раз.');
   }
 
-  const payload = (await response.json()) as GroqResponse;
+  const payload = (await response.json()) as ChatCompletionResponse;
   const rawText = payload.choices?.[0]?.message?.content?.trim();
   if (!rawText) {
     throw new Error('AI повернув порожню відповідь. Спробуй ще раз.');

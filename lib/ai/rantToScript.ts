@@ -1,5 +1,9 @@
-import { requireServerEnv } from '@/lib/env';
-import { GROQ_TEXT_MODEL } from '@/lib/ai/groqModel';
+import {
+  OPENROUTER_CHAT_URL,
+  OPENROUTER_TEXT_MODEL,
+  openRouterJsonHeaders,
+  requireOpenRouterKey,
+} from '@/lib/ai/openrouter';
 
 export interface RantSceneDraft {
   text: string;
@@ -186,17 +190,14 @@ function flattenToSceneDrafts(parsed: RantResponse, outputLanguage: OutputLangua
 export async function transformRantToScript(
   rant: string
 ): Promise<{ title: string; scenes: RantSceneDraft[] }> {
-  const apiKey = requireServerEnv('GROQ_API_KEY');
+  const apiKey = requireOpenRouterKey();
   const outputLanguage = detectOutputLanguage(rant);
 
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+  const res = await fetch(OPENROUTER_CHAT_URL, {
     method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${apiKey}`,
-    },
+    headers: openRouterJsonHeaders(apiKey),
     body: JSON.stringify({
-      model: GROQ_TEXT_MODEL,
+      model: OPENROUTER_TEXT_MODEL,
       temperature: 0.7,
       response_format: { type: 'json_object' },
       messages: [
@@ -208,7 +209,7 @@ export async function transformRantToScript(
 
   if (!res.ok) {
     const body = await res.text();
-    console.error('[rant-to-script] Groq HTTP error:', res.status, body);
+    console.error('[rant-to-script] OpenRouter HTTP error:', res.status, body);
     throw new Error('Щось пішло не так. Спробуй ще раз.');
   }
 

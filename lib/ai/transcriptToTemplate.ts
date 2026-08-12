@@ -1,5 +1,9 @@
-import { requireServerEnv } from '@/lib/env';
-import { GROQ_TEXT_MODEL } from '@/lib/ai/groqModel';
+import {
+  OPENROUTER_CHAT_URL,
+  OPENROUTER_TEXT_MODEL,
+  openRouterJsonHeaders,
+  requireOpenRouterKey,
+} from '@/lib/ai/openrouter';
 
 export interface TemplateSceneDraft {
   text: string;
@@ -74,7 +78,7 @@ export async function templatizeTranscriptToScenes(
   transcript: string,
   context?: TemplatizeReferenceContext
 ): Promise<{ title: string; scenes: TemplateSceneDraft[] }> {
-  const apiKey = requireServerEnv('GROQ_API_KEY');
+  const apiKey = requireOpenRouterKey();
   const trimmed = transcript.trim();
   const refUrl = context?.referenceUrl?.trim() ?? '';
   const refNote = context?.referenceNote?.trim() ?? '';
@@ -95,14 +99,11 @@ export async function templatizeTranscriptToScenes(
         ? '\n\nIMPORTANT REPAIR: Return JSON with key "scenes" only as an array of objects like {"text":"..."}. Minimum 3 non-empty scenes.'
         : '';
 
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    const res = await fetch(OPENROUTER_CHAT_URL, {
       method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${apiKey}`,
-      },
+      headers: openRouterJsonHeaders(apiKey),
       body: JSON.stringify({
-        model: GROQ_TEXT_MODEL,
+        model: OPENROUTER_TEXT_MODEL,
         temperature: 0.45,
         response_format: { type: 'json_object' },
         messages: [
@@ -117,7 +118,7 @@ export async function templatizeTranscriptToScenes(
 
     if (!res.ok) {
       const body = await res.text();
-      lastReason = `Groq template step failed (${res.status})`;
+      lastReason = `OpenRouter template step failed (${res.status})`;
       lastRawPreview = body.slice(0, 300);
       continue;
     }
