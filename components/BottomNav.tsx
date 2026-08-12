@@ -8,11 +8,13 @@ import CreateRadialMenu, {
   type RadialOptionId,
 } from './CreateRadialMenu';
 import BraindumpOverlay from './BraindumpOverlay';
+import RepurposeOverlay from './RepurposeOverlay';
 import {
   OPEN_BRAINDUMP_IDEA_EVENT,
   OPEN_BRAINDUMP_FRESH_EVENT,
   type OpenBraindumpIdeaDetail,
 } from '@/lib/content/braindumpIdeaEvent';
+import { OPEN_REPURPOSE_EVENT, type OpenRepurposeDetail } from '@/lib/content/repurposeEvent';
 import { CONTENT_TYPES } from '@/lib/contentTypes';
 import { isImmersiveEditorRoute } from '@/lib/immersiveEditorRoute';
 import type { Proposal } from '@/lib/propose/types';
@@ -22,10 +24,16 @@ import type { Proposal } from '@/lib/propose/types';
  * Mobile-first (the desktop layout uses the sidebar), white surface, with the
  * brand blue accent on the active tab.
  *
- * The Create FAB opens the radial menu (task 86d35yfxw): 4 options fan up in an
+ * The Create FAB opens the radial menu (task 86d35yfxw): the options fan up in an
  * arc. Tap-to-open → tap-option is the guaranteed path; long-press + glide-release
  * is layered on top. Рілс/Карусель/Сторіс route into their creation flows; Ідеї
- * opens the braindump blur-overlay (task 86d38zghd) — NOT a route.
+ * opens the braindump blur-overlay (task 86d38zghd) and Переробити opens the
+ * repurpose blur-overlay — NOT routes.
+ *
+ * Both overlays are mounted HERE, once, deliberately: this component renders on
+ * every non-immersive screen (the <nav> itself is `md:hidden`, the overlays are
+ * not), so the desktop sidebar and any future entry point can open either one by
+ * dispatching a window event instead of mounting a second copy.
  */
 
 const ACCENT = '#004BA8';
@@ -55,8 +63,8 @@ const rightTabs: DestinationTab[] = [
   { label: 'Профіль', href: '/profile', matchPrefixes: ['/profile'], Icon: User },
 ];
 
-/** Routes for the three content-creation options (Ідеї is handled separately). */
-const OPTION_ROUTES: Record<Exclude<RadialOptionId, 'ideas'>, string> = {
+/** Routes for the three content-creation options (the overlays are separate). */
+const OPTION_ROUTES: Record<Exclude<RadialOptionId, 'ideas' | 'repurpose'>, string> = {
   reels: CONTENT_TYPES.reels.createHref,
   carousel: CONTENT_TYPES.carousel.createHref,
   stories: CONTENT_TYPES.stories.createHref,
@@ -93,6 +101,9 @@ export default function BottomNav() {
   // Set when the caller already confirmed an angle (proposing empty states), so
   // the overlay opens on capture instead of re-asking which direction to take.
   const [braindumpAngle, setBraindumpAngle] = useState<Proposal | null>(null);
+  const [repurposeOpen, setRepurposeOpen] = useState(false);
+  // A link the caller already had (e.g. a posted-link row asking to repurpose it).
+  const [repurposeUrl, setRepurposeUrl] = useState<string | null>(null);
 
   const fabRef = useRef<HTMLButtonElement>(null);
   const bubbleEls = useRef<Map<RadialOptionId, HTMLButtonElement>>(new Map());
@@ -155,6 +166,18 @@ export default function BottomNav() {
     return () => window.removeEventListener(OPEN_BRAINDUMP_FRESH_EVENT, onOpenFresh);
   }, []);
 
+  // Anywhere in the app can ask to repurpose a post (the desktop sidebar's
+  // «Переробити», and any row that already holds a link).
+  useEffect(() => {
+    const onOpenRepurpose = (e: Event) => {
+      const detail = (e as CustomEvent<OpenRepurposeDetail>).detail;
+      setRepurposeUrl(detail?.url ?? null);
+      setRepurposeOpen(true);
+    };
+    window.addEventListener(OPEN_REPURPOSE_EVENT, onOpenRepurpose);
+    return () => window.removeEventListener(OPEN_REPURPOSE_EVENT, onOpenRepurpose);
+  }, []);
+
   const selectOption = useCallback(
     (id: RadialOptionId) => {
       closeMenu();
@@ -162,6 +185,11 @@ export default function BottomNav() {
         setBraindumpIdea(null); // fresh capture from the FAB
         setBraindumpAngle(null); // …and no pre-confirmed angle: show the deck
         setBraindumpOpen(true);
+        return;
+      }
+      if (id === 'repurpose') {
+        setRepurposeUrl(null); // fresh paste from the FAB
+        setRepurposeOpen(true);
         return;
       }
       router.push(OPTION_ROUTES[id]);
@@ -366,6 +394,15 @@ export default function BottomNav() {
           setBraindumpOpen(false);
           setBraindumpIdea(null);
           setBraindumpAngle(null);
+        }}
+      />
+
+      <RepurposeOverlay
+        open={repurposeOpen}
+        initialUrl={repurposeUrl}
+        onClose={() => {
+          setRepurposeOpen(false);
+          setRepurposeUrl(null);
         }}
       />
     </>

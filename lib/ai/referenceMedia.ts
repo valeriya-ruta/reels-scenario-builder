@@ -21,6 +21,10 @@ function isTiktokHost(hostname: string): boolean {
 export interface ResolvedReferenceMedia {
   normalizedUrl: string;
   mediaUrl: string;
+  /** Caption text, when the platform's scrape carried one. */
+  caption?: string | null;
+  /** @handle of the author, when the platform's scrape carried one. */
+  authorHandle?: string | null;
 }
 
 /**

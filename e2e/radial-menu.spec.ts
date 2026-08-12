@@ -20,9 +20,9 @@ test.describe('Create radial menu', () => {
     return fab;
   };
 
-  test('opens with 4 options and the FAB becomes ×', async ({ page }) => {
+  test('opens with 5 options and the FAB becomes ×', async ({ page }) => {
     const fab = await openMenu(page);
-    for (const id of ['reels', 'carousel', 'stories', 'ideas']) {
+    for (const id of ['reels', 'carousel', 'stories', 'ideas', 'repurpose']) {
       await expect(page.getByTestId(`radial-option-${id}`)).toBeVisible();
     }
     await expect(fab).toHaveAttribute('aria-label', 'Закрити');
@@ -37,7 +37,7 @@ test.describe('Create radial menu', () => {
     expect(fb).not.toBeNull();
     const fabCx = fb!.x + fb!.width / 2;
     const fabCy = fb!.y + fb!.height / 2;
-    for (const id of ['reels', 'carousel', 'stories', 'ideas']) {
+    for (const id of ['reels', 'carousel', 'stories', 'ideas', 'repurpose']) {
       const box = await page.getByTestId(`radial-option-${id}`).boundingBox();
       expect(box).not.toBeNull();
       const cx = box!.x + box!.width / 2;

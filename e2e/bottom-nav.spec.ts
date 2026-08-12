@@ -58,7 +58,7 @@ test.describe('floating bottom nav', () => {
     }
   });
 
-  test('center Create FAB opens the radial menu with 4 options', async ({ page }) => {
+  test('center Create FAB opens the radial menu with 5 options', async ({ page }) => {
     await page.goto('/dashboard');
     const nav = page.getByRole('navigation', { name: 'Основна навігація' });
     const fab = nav.getByTestId('create-fab');
@@ -69,7 +69,7 @@ test.describe('floating bottom nav', () => {
     await fab.click();
     const menu = page.getByTestId('radial-menu');
     await expect(menu).toBeVisible();
-    for (const id of ['reels', 'carousel', 'stories', 'ideas']) {
+    for (const id of ['reels', 'carousel', 'stories', 'ideas', 'repurpose']) {
       await expect(menu.getByTestId(`radial-option-${id}`)).toBeVisible();
     }
   });

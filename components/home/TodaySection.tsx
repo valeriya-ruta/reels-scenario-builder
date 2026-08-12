@@ -13,11 +13,19 @@ import { OPEN_BRAINDUMP_FRESH_EVENT } from '@/lib/content/braindumpIdeaEvent';
 import type { ContentPiece } from '@/lib/content/contentPiece';
 
 /** Radial menu ids → the content types the create action understands. */
-const TYPE_FOR: Record<Exclude<RadialOptionId, 'ideas'>, 'reel' | 'carousel' | 'story'> = {
+const TYPE_FOR: Record<Exclude<RadialOptionId, 'ideas' | 'repurpose'>, 'reel' | 'carousel' | 'story'> = {
   reels: 'reel',
   carousel: 'carousel',
   stories: 'story',
 };
+
+/**
+ * Everything in THIS menu lands on today — that is the whole point of the «＋».
+ * Переробити can't keep that promise (it produces a piece from a pasted post,
+ * dated in its own review), so it is deliberately not offered here. It lives in
+ * the FAB / sidebar create menus, which make no date promise.
+ */
+const TODAY_OPTIONS = RADIAL_OPTIONS.filter((opt) => opt.id !== 'repurpose');
 
 /**
  * СЬОГОДНІ — the top of the urgency stack (Prompt 7).
@@ -51,6 +59,7 @@ export default function TodaySection({
       window.dispatchEvent(new CustomEvent(OPEN_BRAINDUMP_FRESH_EVENT));
       return;
     }
+    if (id === 'repurpose') return; // not offered here — see TODAY_OPTIONS
     setBusy(id);
     const res = await createContentOnDate(TYPE_FOR[id], todayKey);
     setBusy(null);
@@ -93,7 +102,7 @@ export default function TodaySection({
 
       <CenterModal open={open} onClose={() => setOpen(false)} title="Додати на сьогодні">
         <div className="flex flex-col">
-          {RADIAL_OPTIONS.map((opt) => (
+          {TODAY_OPTIONS.map((opt) => (
             <button
               key={opt.id}
               type="button"
