@@ -36,8 +36,13 @@ export default function EditorTopBar({
   backHref: string;
   backLabel?: string;
   title: string;
-  /** Called with the trimmed new name; skipped when unchanged or empty. */
-  onRename: (next: string) => void;
+  /**
+   * Called with the trimmed new name; skipped when unchanged or empty. Omit when
+   * the title is DERIVED rather than stored (the storytelling board's saga name
+   * comes from its days) — the title then renders as plain text, with no pen
+   * promising an edit that has nothing to write to.
+   */
+  onRename?: (next: string) => void;
   /** Status / date / source chips, rendered on their own row underneath. */
   meta?: ReactNode;
   /** Rare, non-repeated action. Leave empty by default. */
@@ -65,7 +70,7 @@ export default function EditorTopBar({
       setDraft(title);
       return;
     }
-    onRename(trimmed);
+    onRename?.(trimmed);
   };
 
   return (
@@ -75,7 +80,14 @@ export default function EditorTopBar({
           <ChevronLeft className="h-5 w-5" />
         </BackLink>
 
-        {editing ? (
+        {!onRename ? (
+          <span
+            data-testid="editor-title"
+            className={`${titleClassName} min-w-0 flex-1 truncate px-1.5 py-1`}
+          >
+            {displayTitle(title, kind)}
+          </span>
+        ) : editing ? (
           <input
             ref={inputRef}
             autoFocus

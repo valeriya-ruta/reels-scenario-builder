@@ -169,7 +169,12 @@ export default function AppShell({ children, userName, userEmail, pro }: AppShel
                     is guaranteed to scroll clear of the nav (Prompt 10). */}
                 <main
                   data-immersive={immersive ? 'true' : 'false'}
-                  className="page-enter app-main-scroll flex min-h-0 flex-1 flex-col overflow-y-auto px-0 pt-0 md:px-6 md:pt-6"
+                  // `min-w-0`: a flex item defaults to min-width:auto, so a screen
+                  // whose content is wider than the viewport (the storytelling
+                  // board's side-by-side days) pushed the WHOLE shell sideways
+                  // instead of scrolling inside itself. Zero lets it shrink to the
+                  // column it was given and keeps overflow a local concern.
+                  className="page-enter app-main-scroll flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-0 pt-0 md:px-6 md:pt-6"
                   style={{ background: 'var(--canvas)' }}
                 >
                   {children}

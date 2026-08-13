@@ -1,12 +1,27 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
 import { requireAuth } from '@/lib/auth';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
-import type { StorytellingColumn, StorytellingStory, VisualType, EngagementType } from '@/lib/domain';
+import type {
+  StorytellingColumn,
+  StorytellingProject,
+  StorytellingStory,
+  VisualType,
+  EngagementType,
+} from '@/lib/domain';
 import { ENGAGEMENT_OPTIONS, VISUAL_OPTIONS } from '@/lib/domain';
 import { generateStoriesFromRant } from '@/lib/ai/rantToStories';
 import { aiLimit } from '@/lib/ratelimit';
 import { proposeSpread, isConsecutive } from '@/lib/content/proposeSpread';
+import {
+  dayName,
+  nextSetIndex,
+  proposeNextDayDate,
+  resequenceSet,
+  setTitle,
+  sortDays,
+} from '@/lib/storytelling/board';
 import type { Slide } from '@/lib/ai/rantToStories';
 
 // ── Project actions ──
@@ -31,6 +46,287 @@ export async function deleteStorytellingProject(projectId: string) {
     .delete()
     .eq('id', projectId)
     .eq('user_id', user.id);
+}
+
+// ── Day actions (the board's columns) ──
+
+/**
+ * A column of the storytelling board IS a storytelling — its own row, its own
+ * date, its own status — tagged into a set with its neighbours. These actions
+ * keep that tag honest: indexes stay 1..N, `set_size` stays the same number on
+ * every row, and a set that shrinks to one day drops the tag entirely.
+ */
+
+/** Set tag as it now stands for one day, so the client can update in place. */
+export type SetTag = {
+  id: string;
+  set_id: string | null;
+  set_index: number | null;
+  set_size: number | null;
+};
+
+export type AddedStorytellingDay = {
+  project: StorytellingProject;
+  columnId: string;
+  storyId: string;
+};
+
+export type AddStorytellingDayResult =
+  | { ok: true; day: AddedStorytellingDay; tags: SetTag[] }
+  | { ok: false; error: string };
+
+/** Local day key (YYYY-MM-DD) — the calendar is day-grained, no time. */
+function todayDayKey(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+    now.getDate(),
+  ).padStart(2, '0')}`;
+}
+
+/** Days already holding content, so a proposal never lands on top of one. */
+async function occupiedDates(
+  supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
+  userId: string,
+  fromKey: string,
+): Promise<string[]> {
+  const { data } = await supabase
+    .from('content_pieces')
+    .select('scheduled_date')
+    .eq('user_id', userId)
+    .not('scheduled_date', 'is', null)
+    .gte('scheduled_date', fromKey);
+  return ((data ?? []) as { scheduled_date: string }[]).map((r) => r.scheduled_date);
+}
+
+async function writeSetTags(
+  supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
+  userId: string,
+  tags: ReadonlyArray<SetTag>,
+): Promise<void> {
+  await Promise.all(
+    tags.map((tag) =>
+      supabase
+        .from('storytelling_projects')
+        .update({ set_id: tag.set_id, set_index: tag.set_index, set_size: tag.set_size })
+        .eq('id', tag.id)
+        .eq('user_id', userId),
+    ),
+  );
+}
+
+/**
+ * Add a day to the board: a NEW storytelling next to the anchor, in the same
+ * set, scheduled on the next open day and starting at Ідея with one empty card.
+ *
+ * Client-provided ids are honoured (optimistic UI): the column renders before
+ * the insert resolves, and the card autosaves to a row that really exists.
+ */
+export async function addStorytellingDay(
+  anchorProjectId: string,
+  ids?: { projectId?: string; columnId?: string; storyId?: string },
+): Promise<AddStorytellingDayResult> {
+  const user = await requireAuth();
+  if (!user) return { ok: false, error: 'UNAUTHORIZED' };
+
+  const supabase = await createServerSupabaseClient();
+  const { data: anchor } = await supabase
+    .from('storytelling_projects')
+    .select('id, name, set_id, set_index, created_at, scheduled_date, project_id')
+    .eq('id', anchorProjectId)
+    .eq('user_id', user.id)
+    .single();
+
+  if (!anchor) return { ok: false, error: 'NOT_FOUND' };
+
+  type Sibling = {
+    id: string;
+    name: string;
+    set_id: string | null;
+    set_index: number | null;
+    created_at: string;
+    scheduled_date: string | null;
+    project_id?: string | null;
+  };
+
+  const anchorRow = anchor as Sibling;
+  let siblings: Sibling[] = [anchorRow];
+  if (anchorRow.set_id) {
+    const { data } = await supabase
+      .from('storytelling_projects')
+      .select('id, name, set_id, set_index, created_at, scheduled_date')
+      .eq('set_id', anchorRow.set_id)
+      .eq('user_id', user.id);
+    if (data && data.length > 0) siblings = data as Sibling[];
+  }
+
+  // A standalone becomes a set of two the moment a second day is added.
+  const setId = anchorRow.set_id ?? globalThis.crypto.randomUUID();
+  const index = nextSetIndex(siblings);
+  const name = dayName(setTitle(siblings.map((s) => s.name ?? '')), index);
+  const today = todayDayKey();
+  const scheduledDate = proposeNextDayDate(
+    siblings.map((s) => s.scheduled_date),
+    today,
+    await occupiedDates(supabase, user.id, today),
+  );
+
+  const projectInsert: Record<string, unknown> = {
+    name,
+    user_id: user.id,
+    scheduled_date: scheduledDate,
+    set_id: setId,
+    set_index: index,
+    set_size: siblings.length + 1,
+    // Inherit the blogger the anchor belongs to (Pro scoping), not the ambient one.
+    project_id: anchorRow.project_id ?? null,
+  };
+  if (ids?.projectId) projectInsert.id = ids.projectId;
+
+  const { data: project, error: projectError } = await supabase
+    .from('storytelling_projects')
+    .insert(projectInsert)
+    .select()
+    .single();
+
+  if (projectError || !project) {
+    console.error('addStorytellingDay project', projectError);
+    return { ok: false, error: 'INSERT_FAILED' };
+  }
+
+  const columnInsert: Record<string, unknown> = {
+    project_id: project.id,
+    name,
+    order_index: 0,
+  };
+  if (ids?.columnId) columnInsert.id = ids.columnId;
+
+  const { data: column, error: columnError } = await supabase
+    .from('storytelling_columns')
+    .insert(columnInsert)
+    .select()
+    .single();
+
+  if (columnError || !column) {
+    // A day with nowhere to write cards is worse than no day at all.
+    await supabase.from('storytelling_projects').delete().eq('id', project.id).eq('user_id', user.id);
+    console.error('addStorytellingDay column', columnError);
+    return { ok: false, error: 'INSERT_FAILED' };
+  }
+
+  const storyInsert: Record<string, unknown> = { column_id: column.id, order_index: 0, text: '' };
+  if (ids?.storyId) storyInsert.id = ids.storyId;
+  const { data: story } = await supabase
+    .from('storytelling_stories')
+    .insert(storyInsert)
+    .select()
+    .single();
+
+  // Re-tag the whole set: the anchor may have just acquired a set_id, and every
+  // row carries the size. The new day goes LAST — the existing days are sorted
+  // among themselves, so an untagged standalone stays day 1 rather than being
+  // pushed behind the day just added to it.
+  const ordered = [
+    ...sortDays(
+      siblings.map((s) => ({ id: s.id, set_index: s.set_index, created_at: s.created_at })),
+    ).map((s) => s.id),
+    project.id as string,
+  ];
+  const tags = resequenceSet(ordered, setId);
+  await writeSetTags(supabase, user.id, tags);
+
+  const tag = tags.find((t) => t.id === project.id);
+  revalidatePath('/', 'layout');
+
+  return {
+    ok: true,
+    day: {
+      project: { ...(project as StorytellingProject), ...(tag ?? {}) },
+      columnId: column.id as string,
+      storyId: (story?.id as string) ?? (ids?.storyId ?? ''),
+    },
+    tags,
+  };
+}
+
+/**
+ * Remove one day from the board — the storytelling itself, with its cards.
+ * The remaining days are re-numbered; a lone survivor stops being a set.
+ */
+export async function removeStorytellingDay(
+  projectId: string,
+): Promise<{ ok: true; tags: SetTag[] } | { ok: false; error: string }> {
+  const user = await requireAuth();
+  if (!user) return { ok: false, error: 'UNAUTHORIZED' };
+
+  const supabase = await createServerSupabaseClient();
+  const { data: day } = await supabase
+    .from('storytelling_projects')
+    .select('id, set_id')
+    .eq('id', projectId)
+    .eq('user_id', user.id)
+    .single();
+
+  if (!day) return { ok: false, error: 'NOT_FOUND' };
+
+  // The day's columns and cards go with it: both FKs are ON DELETE CASCADE, so
+  // this is one atomic delete rather than three round trips that could half-fail.
+  const { error } = await supabase
+    .from('storytelling_projects')
+    .delete()
+    .eq('id', projectId)
+    .eq('user_id', user.id);
+
+  if (error) {
+    console.error('removeStorytellingDay', error);
+    return { ok: false, error: 'DELETE_FAILED' };
+  }
+
+  const setId = (day as { set_id: string | null }).set_id;
+  let tags: SetTag[] = [];
+  if (setId) {
+    const { data: rest } = await supabase
+      .from('storytelling_projects')
+      .select('id, set_index, created_at')
+      .eq('set_id', setId)
+      .eq('user_id', user.id);
+    tags = resequenceSet(
+      sortDays((rest ?? []) as { id: string; set_index: number | null; created_at: string }[]).map(
+        (d) => d.id,
+      ),
+      setId,
+    );
+    await writeSetTags(supabase, user.id, tags);
+  }
+
+  revalidatePath('/', 'layout');
+  return { ok: true, tags };
+}
+
+/** Persist a new left-to-right order for the board. */
+export async function reorderStorytellingDays(
+  orderedIds: string[],
+): Promise<{ ok: true; tags: SetTag[] } | { ok: false; error: string }> {
+  const user = await requireAuth();
+  if (!user) return { ok: false, error: 'UNAUTHORIZED' };
+  if (orderedIds.length < 2) return { ok: false, error: 'NOT_A_SET' };
+
+  const supabase = await createServerSupabaseClient();
+  const { data: rows } = await supabase
+    .from('storytelling_projects')
+    .select('id, set_id')
+    .in('id', orderedIds)
+    .eq('user_id', user.id);
+
+  const owned = (rows ?? []) as { id: string; set_id: string | null }[];
+  if (owned.length !== orderedIds.length) return { ok: false, error: 'NOT_FOUND' };
+
+  const setId = owned.find((r) => r.set_id)?.set_id;
+  if (!setId) return { ok: false, error: 'NOT_A_SET' };
+
+  const tags = resequenceSet(orderedIds, setId);
+  await writeSetTags(supabase, user.id, tags);
+  revalidatePath('/', 'layout');
+  return { ok: true, tags };
 }
 
 // ── Column actions ──
