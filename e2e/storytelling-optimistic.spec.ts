@@ -6,6 +6,8 @@ import { ACTIVE_STATE } from './utils/authPaths';
  * 86d3fcnny). Asserts the acceptance flow end-to-end:
  *   • click "Додати сторітел" (new column) → a new column appears effectively
  *     instantly (no 1–3s await-before-render), even on a throttled connection
+ *   • the new column carries its OWN status and date — a column is a whole
+ *     storytelling, which is what makes the multi-day board safe to schedule
  *   • click "Додати сторіс" inside it → a new card appears instantly
  *   • reload → both persisted with real ids + correct ordering
  *
@@ -47,8 +49,18 @@ test.describe('storytelling — optimistic create (perceived lag fix)', () => {
       .poll(() => page.getByTestId('story-column').count(), { timeout: 400 })
       .toBe(columnsBefore + 1);
 
-    // New story inside the last column appears instantly.
+    // Each column schedules itself: its own status pill and its own date chip.
     const lastColumn = page.getByTestId('story-column').last();
+    await expect(lastColumn.getByTestId('status-pill')).toBeVisible();
+    await expect(lastColumn.getByTestId('schedule-chip')).toBeVisible();
+    // The server proposes the next open day, so the new column lands dated.
+    await expect
+      .poll(() => lastColumn.getByTestId('schedule-chip').getAttribute('data-scheduled'), {
+        timeout: 5_000,
+      })
+      .toBe('true');
+
+    // New story inside the last column appears instantly.
     const cardsBefore = await lastColumn.getByPlaceholder('Про що').count();
     await lastColumn.getByTestId('add-story').click();
     await expect

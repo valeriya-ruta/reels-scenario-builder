@@ -7,7 +7,7 @@ import type {
   StorytellingStory,
 } from '@/lib/domain';
 import StorytellingBuilder from '@/components/StorytellingBuilder';
-import type { SetSibling } from '@/components/storytelling/SetNav';
+import { buildBoardDays } from '@/lib/storytelling/board';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -29,13 +29,27 @@ export default async function StorytellingPage({ params }: PageProps) {
 
   if (projectError || !project) redirect('/storytellings');
 
+  // The board shows the whole set: every day of the saga side by side, each with
+  // its own date and status. A standalone storytelling is simply a set of one.
+  let days: StorytellingProject[] = [project as StorytellingProject];
+  const setId = (project as StorytellingProject).set_id;
+  if (setId) {
+    const { data: siblings } = await supabase
+      .from('storytelling_projects')
+      .select('*')
+      .eq('set_id', setId)
+      .eq('user_id', user.id);
+    if (siblings && siblings.length > 0) days = siblings as StorytellingProject[];
+  }
+
+  const dayIds = days.map((d) => d.id);
   const { data: columns } = await supabase
     .from('storytelling_columns')
     .select('*')
-    .eq('project_id', id)
+    .in('project_id', dayIds)
     .order('order_index', { ascending: true });
 
-  const columnIds = (columns || []).map((c: StorytellingColumn) => c.id);
+  const columnIds = ((columns as StorytellingColumn[]) || []).map((c) => c.id);
 
   let stories: StorytellingStory[] = [];
   if (columnIds.length > 0) {
@@ -47,30 +61,10 @@ export default async function StorytellingPage({ params }: PageProps) {
     stories = (data as StorytellingStory[]) || [];
   }
 
-  // Sibling days of the same generated saga (own dates + statuses; no parent).
-  let siblings: SetSibling[] = [];
-  const setId = (project as StorytellingProject).set_id;
-  if (setId) {
-    const { data: sibs } = await supabase
-      .from('storytelling_projects')
-      .select('id,name,scheduled_date,set_index')
-      .eq('set_id', setId)
-      .eq('user_id', user.id)
-      .order('set_index', { ascending: true });
-    siblings = (sibs ?? []).map((r: { id: string; name: string; scheduled_date: string | null; set_index: number | null }) => ({
-      id: r.id,
-      name: r.name,
-      scheduledDate: r.scheduled_date,
-      setIndex: r.set_index,
-    }));
-  }
-
   return (
     <StorytellingBuilder
-      project={project as StorytellingProject}
-      initialColumns={(columns as StorytellingColumn[]) || []}
-      initialStories={stories}
-      siblings={siblings}
+      initialDays={buildBoardDays(days, (columns as StorytellingColumn[]) || [], stories)}
+      currentId={id}
     />
   );
 }
