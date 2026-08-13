@@ -22,6 +22,7 @@ import {
   setTitle,
   sortDays,
 } from '@/lib/storytelling/board';
+import { deriveStorytellingName, isUnnamedStorytelling } from '@/lib/storytelling/autoName';
 import type { Slide } from '@/lib/ai/rantToStories';
 
 // ── Project actions ──
@@ -442,6 +443,73 @@ export async function updateStorytellingStory(
   if (!user) return;
   const supabase = await createServerSupabaseClient();
   await supabase.from('storytelling_stories').update(updates).eq('id', storyId);
+}
+
+/**
+ * Give an unnamed storytelling a name taken from what has been written in it.
+ *
+ * A manually created story is stored as «Нова історія», so a week of them reads
+ * as four identical rows in Сьогодні and План — you cannot tell which is which
+ * without opening each one. Once a card holds a real sentence, that sentence
+ * becomes the name.
+ *
+ * Only ever fills a PLACEHOLDER: a name the user typed (or one an earlier
+ * auto-name already set) is never overwritten. The text comes from the client
+ * because it is the freshest copy — the card's own autosave may still be in
+ * flight — and it is the same user's writing either way; ownership is enforced
+ * on the row that actually gets renamed.
+ */
+export async function autoNameStorytellingFromStory(
+  storyId: string,
+  text: string,
+): Promise<{ ok: true; id: string; name: string } | { ok: false; reason: string }> {
+  const user = await requireAuth();
+  if (!user) return { ok: false, reason: 'UNAUTHORIZED' };
+
+  const name = deriveStorytellingName(text);
+  if (!name) return { ok: false, reason: 'TOO_THIN' };
+
+  const supabase = await createServerSupabaseClient();
+
+  const { data: story } = await supabase
+    .from('storytelling_stories')
+    .select('id, column_id')
+    .eq('id', storyId)
+    .single();
+  if (!story) return { ok: false, reason: 'NOT_FOUND' };
+
+  const { data: column } = await supabase
+    .from('storytelling_columns')
+    .select('id, project_id')
+    .eq('id', (story as { column_id: string }).column_id)
+    .single();
+  if (!column) return { ok: false, reason: 'NOT_FOUND' };
+
+  const { data: project } = await supabase
+    .from('storytelling_projects')
+    .select('id, name')
+    .eq('id', (column as { project_id: string }).project_id)
+    .eq('user_id', user.id)
+    .single();
+  if (!project) return { ok: false, reason: 'NOT_FOUND' };
+
+  const current = (project as { id: string; name: string | null }).name;
+  if (!isUnnamedStorytelling(current)) return { ok: false, reason: 'ALREADY_NAMED' };
+
+  const { error } = await supabase
+    .from('storytelling_projects')
+    .update({ name, updated_at: new Date().toISOString() })
+    .eq('id', project.id)
+    .eq('user_id', user.id);
+
+  if (error) {
+    console.error('autoNameStorytellingFromStory', error);
+    return { ok: false, reason: 'UPDATE_FAILED' };
+  }
+
+  // Сьогодні, План and Контент all read the name from the same view.
+  revalidatePath('/', 'layout');
+  return { ok: true, id: project.id as string, name };
 }
 
 export async function deleteStorytellingStory(storyId: string) {
