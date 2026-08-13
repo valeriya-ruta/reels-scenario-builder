@@ -2,15 +2,15 @@ import 'server-only';
 import { optionalServerEnv, requireServerEnv } from '@/lib/env';
 
 /**
- * Carousel text generation on Gemini 2.5 Pro.
- *
- * Pro is the bake-off winner on voice/style, and it's the chosen default despite
- * being a heavy reasoning model: on long carousels it can run close to the 60s
- * serverless limit and occasionally time out. That's an accepted quality/latency
- * tradeoff — a timeout now surfaces a visible, retryable error in the braindump
- * UI rather than a silent freeze, and the whole latency safety net below stays on
- * (bounded thinking + a hard fetch timeout). To trade quality for speed, set
- * CAROUSEL_MODEL=gemini-2.5-flash — no deploy needed.
+ * Carousel text generation. Two candidates, one env switch:
+ *   • gemini-2.5-flash (current default) — fast; finishes comfortably inside the
+ *     60s serverless limit.
+ *   • gemini-2.5-pro — bake-off winner on voice/style, but a heavy reasoning model
+ *     that can approach/exceed 60s on long carousels and time out.
+ * Flash is the default for reliability; set CAROUSEL_MODEL to override either way
+ * (e.g. CAROUSEL_MODEL=gemini-2.5-pro) with no deploy. The latency safety net below
+ * (bounded thinking + a hard fetch timeout) applies to whichever model runs, and a
+ * timeout surfaces a visible, retryable error in the braindump UI, not a freeze.
  *
  * Provider selection, in order:
  *   1. OPENROUTER_API_KEY set → OpenRouter (the consolidated-billing target).
@@ -21,9 +21,9 @@ import { optionalServerEnv, requireServerEnv } from '@/lib/env';
  * `postProcessCarouselRant`.
  */
 
-// One env override drives both providers, so the model can be retuned (e.g. to
-// gemini-2.5-flash for speed) without a deploy. `google/` prefix added for OpenRouter.
-const CAROUSEL_MODEL = optionalServerEnv('CAROUSEL_MODEL') || 'gemini-2.5-pro';
+// One env override drives both providers, so the model can be retuned without a
+// deploy. `google/` prefix is added for the OpenRouter path.
+const CAROUSEL_MODEL = optionalServerEnv('CAROUSEL_MODEL') || 'gemini-2.5-flash';
 export const CAROUSEL_MODEL_OPENROUTER = `google/${CAROUSEL_MODEL}`;
 export const CAROUSEL_MODEL_GEMINI = CAROUSEL_MODEL;
 
