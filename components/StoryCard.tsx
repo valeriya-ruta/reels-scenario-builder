@@ -4,8 +4,10 @@ import { useRef, useState } from 'react';
 import { Check, Copy, X } from 'lucide-react';
 import type { StorytellingStory, VisualType, EngagementType } from '@/lib/domain';
 import { VISUAL_OPTIONS, ENGAGEMENT_OPTIONS } from '@/lib/domain';
-import { updateStorytellingStory } from '@/app/storytelling-actions';
+import { autoNameStorytellingFromStory, updateStorytellingStory } from '@/app/storytelling-actions';
 import TapButton from '@/components/ui/TapButton';
+import { deriveStorytellingName } from '@/lib/storytelling/autoName';
+import { dispatchStorytellingAutoNamed } from '@/lib/storytelling/autoNameEvent';
 
 /**
  * One story card — a READING surface first, a form second.
@@ -36,6 +38,30 @@ interface StoryCardProps {
 export default function StoryCard({ story, index, onUpdate, onDelete }: StoryCardProps) {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [copied, setCopied] = useState(false);
+  // Auto-naming is attempted once per card per session: the server decides
+  // whether the storytelling is still unnamed, and its answer cannot change
+  // while this editor is open (nothing else renames it behind our back).
+  const autoNamedRef = useRef(false);
+
+  /**
+   * An unnamed storytelling takes its name from its opening card, so it can be
+   * told apart in Сьогодні / План without opening it (see `autoName.ts`). Fires
+   * from the first card only — that is the line the story opens on — and only
+   * once there is a real sentence to take.
+   */
+  const maybeAutoName = (text: string) => {
+    if (autoNamedRef.current || index !== 0) return;
+    if (!deriveStorytellingName(text)) return;
+    autoNamedRef.current = true;
+    void autoNameStorytellingFromStory(story.id, text)
+      .then((res) => {
+        if (res.ok) dispatchStorytellingAutoNamed(res.id, res.name);
+      })
+      .catch(() => {
+        // Transient failure: let the next keystroke try again.
+        autoNamedRef.current = false;
+      });
+  };
 
   const copyStoryText = async () => {
     try {
@@ -52,6 +78,7 @@ export default function StoryCard({ story, index, onUpdate, onDelete }: StoryCar
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       updateStorytellingStory(story.id, { text });
+      maybeAutoName(text);
     }, 500);
   };
 
