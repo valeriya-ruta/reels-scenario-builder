@@ -157,6 +157,39 @@ function commonWordPrefix(names: ReadonlyArray<string>): string {
 }
 
 /**
+ * Renaming the BOARD, which owns no row of its own.
+ *
+ * The board's title is the days' shared stem, so renaming it means renaming the
+ * days that carry that stem: «Злам року» + «Злам року — день 2» both move to the
+ * new stem, keeping their own suffixes. A day the user renamed by hand no longer
+ * starts with the stem, so it is left exactly as it is — a board rename must not
+ * quietly erase a name someone chose for one day.
+ *
+ * Returns only the days whose name actually changes.
+ */
+export function renameSetStem(
+  days: ReadonlyArray<{ id: string; name: string }>,
+  oldStem: string,
+  nextStem: string,
+): Array<{ id: string; name: string }> {
+  const stem = oldStem.trim();
+  const next = nextStem.trim();
+  if (!stem || !next || stem === next) return [];
+
+  const out: Array<{ id: string; name: string }> = [];
+  for (const day of days) {
+    const name = (day.name ?? '').trim();
+    if (name === stem) {
+      out.push({ id: day.id, name: next });
+    } else if (name.startsWith(stem)) {
+      // Keep the tail («— день 2», «: рішення») and swap only the stem.
+      out.push({ id: day.id, name: `${next}${name.slice(stem.length)}`.slice(0, 120) });
+    }
+  }
+  return out;
+}
+
+/**
  * The day a newly added column should land on: the next OPEN day after the set's
  * last dated day (or after today, when the set carries no dates yet).
  *

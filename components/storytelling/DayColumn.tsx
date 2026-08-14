@@ -64,10 +64,16 @@ export default function DayColumn({
     <div
       data-testid="story-column"
       data-day-id={project.id}
+      // A lone story keeps a comfortable reading width — it is being written, not
+      // scanned — while still sitting in the board's row so the «+» column is
+      // visible beside it. Columns of a set are narrower and snap one at a time.
       className={
         isSet
           ? 'flex w-[86vw] shrink-0 snap-start flex-col sm:w-[360px]'
-          : 'flex w-full flex-col'
+          // 80vw, not the full width: the «+» column has to peek in from the
+          // right, or on a phone the board looks like a single page again and
+          // the whole point is invisible.
+          : 'flex w-[80vw] shrink-0 snap-start flex-col sm:w-[min(560px,60vw)]'
       }
     >
       <div className="mb-3 px-1">
@@ -221,15 +227,20 @@ export default function DayColumn({
           </div>
         ))}
 
-        <button
-          type="button"
-          onClick={() => onAddStory(project.id)}
-          data-testid="add-story"
-          className="flex cursor-pointer items-center justify-center gap-2 rounded-[16px] border-2 border-dashed border-[color:var(--border)] bg-[color:var(--surface1)]/60 p-4 text-sm font-medium text-zinc-500 transition-colors hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface1)]"
-        >
-          <Plus className="h-4 w-4" strokeWidth={2.4} />
-          Додати сторіс
-        </button>
+        {/* Only on a set. With one column the bottom bar's «Додати сторіс» is
+            already unambiguous, and two add-buttons three letters apart stacked
+            on top of each other is the duplicate that had to go. */}
+        {isSet && (
+          <button
+            type="button"
+            onClick={() => onAddStory(project.id)}
+            data-testid="add-story"
+            className="flex cursor-pointer items-center justify-center gap-2 rounded-[16px] border-2 border-dashed border-[color:var(--border)] bg-[color:var(--surface1)]/60 p-4 text-sm font-medium text-zinc-500 transition-colors hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface1)]"
+          >
+            <Plus className="h-4 w-4" strokeWidth={2.4} />
+            Додати сторіс
+          </button>
+        )}
       </div>
     </div>
   );

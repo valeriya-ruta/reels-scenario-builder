@@ -22,6 +22,7 @@ import {
   boardSummary,
   dayName,
   nextSetIndex,
+  renameSetStem,
   setTitle,
   totalStories,
   type BoardDay,
@@ -337,13 +338,26 @@ export default function StorytellingBuilder({ initialDays, currentId }: Props) {
     void copyText(isSet ? `${title}\n\n${body}` : body, 'all');
   }, [days, isSet, title, copyText]);
 
+  /**
+   * Rename the whole board. A single story owns its name outright; a set has no
+   * row of its own, so the new stem is written into the days that carry the old
+   * one (days renamed by hand keep their names — see `renameSetStem`).
+   */
   const handleRenameBoard = useCallback(
     (next: string) => {
-      const only = days[0];
-      if (!only) return;
-      handleRenameDay(only.project.id, next);
+      if (!isSet) {
+        const only = days[0];
+        if (only) handleRenameDay(only.project.id, next);
+        return;
+      }
+      const renames = renameSetStem(
+        days.map((d) => ({ id: d.project.id, name: displayTitle(d.project.name, 'story') })),
+        title,
+        next,
+      );
+      for (const rename of renames) handleRenameDay(rename.id, rename.name);
     },
-    [days, handleRenameDay],
+    [days, isSet, title, handleRenameDay],
   );
 
   return (
@@ -365,17 +379,34 @@ export default function StorytellingBuilder({ initialDays, currentId }: Props) {
         // The board is capped by the VIEWPORT as well as by 1180px: an intrinsic
         // width wider than the screen would otherwise become the app shell's
         // width and drag every other surface sideways with it.
-        className={`mx-auto w-full px-4 pt-5 ${isSet ? 'max-w-[min(1180px,100vw)]' : 'max-w-[640px]'}`}
+        // One width for both states: the board needs room for the story column
+        // AND the «+» column beside it, so a 640px cap would clip the very
+        // affordance that shows you the board exists. Reading width is set by the
+        // column itself, not by the page.
+        className="mx-auto w-full max-w-[min(1180px,100vw)] px-4 pt-5"
         style={{ paddingBottom: 'calc(104px + env(safe-area-inset-bottom))' }}
       >
         <EditorTopBar
           backHref="/storytellings"
           title={title}
           kind="story"
-          // A set has no row of its own to rename: its title is derived from the
-          // days, and each day is renamed in its own column header.
-          onRename={isSet ? undefined : handleRenameBoard}
+          onRename={handleRenameBoard}
           meta={sourceId ? <SourceDumpChip contentId={sourceId} /> : null}
+          trailing={
+            <button
+              type="button"
+              onClick={copyAll}
+              aria-label="Копіювати всі сторіс"
+              title={copiedId === 'all' ? 'Скопійовано' : 'Копіювати всі сторіс'}
+              className="app-icon-btn"
+            >
+              {copiedId === 'all' ? (
+                <Check className="h-4 w-4 text-emerald-600" strokeWidth={2.4} />
+              ) : (
+                <Copy className="h-4 w-4" strokeWidth={1.8} />
+              )}
+            </button>
+          }
         />
 
         <p className="mb-4 mt-1 px-1 text-[12.5px] font-medium text-[color:var(--text-muted)]">
@@ -384,16 +415,15 @@ export default function StorytellingBuilder({ initialDays, currentId }: Props) {
             : `${totalStories(days)} сторіс · одна історія на день`}
         </p>
 
-        {/* Columns. One day reads as the plain vertical run it always was; a set
-            scrolls horizontally, one column snapping into place at a time. */}
+        {/* The board is ALWAYS a row of columns, even when there is one story.
+            It used to collapse to a plain vertical list until a second day
+            existed, which meant the multi-story view was invisible until you had
+            already guessed it was there. The «+» column at the end is what makes
+            it visible: the shape of the board is on screen from the first story. */}
         <div
           data-testid="story-board"
-          className={
-            isSet
-              ? '-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-4 overflow-x-auto px-4 pb-2'
-              : 'flex flex-col'
-          }
-          style={isSet ? { scrollbarWidth: 'thin', scrollbarColor: '#d4d4d8 transparent' } : undefined}
+          className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-4 overflow-x-auto px-4 pb-2"
+          style={{ scrollbarWidth: 'thin', scrollbarColor: '#d4d4d8 transparent' }}
         >
           {days.map((day, index) => (
             <DayColumn
@@ -412,40 +442,50 @@ export default function StorytellingBuilder({ initialDays, currentId }: Props) {
               onMoveStory={handleMoveStory}
             />
           ))}
-        </div>
-      </div>
 
-      {/* Repeated actions in the thumb zone (§1), not the top corners. */}
-      <div
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-[color:var(--border)] bg-[color:var(--background)]/95 px-4 pb-[calc(12px+env(safe-area-inset-bottom))] pt-3 backdrop-blur"
-        style={{ boxShadow: '0 -2px 20px rgba(0,0,0,0.06)' }}
-      >
-        <div className="mx-auto flex max-w-2xl items-center gap-2">
+          {/* Add-a-day lives HERE, among the columns, not in the bottom bar. In
+              the bar it sat directly under «Додати сторіс» — two buttons whose
+              labels differ by three letters, stacked. One action, one place. */}
           <button
             type="button"
             onClick={handleAddDay}
             disabled={addingDay}
             data-testid="add-column"
-            className="app-btn-primary flex-1 disabled:opacity-70"
+            className="flex w-[62vw] shrink-0 snap-start flex-col items-center justify-center gap-2 self-start rounded-[16px] border-2 border-dashed border-[color:var(--border)] bg-[color:var(--surface1)]/60 p-6 text-center transition-colors hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface1)] disabled:opacity-60 sm:w-[240px]"
+            style={{ minHeight: 180 }}
           >
-            <Plus className="h-4 w-4" strokeWidth={2.4} />
-            Додати сторітел
-          </button>
-          <button
-            type="button"
-            onClick={copyAll}
-            aria-label="Копіювати всі сторіс"
-            title={copiedId === 'all' ? 'Скопійовано' : 'Копіювати всі сторіс'}
-            className="app-icon-btn"
-          >
-            {copiedId === 'all' ? (
-              <Check className="h-4 w-4 text-emerald-600" strokeWidth={2.4} />
-            ) : (
-              <Copy className="h-4 w-4" strokeWidth={1.8} />
-            )}
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-zinc-400 shadow-sm">
+              <Plus className="h-5 w-5" strokeWidth={2.2} />
+            </span>
+            <span className="text-sm font-semibold text-zinc-600">Додати сторітел</span>
+            <span className="text-[12px] leading-snug text-[color:var(--text-muted)]">
+              ще одна історія — свій день і свій статус
+            </span>
           </button>
         </div>
       </div>
+
+      {/* Thumb zone: the ONE repeated action, adding a story to the day you are
+          writing. On a set each column owns its own «Додати сторіс» (a single
+          global one would not know which day it meant), so the bar steps aside. */}
+      {!isSet && (
+        <div
+          className="fixed inset-x-0 bottom-0 z-40 border-t border-[color:var(--border)] bg-[color:var(--background)]/95 px-4 pb-[calc(12px+env(safe-area-inset-bottom))] pt-3 backdrop-blur"
+          style={{ boxShadow: '0 -2px 20px rgba(0,0,0,0.06)' }}
+        >
+          <div className="mx-auto flex max-w-2xl items-center gap-2">
+            <button
+              type="button"
+              onClick={() => days[0] && handleAddStory(days[0].project.id)}
+              data-testid="add-story-primary"
+              className="app-btn-primary flex-1"
+            >
+              <Plus className="h-4 w-4" strokeWidth={2.4} />
+              Додати сторіс
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
