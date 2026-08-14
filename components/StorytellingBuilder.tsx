@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Check, Copy, Plus } from 'lucide-react';
 import type {
   StorytellingProject,
@@ -21,6 +21,7 @@ import { flattenStories, primaryColumnId } from '@/lib/storytelling/single';
 import ScheduleChip from '@/components/content/ScheduleChip';
 import StatusPill from '@/components/content/StatusPill';
 import SourceDumpChip from '@/components/braindump/SourceDumpChip';
+import { onStorytellingAutoNamed } from '@/lib/storytelling/autoNameEvent';
 
 /**
  * ONE storytelling = ONE dated, self-contained piece (§3, de-projectify).
@@ -87,6 +88,18 @@ export default function StorytellingBuilder({
       await updateStorytellingProjectName(project.id, next);
     },
     [project.id],
+  );
+
+  // A storytelling that has never been named takes its name from its opening
+  // card. The write happens in the card; this is the header catching up, so the
+  // user sees «Нова історія» become what they just wrote rather than finding out
+  // on reload.
+  useEffect(
+    () =>
+      onStorytellingAutoNamed(({ id, name }) =>
+        setProject((p) => (p.id === id ? { ...p, name } : p)),
+      ),
+    [],
   );
 
   const copyAll = useCallback(async () => {
