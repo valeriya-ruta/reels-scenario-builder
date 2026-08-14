@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Check, Copy, Plus } from 'lucide-react';
 import type { StorytellingStory } from '@/lib/domain';
@@ -28,6 +28,7 @@ import {
 } from '@/lib/storytelling/board';
 import { displayTitle } from '@/lib/content/displayTitle';
 import { dayHeaderLabel } from '@/lib/content/calendar';
+import { onStorytellingAutoNamed } from '@/lib/storytelling/autoNameEvent';
 
 /**
  * The storytelling board — several storytellings side by side, one per day.
@@ -119,6 +120,19 @@ export default function StorytellingBuilder({ initialDays, currentId }: Props) {
       }),
     );
   }, []);
+
+  // A day that has never been named takes its name from its opening card. The
+  // write happens in the card; this is the header catching up, so the user sees
+  // «Нова історія» become what they just wrote instead of finding out on reload.
+  useEffect(
+    () =>
+      onStorytellingAutoNamed(({ id, name }) =>
+        setDays((prev) =>
+          prev.map((d) => (d.project.id === id ? { ...d, project: { ...d.project, name } } : d)),
+        ),
+      ),
+    [],
+  );
 
   // ── Board-level (day) actions ──
 
