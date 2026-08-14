@@ -23,12 +23,17 @@ const PLACEHOLDER_NAMES = new Set([
   'no name',
   'untitled',
   'сторітел',
+  // The label storytellings used to be created with. Rows still carrying it were
+  // never named by anyone, so they show today's label rather than yesterday's.
+  'нова історія',
 ]);
 
 export const NEW_LABELS: Record<TitleKind, string> = {
   reel: 'Новий рілс',
   carousel: 'Нова карусель',
-  story: 'Нова історія',
+  // The thing itself is a «сторітел» — that is what the board's columns are
+  // called and what the add button says, so an untitled one is named for it.
+  story: 'Новий сторітел',
   idea: 'Нова думка',
 };
 

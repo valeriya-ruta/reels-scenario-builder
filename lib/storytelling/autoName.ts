@@ -35,8 +35,16 @@ import { isPlaceholderTitle, NEW_LABELS } from '@/lib/content/displayTitle';
 export function isUnnamedStorytelling(name: string | null | undefined): boolean {
   if (isPlaceholderTitle(name)) return true;
   const normalized = (name ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
-  return normalized === NEW_LABELS.story.toLowerCase();
+  return UNNAMED_LABELS.has(normalized);
 }
+
+/**
+ * Every label the app has ever written at creation. «Нова історія» is the older
+ * one and is still sitting in rows created before the rename, so it has to keep
+ * counting as unnamed — otherwise every story made before today would be treated
+ * as deliberately titled and never name itself.
+ */
+const UNNAMED_LABELS = new Set([NEW_LABELS.story.toLowerCase(), 'нова історія']);
 
 /** Below this there is nothing to name yet. */
 const MIN_WORDS = 3;

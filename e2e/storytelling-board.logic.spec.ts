@@ -6,6 +6,7 @@ import {
   nextSetIndex,
   pluralUa,
   proposeNextDayDate,
+  renameSetStem,
   resequenceSet,
   setTitle,
   sortDays,
@@ -221,5 +222,38 @@ test.describe('the counter line', () => {
   test('summary reads as a sentence', () => {
     expect(boardSummary(1, 4)).toBe('1 історія · 4 сторіс');
     expect(boardSummary(3, 12)).toBe('3 історії · 12 сторіс');
+  });
+});
+
+test.describe('renaming the board', () => {
+  const day = (id: string, name: string) => ({ id, name });
+
+  test('the new stem replaces the old one on every day that carried it', () => {
+    expect(
+      renameSetStem(
+        [day('a', 'Злам року'), day('b', 'Злам року — день 2'), day('c', 'Злам року — день 3')],
+        'Злам року',
+        'Новий сторітел',
+      ),
+    ).toEqual([
+      { id: 'a', name: 'Новий сторітел' },
+      { id: 'b', name: 'Новий сторітел — день 2' },
+      { id: 'c', name: 'Новий сторітел — день 3' },
+    ]);
+  });
+
+  test('a day renamed by hand keeps its name — a board rename never erases it', () => {
+    const out = renameSetStem(
+      [day('a', 'Злам року'), day('b', 'Як я звільнилась')],
+      'Злам року',
+      'Новий сторітел',
+    );
+    expect(out).toEqual([{ id: 'a', name: 'Новий сторітел' }]);
+  });
+
+  test('nothing is written when the name did not actually change', () => {
+    expect(renameSetStem([day('a', 'Злам року')], 'Злам року', 'Злам року')).toEqual([]);
+    expect(renameSetStem([day('a', 'Злам року')], 'Злам року', '   ')).toEqual([]);
+    expect(renameSetStem([day('a', 'Злам року')], '', 'Нове')).toEqual([]);
   });
 });
