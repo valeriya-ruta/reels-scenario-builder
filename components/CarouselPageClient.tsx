@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import CarouselBuilder from '@/components/CarouselBuilder';
 import BrandDNASetup from '@/components/BrandDNASetup';
+import InactivityNudge from '@/components/InactivityNudge';
 import { useBrandStore } from '@/components/BrandProvider';
 import type { BrandSettings } from '@/lib/brand';
 import type { Slide } from '@/lib/carouselTypes';
@@ -49,6 +50,7 @@ export default function CarouselPageClient({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      <InactivityNudge />
       <CarouselBuilder
         projectId={carouselProject.id}
         initialProjectName={carouselProject.name}
