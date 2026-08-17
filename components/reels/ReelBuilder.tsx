@@ -87,6 +87,10 @@ export default function ReelBuilder({
   const [addOpen, setAddOpen] = useState(false);
   const [presetOpen, setPresetOpen] = useState(false);
   const [hints, setHints] = useState<Record<string, string>>({});
+  // A write that fails has to SAY so. The first version swallowed every failure,
+  // so when RLS silently refused the insert the button simply did nothing and
+  // there was no way to tell a broken save from a slow one.
+  const [error, setError] = useState<string | null>(null);
   const persist = useDebouncedPersist();
 
   const seconds = useMemo(() => estimateSeconds(blocks), [blocks]);
@@ -98,7 +102,9 @@ export default function ReelBuilder({
       // Keyed by block AND field, so editing the text does not cancel the write
       // of an overlay attached a moment earlier.
       persist(`${id}:${Object.keys(patch).join(',')}`, () => {
-        void updateReelBlock(id, toPatch(patch));
+        void updateReelBlock(id, toPatch(patch)).then((res) => {
+          if (!res.ok) setError('Не вдалося зберегти. Онови сторінку.');
+        });
       });
     },
     [persist],
@@ -110,6 +116,7 @@ export default function ReelBuilder({
       const orderIndex = blocks.length;
       void addReelBlock(project.id, kind, orderIndex).then((res) => {
         if (res.ok) setBlocks((prev) => [...prev, res.block]);
+        else setError('Не вдалося додати блок. Онови сторінку.');
       });
     },
     [blocks.length, project.id],
@@ -141,7 +148,10 @@ export default function ReelBuilder({
       setPresetOpen(false);
       const preset = REEL_PRESETS.find((p) => p.id === presetId);
       void applyReelPreset(project.id, presetId).then((res) => {
-        if (!res.ok) return;
+        if (!res.ok) {
+          setError('Не вдалося додати форму. Онови сторінку.');
+          return;
+        }
         setBlocks((prev) => [...prev, ...res.blocks]);
         // The preset's per-block prompts become placeholders — an empty preset
         // should read as instructions, not as a column of blank boxes.
@@ -168,6 +178,24 @@ export default function ReelBuilder({
 
   return (
     <div className="app-canvas min-h-screen">
+      {error && (
+        <div
+          role="status"
+          data-testid="reel-error"
+          className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-full bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white shadow-lg"
+        >
+          {error}
+          <button
+            type="button"
+            onClick={() => setError(null)}
+            aria-label="Закрити"
+            className="cursor-pointer opacity-70 hover:opacity-100"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       <div className="mx-auto w-full max-w-[1180px] px-6 pb-24 pt-5">
         <EditorTopBar
           backHref="/projects"
