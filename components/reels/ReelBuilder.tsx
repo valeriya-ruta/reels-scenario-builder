@@ -13,8 +13,12 @@ import {
   BLOCK_KINDS,
   BLOCK_LABELS,
   BLOCK_COLORS,
+  editKey,
+  editList,
   estimateSeconds,
   formatDuration,
+  shotKey,
+  shotList,
   shotSummary,
   type BlockKind,
   type ReelBlock,
@@ -76,11 +80,17 @@ export default function ReelBuilder({
   project,
   initialBlocks,
   shareToken = null,
+  ownerProgress,
 }: {
   project: Project;
   initialBlocks: ReelBlock[];
   /** Existing share link for this reel, if one was already created. */
   shareToken?: string | null;
+  /**
+   * What the person on the other end of the share link has already ticked off.
+   * Read-only here — she tracks, she does not un-tick someone else's work.
+   */
+  ownerProgress?: string[];
 }) {
   const [blocks, setBlocks] = useState<ReelBlock[]>(initialBlocks);
   const [tab, setTab] = useState<Tab>('write');
@@ -93,6 +103,20 @@ export default function ReelBuilder({
   const [error, setError] = useState<string | null>(null);
   const persist = useDebouncedPersist();
 
+  const done = useMemo(() => new Set(ownerProgress ?? []), [ownerProgress]);
+  // How far along the other side is, counted against THIS tab's list — a shot
+  // count that included edits would read as progress she hasn't got.
+  const tabProgress = useMemo(() => {
+    if (done.size === 0) return null;
+    const keys =
+      tab === 'shoot'
+        ? shotList(blocks).map(shotKey)
+        : tab === 'edit'
+          ? editList(blocks).map(editKey)
+          : [];
+    if (keys.length === 0) return null;
+    return { finished: keys.filter((k) => done.has(k)).length, total: keys.length };
+  }, [blocks, done, tab]);
   const seconds = useMemo(() => estimateSeconds(blocks), [blocks]);
   const shots = useMemo(() => shotSummary(blocks), [blocks]);
 
@@ -351,7 +375,21 @@ export default function ReelBuilder({
             </div>
           </>
         ) : (
-          <ReelRecipe blocks={blocks} only={tab === 'shoot' ? 'shoot' : 'edit'} />
+          <>
+            {/* What she came here to see: how much of it is already done on the
+                other side of the share link. */}
+            {tabProgress && (
+              <p
+                data-testid="owner-progress"
+                className="mb-3 rounded-[12px] border px-3.5 py-2 text-[12.5px] font-semibold"
+                style={{ borderColor: '#0F8A6A55', backgroundColor: '#0F8A6A12', color: '#0F6B54' }}
+              >
+                {tab === 'shoot' ? 'Знято' : 'Змонтовано'}: {tabProgress.finished} з{' '}
+                {tabProgress.total}
+              </p>
+            )}
+            <ReelRecipe blocks={blocks} only={tab === 'shoot' ? 'shoot' : 'edit'} done={done} />
+          </>
         )}
       </div>
     </div>

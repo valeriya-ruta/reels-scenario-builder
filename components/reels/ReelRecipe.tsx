@@ -1,11 +1,13 @@
 'use client';
 
-import { Camera, Clapperboard, Link2, Search } from 'lucide-react';
+import { Camera, Check, Clapperboard, Link2, Search } from 'lucide-react';
 import {
   ASSET_LABELS,
   BLOCK_COLORS,
   BLOCK_LABELS,
+  editKey,
   editList,
+  shotKey,
   shotList,
   spokenScript,
   type ReelBlock,
@@ -27,10 +29,18 @@ import {
 export default function ReelRecipe({
   blocks,
   only,
+  done,
+  onToggleDone,
 }: {
   blocks: ReelBlock[];
   /** Restrict to one section (the builder's tabs); omit to show all three. */
   only?: 'shoot' | 'edit' | 'script';
+  /**
+   * Keys already ticked. Passing this WITHOUT `onToggleDone` is the builder's
+   * case: she sees what the blogger has recorded, read-only.
+   */
+  done?: ReadonlySet<string>;
+  onToggleDone?: (key: string, next: boolean) => void;
 }) {
   const shots = shotList(blocks);
   const edits = editList(blocks);
@@ -53,19 +63,43 @@ export default function ReelRecipe({
             </p>
           ) : (
             <ol className="flex flex-col gap-2">
-              {shots.map((s, i) => (
+              {shots.map((s, i) => {
+                const key = shotKey(s);
+                const isDone = done?.has(key) ?? false;
+                return (
                 <li
                   key={i}
                   data-testid="shot-item"
-                  className="flex items-start gap-3 rounded-[14px] border border-[color:var(--border)] bg-[color:var(--background)] p-3.5"
-                  style={{ boxShadow: 'var(--elev-1)' }}
+                  data-done={isDone ? 'true' : 'false'}
+                  className="flex items-start gap-3 rounded-[14px] border border-[color:var(--border)] bg-[color:var(--background)] p-3.5 transition-opacity"
+                  style={{ boxShadow: 'var(--elev-1)', opacity: isDone ? 0.55 : 1 }}
                 >
-                  <span
-                    className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-[7px] text-[11px] font-bold tabular-nums text-white"
-                    style={{ backgroundColor: BLOCK_COLORS[s.kind] }}
-                  >
-                    {s.at}
-                  </span>
+                  {/* Ticking exists only where a handler was given — the builder
+                      shows the same list without it, since the person writing
+                      the reel is not the person crossing shots off. */}
+                  {onToggleDone ? (
+                    <button
+                      type="button"
+                      onClick={() => onToggleDone(key, !isDone)}
+                      aria-pressed={isDone}
+                      aria-label={isDone ? 'Зняти позначку' : 'Позначити як знято'}
+                      data-testid="shot-done"
+                      className="mt-0.5 flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-[7px] border-2 transition-colors"
+                      style={{
+                        borderColor: isDone ? BLOCK_COLORS[s.kind] : 'var(--border-strong)',
+                        backgroundColor: isDone ? BLOCK_COLORS[s.kind] : 'transparent',
+                      }}
+                    >
+                      {isDone && <Check className="h-3.5 w-3.5 text-white" strokeWidth={3} />}
+                    </button>
+                  ) : (
+                    <span
+                      className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-[7px] text-[11px] font-bold tabular-nums text-white"
+                      style={{ backgroundColor: BLOCK_COLORS[s.kind] }}
+                    >
+                      {s.at}
+                    </span>
+                  )}
 
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -80,7 +114,10 @@ export default function ReelRecipe({
                           {ASSET_LABELS[s.action]}
                         </span>
                       )}
-                      <span className="text-[14.5px] font-semibold leading-snug text-[color:var(--foreground)]">
+                      <span
+                        className="text-[14.5px] font-semibold leading-snug text-[color:var(--foreground)]"
+                        style={{ textDecoration: isDone ? 'line-through' : undefined }}
+                      >
                         {s.what}
                       </span>
                     </div>
@@ -107,7 +144,8 @@ export default function ReelRecipe({
                     )}
                   </div>
                 </li>
-              ))}
+                );
+              })}
             </ol>
           )}
         </section>
@@ -141,20 +179,46 @@ export default function ReelRecipe({
             </p>
           ) : (
             <ol className="flex flex-col gap-1.5">
-              {edits.map((e, i) => (
-                <li
-                  key={i}
-                  data-testid="edit-item"
-                  className="flex items-start gap-3 rounded-[12px] border border-[color:var(--border)] bg-[color:var(--surface1)]/60 px-3.5 py-2.5"
-                >
-                  <span className="mt-px shrink-0 text-[11px] font-bold tabular-nums text-[color:var(--text-muted)]">
-                    {e.at}
-                  </span>
-                  <span className="text-[13.5px] leading-relaxed text-[color:var(--foreground)]">
-                    {e.what}
-                  </span>
-                </li>
-              ))}
+              {edits.map((e, i) => {
+                const key = editKey(e);
+                const isDone = done?.has(key) ?? false;
+                return (
+                  <li
+                    key={i}
+                    data-testid="edit-item"
+                    data-done={isDone ? 'true' : 'false'}
+                    className="flex items-start gap-3 rounded-[12px] border border-[color:var(--border)] bg-[color:var(--surface1)]/60 px-3.5 py-2.5 transition-opacity"
+                    style={{ opacity: isDone ? 0.55 : 1 }}
+                  >
+                    {onToggleDone ? (
+                      <button
+                        type="button"
+                        onClick={() => onToggleDone(key, !isDone)}
+                        aria-pressed={isDone}
+                        aria-label={isDone ? 'Зняти позначку' : 'Позначити як зроблено'}
+                        data-testid="edit-done"
+                        className="mt-px flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded-[6px] border-2 transition-colors"
+                        style={{
+                          borderColor: isDone ? '#0F8A6A' : 'var(--border-strong)',
+                          backgroundColor: isDone ? '#0F8A6A' : 'transparent',
+                        }}
+                      >
+                        {isDone && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
+                      </button>
+                    ) : (
+                      <span className="mt-px shrink-0 text-[11px] font-bold tabular-nums text-[color:var(--text-muted)]">
+                        {e.at}
+                      </span>
+                    )}
+                    <span
+                      className="text-[13.5px] leading-relaxed text-[color:var(--foreground)]"
+                      style={{ textDecoration: isDone ? 'line-through' : undefined }}
+                    >
+                      {e.what}
+                    </span>
+                  </li>
+                );
+              })}
             </ol>
           )}
         </section>

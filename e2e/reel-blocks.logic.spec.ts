@@ -1,9 +1,11 @@
 import { test, expect } from '@playwright/test';
 import {
+  editKey,
   editList,
   effectiveAudio,
   emptyBlock,
   resolveOverlays,
+  shotKey,
   shotList,
   shotSummary,
   spokenScript,
@@ -171,5 +173,76 @@ test.describe('reel blocks — the script', () => {
       block({ kind: 'talk', spoken: 'Бувай' }),
     ]);
     expect(script).toBe('Привіт\n\nБувай');
+  });
+});
+
+/**
+ * A tick made on the shared page has to survive the reel being edited around it.
+ * Ticks are stored against these keys, so if a key moved when a block was
+ * dragged or a line reworded, "already filmed" would silently jump to a
+ * different shot — the one failure mode that makes the whole feature worse than
+ * no feature.
+ */
+test.describe('reel blocks — progress keys', () => {
+  test('a shot key names the block and its half, never its position', () => {
+    const blocks = [
+      block({ id: 'a', kind: 'talk', spoken: 'Перше' }),
+      block({ id: 'b', kind: 'broll', assetNote: 'кава', assetKind: 'film' }),
+    ];
+    const before = shotList(blocks).map(shotKey);
+
+    // Same blocks, opposite order, one of them reworded.
+    const after = shotList([
+      { ...blocks[1] },
+      { ...blocks[0], spoken: 'Перше, але інакше' },
+    ]).map(shotKey);
+
+    expect(before.sort()).toEqual(after.sort());
+    expect(before.every((k) => /^[ab]:(take|asset)$/.test(k))).toBe(true);
+  });
+
+  test('a talking block with an asset yields two distinct keys', () => {
+    const keys = shotList([
+      block({ id: 'a', kind: 'talk', spoken: 'Кажу', assetKind: 'find', assetNote: 'референс' }),
+    ]).map(shotKey);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  test('an edit key follows its overlay, not its place in the list', () => {
+    const withOne = editList([
+      block({
+        id: 'a',
+        kind: 'talk',
+        spoken: 'Це коштує дорого',
+        overlays: [
+          overlay({ id: 'o2', anchorText: 'дорого', anchorStart: 'Це коштує дорого'.indexOf('дорого'), kind: 'image', note: 'ціни' }),
+        ],
+      }),
+    ]).map(editKey);
+
+    // Another overlay is added ABOVE it later — the existing key must not shift.
+    const withTwo = editList([
+      block({
+        id: 'a',
+        kind: 'talk',
+        spoken: 'Це коштує дорого',
+        overlays: [
+          overlay({ id: 'o1', anchorText: 'Це', anchorStart: 0, kind: 'image', note: 'обкладинка' }),
+          overlay({ id: 'o2', anchorText: 'дорого', anchorStart: 'Це коштує дорого'.indexOf('дорого'), kind: 'image', note: 'ціни' }),
+        ],
+      }),
+    ]).map(editKey);
+
+    expect(withOne).toEqual(['a:edit:ov:o2']);
+    expect(withTwo).toContain('a:edit:ov:o2');
+  });
+
+  test('shot keys and edit keys never collide', () => {
+    const blocks = [
+      block({ id: 'a', kind: 'talk', spoken: 'Кажу', editNote: 'різати швидко' }),
+      block({ id: 'b', kind: 'broll', assetNote: 'кава', assetKind: 'film' }),
+    ];
+    const all = [...shotList(blocks).map(shotKey), ...editList(blocks).map(editKey)];
+    expect(new Set(all).size).toBe(all.length);
   });
 });
