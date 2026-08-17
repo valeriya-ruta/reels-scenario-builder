@@ -43,6 +43,7 @@ export default function ShareManyButton({ reels }: { reels: PickableReel[] }) {
   }, [open]);
 
   const ordered = useMemo(() => reels.filter((r) => picked.has(r.id)).map((r) => r.id), [reels, picked]);
+  const allPicked = reels.length > 0 && ordered.length === reels.length;
 
   const toggle = (id: string) =>
     setPicked((prev) => {
@@ -124,6 +125,26 @@ export default function ShareManyButton({ reels }: { reels: PickableReel[] }) {
                   data-testid="share-many-title"
                   className="mb-3 w-full rounded-[12px] border border-[color:var(--border)] bg-white px-3 py-2.5 text-[14px] outline-none focus:border-[color:var(--border-strong)]"
                 />
+
+                {/* Sharing everything prepared is the common case — fifteen
+                    taps to say "all of them" is the wrong default. */}
+                {reels.length > 1 && (
+                  <div className="mb-2 flex items-center justify-between px-0.5">
+                    <span className="text-[12px] text-[color:var(--text-muted)]">
+                      Обрано {picked.size} з {reels.length}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPicked(allPicked ? new Set() : new Set(reels.map((r) => r.id)))
+                      }
+                      data-testid="share-many-all"
+                      className="cursor-pointer text-[12.5px] font-semibold text-[color:var(--accent)] hover:underline"
+                    >
+                      {allPicked ? 'Зняти всі' : 'Обрати всі'}
+                    </button>
+                  </div>
+                )}
 
                 <div className="min-h-0 flex-1 overflow-y-auto rounded-[14px] border border-[color:var(--border)]">
                   {reels.length === 0 ? (

@@ -3,7 +3,6 @@ import { requireAuth } from '@/lib/auth';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import { deleteProject } from '@/app/actions';
 import SwipeableContentList from '@/components/content/SwipeableContentList';
-import ShareManyButton from '@/components/reels/ShareManyButton';
 import type { ContentPiece } from '@/lib/content/contentPiece';
 import type { ContentStatus } from '@/lib/content/statusSystem';
 import { attachPreviews } from '@/lib/content/contentPreview';
@@ -68,17 +67,7 @@ export default async function ProjectsPage() {
           onCreate={createReelProject}
           onDelete={deleteProject}
           emptyText="Рілсів ще немає — ось із чого я б зняла перший"
-          headerAction={
-            pieces.length > 0 ? (
-              <ShareManyButton
-                reels={((projects as Row[] | null) ?? []).map((p) => ({
-                  id: p.id,
-                  name: p.name,
-                  scheduledDate: p.scheduled_date ?? null,
-                }))}
-              />
-            ) : null
-          }
+          shareMany
         />
       </div>
     </div>
