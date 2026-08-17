@@ -322,3 +322,55 @@ test.describe('reel blocks — the shot list grouped by type', () => {
     expect(shotGroups([])).toEqual([]);
   });
 });
+
+/**
+ * A sound block keeps its note in the same column as a cutaway's, so the shot
+ * list was telling someone to go and film «Після "do i clench my fists?" мені
+ * здається тут ідеально підійде» — a song. Nobody points a camera at a song.
+ */
+test.describe('a song is editing work, not a shot', () => {
+  const soundReel = [
+    block({ id: 'a', kind: 'broll', assetKind: 'film', assetNote: 'Зйомка зверху, flatlay' }),
+    block({
+      id: 'b',
+      kind: 'sound',
+      assetNote: 'Після "do i clench my fists?" тут ідеально підійде',
+      assetUrl: 'https://example.com/track',
+      audioSource: 'trend',
+    }),
+  ];
+
+  test('the sound never reaches the shot list', () => {
+    const shots = shotList(soundReel);
+    expect(shots).toHaveLength(1);
+    expect(shots[0].blockId).toBe('a');
+  });
+
+  test('it IS on the edit list, where it belongs', () => {
+    const sound = editList(soundReel).find((e) => e.slot === 'edit:sound');
+    expect(sound?.what).toContain('do i clench my fists');
+  });
+
+  test('the reference link travels with it — this is now its only home', () => {
+    const sound = editList(soundReel).find((e) => e.slot === 'edit:sound');
+    expect(sound?.url).toBe('https://example.com/track');
+  });
+
+  test('a clip to FIND keeps its link on the edit list too', () => {
+    const items = editList([
+      block({ id: 'c', kind: 'broll', assetKind: 'find', assetNote: 'тренд', assetUrl: 'https://example.com/reel' }),
+    ]);
+    expect(items.find((e) => e.slot === 'edit:asset')?.url).toBe('https://example.com/reel');
+  });
+
+  test('the count stops promising a shot that does not exist', () => {
+    expect(shotSummary(soundReel)).toBe('1 зняти');
+  });
+
+  test('a cutaway is still a shot — only sound is exempt', () => {
+    const shots = shotList([
+      block({ id: 'd', kind: 'broll', assetKind: 'film', assetNote: 'кава' }),
+    ]);
+    expect(shots).toHaveLength(1);
+  });
+});

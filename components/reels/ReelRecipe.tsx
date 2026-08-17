@@ -248,11 +248,26 @@ export default function ReelRecipe({
                         {e.at}
                       </span>
                     )}
-                    <span
-                      className="text-[13.5px] leading-relaxed text-[color:var(--foreground)]"
-                      style={{ textDecoration: isDone ? 'line-through' : undefined }}
-                    >
-                      {e.what}
+                    <span className="min-w-0 flex-1">
+                      <span
+                        className="text-[13.5px] leading-relaxed text-[color:var(--foreground)]"
+                        style={{ textDecoration: isDone ? 'line-through' : undefined }}
+                      >
+                        {e.what}
+                      </span>
+                      {/* A song or a clip to find is useless without the link —
+                          and this is the only list it appears on. */}
+                      {e.url && (
+                        <a
+                          href={e.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="ml-2 inline-flex items-center gap-1 align-middle text-[12.5px] font-medium text-[color:var(--accent)] hover:underline"
+                        >
+                          <Link2 className="h-3.5 w-3.5" />
+                          Референс
+                        </a>
+                      )}
                     </span>
                   </li>
                 );
