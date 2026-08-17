@@ -35,6 +35,12 @@ test.describe('shared calendar — rows → pieces', () => {
     expect(pieces.map((p) => p.id)).toEqual(['p1']);
   });
 
+  test('status never reaches the client, even though the row carries it', () => {
+    const [piece] = toSharedPieces([row({ status: 'film' })]);
+    expect('status' in piece).toBe(false);
+    expect(JSON.stringify(piece)).not.toContain('film');
+  });
+
   test('normalizes a timestamp down to the day key the grid buckets on', () => {
     const [piece] = toSharedPieces([row({ scheduled_date: '2026-08-18T00:00:00.000Z' })]);
     expect(piece.scheduledDate).toBe('2026-08-18');
@@ -83,6 +89,9 @@ test.describe('shared calendar — piece → detail blocks', () => {
     });
     expect(detail?.type).toBe('story');
     expect(detail?.countLabel).toBe('2 сторіс');
+    // The creator's production state is not the client's business, and dropping
+    // it here keeps it out of the page's data, not merely off the screen.
+    expect('status' in (detail as object)).toBe(false);
     expect(detail?.blocks[0]).toEqual({
       heading: 'Сторіс 1',
       body: 'Я зупинилась.',
