@@ -3,6 +3,13 @@ import 'server-only';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import type { ContentPiece, ContentPreview } from '@/lib/content/contentPiece';
 import { estimateDialogueSeconds } from '@/lib/dialogueDuration';
+import {
+  estimateSeconds,
+  isBlockEmpty,
+  spokenScript,
+  toReelBlock,
+  type ReelBlock,
+} from '@/lib/reels/blocks';
 
 /** «1:35» — the shape a creator checks a Reel's length against. */
 function formatDuration(totalSeconds: number): string {
@@ -82,11 +89,55 @@ export async function attachPreviews(pieces: ContentPiece[]): Promise<ContentPie
 
     (async () => {
       if (reelIds.length === 0) return;
+
+      // A reel is BLOCKS (migration 033). `scenes` is the shape from before
+      // that and is mirrored one way only — scenes → blocks — so a reel that
+      // has been edited in the builder still carries whatever `scenes` held the
+      // day it was created. Reading `scenes` here put text on the card that the
+      // author had already rewritten, in a language she had already changed.
+      const { data: blockRows } = await supabase
+        .from('reel_blocks')
+        .select(
+          'id,project_id,order_index,kind,speaker,spoken,screen_text,record_note,asset_kind,asset_note,asset_url,edit_note,overlays,audio_source,duration_sec',
+        )
+        .in('project_id', reelIds)
+        .order('order_index', { ascending: true });
+
+      const byProject = new Map<string, ReelBlock[]>();
+      for (const row of blockRows ?? []) {
+        const block = toReelBlock(row as Record<string, unknown>);
+        const list = byProject.get(block.projectId);
+        if (list) list.push(block);
+        else byProject.set(block.projectId, [block]);
+      }
+
+      for (const [id, all] of byProject) {
+        const blocks = all.filter((b) => !isBlockEmpty(b));
+        if (blocks.length === 0) continue;
+        // The same derivation the builder and the shared page use, so the card
+        // cannot disagree with the screen it links to.
+        const lead = clean(spokenScript(blocks).split('\n\n')[0]) || clean(blocks[0].recordNote) || clean(blocks[0].assetNote);
+        const seconds = estimateSeconds(blocks);
+        previews.set(id, {
+          lead,
+          count: blocks.length,
+          countLabel: `${blocks.length} блоків`,
+          ...(seconds > 0 ? { durationLabel: formatDuration(seconds) } : {}),
+        });
+      }
+
+      // Reels written before blocks existed, and any whose mirror never ran.
+      // Keyed on HAVING blocks, not on having produced a preview: a reel whose
+      // blocks were emptied out shows no preview rather than resurrecting the
+      // text from `scenes` that the author deleted.
+      const withoutBlocks = reelIds.filter((id) => !byProject.has(id));
+      if (withoutBlocks.length === 0) return;
+
       // The hook is scene 0 by construction (see flattenToSceneDrafts).
       const { data } = await supabase
         .from('scenes')
         .select('project_id,order_index,lines')
-        .in('project_id', reelIds)
+        .in('project_id', withoutBlocks)
         .order('order_index', { ascending: true })
         .returns<{ project_id: string; order_index: number; lines: string | null }[]>();
       const counts = new Map<string, number>();
