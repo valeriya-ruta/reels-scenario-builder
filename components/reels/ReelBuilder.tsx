@@ -24,6 +24,7 @@ import {
   type ReelBlock,
 } from '@/lib/reels/blocks';
 import { REEL_PRESETS } from '@/lib/reels/presets';
+import { updateProjectName } from '@/app/actions';
 import {
   addReelBlock,
   applyReelPreset,
@@ -102,6 +103,24 @@ export default function ReelBuilder({
   // there was no way to tell a broken save from a slow one.
   const [error, setError] = useState<string | null>(null);
   const persist = useDebouncedPersist();
+
+  // The name lives here so the header shows the new one immediately; the write
+  // follows and rolls back if it fails, the same as every other edit on this
+  // screen.
+  const [name, setName] = useState(project.name);
+  const rename = useCallback(
+    (next: string) => {
+      const previous = name;
+      setName(next);
+      void updateProjectName(project.id, next).then((res) => {
+        if (!res.ok) {
+          setName(previous);
+          setError('Не вдалося змінити назву.');
+        }
+      });
+    },
+    [name, project.id],
+  );
 
   const done = useMemo(() => new Set(ownerProgress ?? []), [ownerProgress]);
   // How far along the other side is, counted against THIS tab's list — a shot
@@ -223,7 +242,8 @@ export default function ReelBuilder({
       <div className="mx-auto w-full max-w-[1180px] px-6 pb-24 pt-5">
         <EditorTopBar
           backHref="/projects"
-          title={project.name}
+          title={name}
+          onRename={rename}
           kind="reel"
           trailing={<ReelShareButton reelId={project.id} initialToken={shareToken} />}
           meta={
