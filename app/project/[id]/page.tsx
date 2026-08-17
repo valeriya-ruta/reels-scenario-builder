@@ -3,7 +3,7 @@ import { requireAuth } from '@/lib/auth';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import { Project } from '@/lib/domain';
 import { toReelBlock } from '@/lib/reels/blocks';
-import { getReelShareLink } from '@/lib/reels/share';
+import { getOwnerProgress, getReelShareLink } from '@/lib/reels/share';
 import ReelBuilder from '@/components/reels/ReelBuilder';
 
 interface PageProps {
@@ -25,7 +25,7 @@ export default async function ProjectPage({ params }: PageProps) {
   const { id } = await params;
   const supabase = await createServerSupabaseClient();
 
-  const [projectRes, blocksRes, shareLink] = await Promise.all([
+  const [projectRes, blocksRes, shareLink, ownerProgress] = await Promise.all([
     supabase.from('projects').select('*').eq('id', id).eq('user_id', user.id).single(),
     supabase
       .from('reel_blocks')
@@ -35,6 +35,7 @@ export default async function ProjectPage({ params }: PageProps) {
       .eq('project_id', id)
       .order('order_index', { ascending: true }),
     getReelShareLink(id),
+    getOwnerProgress(id),
   ]);
 
   const { data: project, error: projectError } = projectRes;
@@ -48,6 +49,7 @@ export default async function ProjectPage({ params }: PageProps) {
       project={project as Project}
       initialBlocks={blocks}
       shareToken={shareLink?.token ?? null}
+      ownerProgress={ownerProgress}
     />
   );
 }

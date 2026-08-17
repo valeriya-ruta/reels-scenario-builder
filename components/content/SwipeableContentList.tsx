@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { Film, LayoutGrid, Play, Plus } from 'lucide-react';
 import DateSheet from '@/components/content/DateSheet';
@@ -48,6 +48,7 @@ export default function SwipeableContentList({
   onCreate,
   onDelete,
   emptyText,
+  headerAction,
 }: {
   pieces: ContentPiece[];
   heading: string;
@@ -57,6 +58,8 @@ export default function SwipeableContentList({
   onCreate: () => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   emptyText: string;
+  /** Extra control beside «+» — the reels list uses it to share a batch. */
+  headerAction?: ReactNode;
 }) {
   const HeaderIcon = HEADER_ICONS[iconKey];
   const router = useRouter();
@@ -169,6 +172,8 @@ export default function SwipeableContentList({
             <p className="app-subtitle">{items.length} матеріалів</p>
           </div>
         </div>
+        <div className="flex shrink-0 items-center gap-2">
+        {headerAction}
         <button
           type="button"
           onClick={create}
@@ -179,6 +184,7 @@ export default function SwipeableContentList({
         >
           {creating ? '…' : <Plus className="h-5 w-5" strokeWidth={2.4} />}
         </button>
+        </div>
       </div>
       <div className="h-px bg-[color:var(--border)]" />
 

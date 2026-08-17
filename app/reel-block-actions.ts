@@ -5,6 +5,7 @@ import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import { toReelBlock, type ReelBlock } from '@/lib/reels/blocks';
 import { findPreset } from '@/lib/reels/presets';
 import {
+  createReelShareSet,
   ensureReelShareLink,
   regenerateReelShareLink,
   revokeReelShareLink,
@@ -203,4 +204,17 @@ export async function regenerateReelShareLinkAction(reelId: string): Promise<Ree
 
 export async function revokeReelShareLinkAction(reelId: string): Promise<{ ok: boolean }> {
   return { ok: await revokeReelShareLink(reelId) };
+}
+
+/**
+ * One link for a whole batch. Fifteen prepared reels are one thing to send, not
+ * fifteen — ownership of every id is re-checked server-side, since the list came
+ * from the browser.
+ */
+export async function createReelSetShareLinkAction(
+  reelIds: string[],
+  title: string | null,
+): Promise<ReelShareResult> {
+  const link = await createReelShareSet(reelIds, title);
+  return link ? { ok: true, token: link.token } : { ok: false };
 }

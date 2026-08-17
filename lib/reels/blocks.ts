@@ -278,6 +278,14 @@ export function formatDuration(totalSeconds: number): string {
 export type ShotItem = {
   /** 1-based position of the block it came from, so it maps back to the script. */
   at: number;
+  /**
+   * The block this came from, and which half of it. A shot has no row of its
+   * own — the list is derived — so this pair is its identity when someone ticks
+   * it off as recorded. Stable across edits to the text, which a positional
+   * index would not be.
+   */
+  blockId: string;
+  slot: 'take' | 'asset';
   kind: BlockKind;
   /** «Зняти» / «Знайти» / null when it is simply the creator talking. */
   action: AssetKind | null;
@@ -305,6 +313,8 @@ export function shotList(blocks: ReadonlyArray<ReelBlock>): ShotItem[] {
     if (b.kind === 'talk' || b.kind === 'dialogue') {
       out.push({
         at: i + 1,
+        blockId: b.id,
+        slot: 'take',
         kind: b.kind,
         action: null,
         what: EMPTY(b.recordNote)
@@ -320,6 +330,8 @@ export function shotList(blocks: ReadonlyArray<ReelBlock>): ShotItem[] {
     if (!EMPTY(b.assetNote) || b.assetKind) {
       out.push({
         at: i + 1,
+        blockId: b.id,
+        slot: 'asset',
         kind: 'broll',
         action: b.assetKind,
         what: EMPTY(b.assetNote) ? 'Відео' : (b.assetNote ?? '').trim(),
@@ -331,8 +343,20 @@ export function shotList(blocks: ReadonlyArray<ReelBlock>): ShotItem[] {
   return out;
 }
 
-/** One editing instruction, as it appears on the edit list. */
-export type EditItem = { at: number; what: string };
+/**
+ * One editing instruction, as it appears on the edit list.
+ *
+ * `slot` identifies WHICH instruction of that block this is, by its source
+ * rather than by its position — an overlay carries its own id, the screen text
+ * and the note are one apiece. So ticking «зроблено» survives adding another
+ * overlay above it, which a positional index would not.
+ */
+export type EditItem = { at: number; what: string; blockId: string; slot: string };
+
+/** The key an edit tick is stored under. */
+export function editKey(item: Pick<EditItem, 'blockId' | 'slot'>): string {
+  return `${item.blockId}:${item.slot}`;
+}
 
 /** Everything the editor has to do, in reel order. */
 export function editList(blocks: ReadonlyArray<ReelBlock>): EditItem[] {
@@ -341,7 +365,13 @@ export function editList(blocks: ReadonlyArray<ReelBlock>): EditItem[] {
     if (isBlockEmpty(b)) return;
     const at = i + 1;
 
-    if (!EMPTY(b.screenText)) out.push({ at, what: `Текст на екрані: «${(b.screenText ?? '').trim()}»` });
+    if (!EMPTY(b.screenText))
+      out.push({
+        at,
+        blockId: b.id,
+        slot: 'edit:screen',
+        what: `Текст на екрані: «${(b.screenText ?? '').trim()}»`,
+      });
 
     // Anchored add-ons read as an instruction with its cue: the editor is told
     // WHEN, in the creator's own words, not at a timecode nobody has yet.
@@ -349,28 +379,39 @@ export function editList(blocks: ReadonlyArray<ReelBlock>): EditItem[] {
       const label = OVERLAY_LABELS[o.kind] ?? 'Вставка';
       const what = EMPTY(o.note) ? label : `${label}: ${o.note.trim()}`;
       const cue = EMPTY(o.anchorText) ? '' : `на «${o.anchorText.trim()}» — `;
-      out.push({ at, what: `${cue}${what}` });
+      out.push({ at, blockId: b.id, slot: `edit:ov:${o.id}`, what: `${cue}${what}` });
     }
 
     // Sound only earns a line when it is NOT what the picture implies — saying
     // "звук із кадру" under a talking head is noise the editor has to read past.
     const audio = effectiveAudio(b);
-    if (audio === 'voiceover') out.push({ at, what: 'Голос продовжується поверх цього кадру' });
-    if (audio === 'trend' && b.kind !== 'sound') out.push({ at, what: 'Трендовий звук поверх' });
-    if (audio === 'mute' && b.kind !== 'text') out.push({ at, what: 'Без звуку' });
+    if (audio === 'voiceover')
+      out.push({ at, blockId: b.id, slot: 'edit:audio', what: 'Голос продовжується поверх цього кадру' });
+    if (audio === 'trend' && b.kind !== 'sound')
+      out.push({ at, blockId: b.id, slot: 'edit:audio', what: 'Трендовий звук поверх' });
+    if (audio === 'mute' && b.kind !== 'text')
+      out.push({ at, blockId: b.id, slot: 'edit:audio', what: 'Без звуку' });
 
     if (b.kind === 'sound' && !EMPTY(b.assetNote)) {
-      out.push({ at, what: `Звук: ${(b.assetNote ?? '').trim()}` });
+      out.push({ at, blockId: b.id, slot: 'edit:sound', what: `Звук: ${(b.assetNote ?? '').trim()}` });
     }
     if (b.kind === 'broll' && (b.assetKind === 'find' || b.assetKind === 'screenshot')) {
       out.push({
         at,
+        blockId: b.id,
+        slot: 'edit:asset',
         what: `${ASSET_LABELS[b.assetKind]}: ${EMPTY(b.assetNote) ? 'відео' : (b.assetNote ?? '').trim()}`,
       });
     }
-    if (!EMPTY(b.editNote)) out.push({ at, what: (b.editNote ?? '').trim() });
+    if (!EMPTY(b.editNote))
+      out.push({ at, blockId: b.id, slot: 'edit:note', what: (b.editNote ?? '').trim() });
   });
   return out;
+}
+
+/** The key a tick is stored under: block + which half of it. */
+export function shotKey(shot: Pick<ShotItem, 'blockId' | 'slot'>): string {
+  return `${shot.blockId}:${shot.slot}`;
 }
 
 /** «3 зняти · 2 знайти» — what the reel costs, before anyone opens it. */
