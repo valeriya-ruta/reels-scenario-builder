@@ -2,6 +2,7 @@
 import { NEW_LABELS } from '@/lib/content/displayTitle';
 
 import { requireAuth, requireAuthResult, AUTH_FAILURE_MESSAGE } from '@/lib/auth';
+import { isNoSpeechError } from '@/lib/ai/noSpeech';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import { getProScope, insertProjectId } from '@/lib/pro/scope';
 import { nanoid } from 'nanoid';
@@ -851,7 +852,9 @@ export async function saveCompetitorReelToScenario(
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         const canBrief = refNoteRaw.length > 0 || refUrlRaw.length > 0;
-        if (canBrief && msg.includes('empty')) {
+        // No speech is the same situation as an empty transcript: there is
+        // nothing to template, but the note and the link are still a brief.
+        if (canBrief && (msg.includes('empty') || isNoSpeechError(e))) {
           transcript = '';
           segments = [];
         } else {

@@ -117,10 +117,10 @@ export async function transcribeFile(file: File, language?: string): Promise<Res
   const send = (verbose: boolean) => {
     const form = new FormData();
     form.append('model', stt.model);
-    if (verbose) {
-      form.append('response_format', 'verbose_json');
-      form.append('temperature', '0');
-    }
+    // Temperature 0 on BOTH paths: Whisper's fallback decoding is where the
+    // invented «Субтитры сделал …» credits come from.
+    form.append('temperature', '0');
+    if (verbose) form.append('response_format', 'verbose_json');
     if (language) form.append('language', language);
     form.append('file', file);
     return fetch(stt.url, { method: 'POST', headers: stt.headers, body: form });
