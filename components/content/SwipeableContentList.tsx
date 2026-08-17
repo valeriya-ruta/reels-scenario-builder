@@ -1,12 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Film, LayoutGrid, Play, Plus } from 'lucide-react';
 import DateSheet from '@/components/content/DateSheet';
 import ContentCard from '@/components/content/ContentCard';
 import SwipeRow from '@/components/content/SwipeRow';
 import ProposingEmptyState from '@/components/propose/ProposingEmptyState';
+import ShareManyButton from '@/components/reels/ShareManyButton';
 import { setContentScheduledDate } from '@/app/content-actions';
 import { contentHref, opensBraindumpOverlay, type ContentPiece } from '@/lib/content/contentPiece';
 import { dispatchOpenBraindumpIdea } from '@/lib/content/braindumpIdeaEvent';
@@ -48,7 +49,7 @@ export default function SwipeableContentList({
   onCreate,
   onDelete,
   emptyText,
-  headerAction,
+  shareMany = false,
 }: {
   pieces: ContentPiece[];
   heading: string;
@@ -58,8 +59,15 @@ export default function SwipeableContentList({
   onCreate: () => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   emptyText: string;
-  /** Extra control beside «+» — the reels list uses it to share a batch. */
-  headerAction?: ReactNode;
+  /**
+   * Show «Поділитися кількома» beside «+» (reels only).
+   *
+   * Rendered from THIS component's live `items` rather than passed in from the
+   * page: a deleted reel disappears from the list immediately but the page's
+   * server snapshot still holds it, and the picker was offering reels that no
+   * longer exist.
+   */
+  shareMany?: boolean;
 }) {
   const HeaderIcon = HEADER_ICONS[iconKey];
   const router = useRouter();
@@ -88,9 +96,11 @@ export default function SwipeableContentList({
   const commitDelete = useCallback(
     (piece: ContentPiece) => {
       setUndo((cur) => (cur && cur.piece.id === piece.id ? null : cur));
-      void onDelete(piece.id);
+      // Refresh once the delete is real, so anything else rendered from the
+      // server snapshot (the share picker, the calendar) stops showing it.
+      void onDelete(piece.id).then(() => router.refresh());
     },
-    [onDelete],
+    [onDelete, router],
   );
 
   const removeRow = useCallback(
@@ -173,7 +183,15 @@ export default function SwipeableContentList({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-        {headerAction}
+        {shareMany && items.length > 0 && (
+          <ShareManyButton
+            reels={items.map((p) => ({
+              id: p.id,
+              name: p.title,
+              scheduledDate: p.scheduledDate ?? null,
+            }))}
+          />
+        )}
         <button
           type="button"
           onClick={create}
