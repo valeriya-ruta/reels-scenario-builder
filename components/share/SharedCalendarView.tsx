@@ -10,7 +10,7 @@ import {
   dayHeaderLabel,
   WEEKDAY_LABELS,
 } from '@/lib/content/calendar';
-import { STATUS_COLORS, STATUS_LABELS, TYPE_LABELS, TYPE_CHIP_COLORS } from '@/lib/content/statusSystem';
+import { TYPE_LABELS, TYPE_CHIP_COLORS } from '@/lib/content/statusSystem';
 import { displayTitle } from '@/lib/content/displayTitle';
 import type { SharedPiece, SharedPieceDetail } from '@/lib/calendar/sharedCalendar';
 
@@ -18,14 +18,21 @@ import type { SharedPiece, SharedPieceDetail } from '@/lib/calendar/sharedCalend
  * The client's view of a shared content calendar (no login, read-only).
  *
  * Three surfaces, in the order the client actually uses them:
- *   month  → tap a day
+ *   month  → pick a day
  *   day    → the list of what is planned on it
  *   piece  → the whole thing, written out
  *
- * Read-only is structural, not styling: there is no status ring, no date chip,
- * no drag — the client is looking at a plan, not editing one. The detail is
- * fetched per piece (one token-checked call) instead of shipping every scene and
- * slide of the whole month to the browser up front.
+ * The day's FIRST piece opens by itself, so the detail column is never an empty
+ * panel waiting to be clicked — on a day with content there is always something
+ * to read. It opens only into the desktop column, never into the phone's sheet:
+ * auto-opening a full-height sheet would drop a modal over the calendar the
+ * moment the page loaded. On a phone the list is already the content, and a tap
+ * raises the sheet.
+ *
+ * Read-only is structural, not styling: no status, no date chip, no drag — the
+ * client is looking at a plan, not managing one. The detail is fetched per piece
+ * (one token-checked call) instead of shipping every scene and slide of the
+ * whole month to the browser up front.
  */
 
 function PieceCard({
@@ -44,25 +51,18 @@ function PieceCard({
       onClick={onOpen}
       data-testid="shared-piece"
       data-piece-id={piece.id}
-      className="mb-2.5 flex w-full cursor-pointer items-start gap-3 rounded-[16px] border bg-[color:var(--background)] p-3.5 text-left transition-colors"
+      className="mb-2.5 flex w-full cursor-pointer items-start rounded-[16px] border bg-[color:var(--background)] p-3.5 text-left transition-colors"
       style={{
         borderColor: selected ? 'var(--accent)' : 'var(--border)',
         boxShadow: selected ? '0 0 0 1px var(--accent)' : 'var(--elev-1)',
       }}
     >
-      <span
-        className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full"
-        style={{ backgroundColor: STATUS_COLORS[piece.status] }}
-        aria-hidden
-      />
       <span className="min-w-0 flex-1">
         <span className="block break-words text-[15px] font-semibold leading-snug text-[color:var(--foreground)]">
           {title}
         </span>
         <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] font-medium">
           <span style={{ color: TYPE_CHIP_COLORS[piece.type] }}>{TYPE_LABELS[piece.type]}</span>
-          <span className="text-[color:var(--text-muted)]">·</span>
-          <span className="text-[color:var(--text-muted)]">{STATUS_LABELS[piece.status]}</span>
           {piece.setIndex && piece.setSize ? (
             <>
               <span className="text-[color:var(--text-muted)]">·</span>
@@ -80,21 +80,24 @@ function PieceCard({
 function DetailBody({
   detail,
   loading,
-  error,
+  failed,
 }: {
   detail: SharedPieceDetail | null;
   loading: boolean;
-  error: string | null;
+  failed: boolean;
 }) {
-  if (loading) {
+  if (failed) {
+    return (
+      <p className="px-1 py-8 text-center text-[13px] text-red-600">
+        Не вдалося відкрити цей контент.
+      </p>
+    );
+  }
+  if (loading || !detail) {
     return (
       <p className="px-1 py-8 text-center text-[13px] text-[color:var(--text-muted)]">Відкриваю…</p>
     );
   }
-  if (error) {
-    return <p className="px-1 py-8 text-center text-[13px] text-red-600">{error}</p>;
-  }
-  if (!detail) return null;
 
   const title = displayTitle(detail.title, detail.type);
   return (
@@ -106,20 +109,9 @@ function DetailBody({
       <h2 className="mt-1 break-words text-[20px] font-bold leading-tight tracking-tight text-[color:var(--foreground)]">
         {title}
       </h2>
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <span
-          className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium"
-          style={{
-            backgroundColor: `${STATUS_COLORS[detail.status]}1A`,
-            color: STATUS_COLORS[detail.status],
-          }}
-        >
-          {STATUS_LABELS[detail.status]}
-        </span>
-        <span className="text-[12px] font-medium text-[color:var(--text-muted)]">
-          {detail.countLabel}
-        </span>
-      </div>
+      <p className="mt-2 text-[12px] font-medium text-[color:var(--text-muted)]">
+        {detail.countLabel}
+      </p>
 
       {detail.blocks.length === 0 ? (
         <p className="mt-6 rounded-[16px] border border-dashed border-[color:var(--border)] px-4 py-8 text-center text-[13px] text-[color:var(--text-muted)]">
@@ -174,13 +166,6 @@ export default function SharedCalendarView({
   const now = new Date();
   const todayKey = dateKey(now.getFullYear(), now.getMonth(), now.getDate());
 
-  const [view, setView] = useState(() => ({ year: now.getFullYear(), month0: now.getMonth() }));
-  const [selectedDay, setSelectedDay] = useState<string | null>(todayKey);
-  const [openPiece, setOpenPiece] = useState<SharedPiece | null>(null);
-  const [detail, setDetail] = useState<SharedPieceDetail | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
   const byDay = useMemo(() => {
     const map = new Map<string, SharedPiece[]>();
     for (const piece of pieces) {
@@ -191,43 +176,80 @@ export default function SharedCalendarView({
     return map;
   }, [pieces]);
 
+  const [view, setView] = useState(() => ({ year: now.getFullYear(), month0: now.getMonth() }));
+  const [selectedDay, setSelectedDay] = useState<string | null>(todayKey);
+  // Today's first piece is already open on arrival — same rule a day tap applies.
+  const [openPiece, setOpenPiece] = useState<SharedPiece | null>(
+    () => byDay.get(todayKey)?.[0] ?? null,
+  );
+  // The phone's sheet is raised only by a real tap, never by the auto-open.
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [detail, setDetail] = useState<SharedPieceDetail | null>(null);
+  // Which piece FAILED, rather than a bare message: keyed this way, moving to
+  // another piece clears the error by itself and no effect has to reset state.
+  const [failedId, setFailedId] = useState<string | null>(null);
+
   const cells = useMemo(
     () => monthGrid(view.year, view.month0, todayKey),
     [view.year, view.month0, todayKey],
   );
   const dayPieces = selectedDay ? byDay.get(selectedDay) ?? [] : [];
 
-  const open = useCallback(
-    (piece: SharedPiece) => {
-      setOpenPiece(piece);
-      setDetail(null);
-      setError(null);
-      setLoading(true);
-      void fetch('/api/share/calendar/detail', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, refTable: piece.refTable, id: piece.id }),
-      })
-        .then(async (res) => {
-          if (!res.ok) throw new Error('failed');
-          const json = (await res.json()) as { detail: SharedPieceDetail };
-          setDetail(json.detail);
-        })
-        .catch(() => setError('Не вдалося відкрити цей контент.'))
-        .finally(() => setLoading(false));
+  // Derived, not stored: a piece is "loading" precisely while the detail on hand
+  // is not yet its own. One less state to keep in step with the fetch.
+  const failed = !!openPiece && failedId === openPiece.id;
+  const loading = !!openPiece && !failed && detail?.id !== openPiece.id;
+
+  /** Show a piece in the detail column; `viaTap` also raises the phone's sheet. */
+  const open = useCallback((piece: SharedPiece, viaTap: boolean) => {
+    setOpenPiece(piece);
+    if (viaTap) setSheetOpen(true);
+  }, []);
+
+  /** Pick a day, and open what it starts with. */
+  const selectDay = useCallback(
+    (dayKey: string) => {
+      setSelectedDay(dayKey);
+      setSheetOpen(false);
+      setOpenPiece(byDay.get(dayKey)?.[0] ?? null);
     },
-    [token],
+    [byDay],
   );
 
-  // Escape closes the mobile detail sheet — the same gesture every sheet honours.
+  // One fetch per opened piece. Every setState here lands in a promise callback,
+  // so nothing writes state synchronously while the effect is running.
   useEffect(() => {
     if (!openPiece) return;
+    let cancelled = false;
+    const { id, refTable } = openPiece;
+    fetch('/api/share/calendar/detail', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, refTable, id }),
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error('failed');
+        const json = (await res.json()) as { detail: SharedPieceDetail };
+        if (!cancelled) setDetail(json.detail);
+      })
+      .catch(() => {
+        if (!cancelled) setFailedId(id);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [openPiece, token]);
+
+  // Escape closes the phone's sheet. It does not clear the selection — the
+  // desktop column has nothing to close, it just shows the current piece.
+  useEffect(() => {
+    if (!sheetOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpenPiece(null);
+      if (e.key === 'Escape') setSheetOpen(false);
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [openPiece]);
+  }, [sheetOpen]);
 
   return (
     <div className="min-h-[100dvh]" style={{ background: 'var(--canvas)' }}>
@@ -303,10 +325,7 @@ export default function SharedCalendarView({
                         data-testid="shared-cal-day"
                         data-day={cell.key}
                         data-count={count}
-                        onClick={() => {
-                          setSelectedDay(cell.key);
-                          setOpenPiece(null);
-                        }}
+                        onClick={() => selectDay(cell.key)}
                         className="relative flex h-full w-full cursor-pointer items-center justify-center"
                       >
                         <span
@@ -353,7 +372,7 @@ export default function SharedCalendarView({
                     key={piece.id}
                     piece={piece}
                     selected={openPiece?.id === piece.id}
-                    onOpen={() => open(piece)}
+                    onOpen={() => open(piece, true)}
                   />
                 ))
               ) : (
@@ -373,7 +392,7 @@ export default function SharedCalendarView({
           {openPiece && (
             <div className="hidden min-w-0 flex-1 md:block">
               <div className="app-card sticky top-6 max-h-[calc(100dvh-48px)] overflow-y-auto p-5">
-                <DetailBody detail={detail} loading={loading} error={error} />
+                <DetailBody detail={detail} loading={loading} failed={failed} />
               </div>
             </div>
           )}
@@ -381,13 +400,13 @@ export default function SharedCalendarView({
       </div>
 
       {/* Mobile: the same detail as a full-height sheet. */}
-      {openPiece && (
+      {openPiece && sheetOpen && (
         <div className="fixed inset-0 z-50 flex flex-col bg-black/40 md:hidden" role="dialog" aria-modal="true">
           <button
             type="button"
             className="flex-1 cursor-default"
             aria-label="Закрити"
-            onClick={() => setOpenPiece(null)}
+            onClick={() => setSheetOpen(false)}
           />
           <div
             className="max-h-[88dvh] overflow-y-auto rounded-t-[22px] bg-[color:var(--background)] px-4 pb-10 pt-4"
@@ -396,14 +415,14 @@ export default function SharedCalendarView({
             <div className="mb-3 flex justify-end">
               <button
                 type="button"
-                onClick={() => setOpenPiece(null)}
+                onClick={() => setSheetOpen(false)}
                 aria-label="Закрити"
                 className="app-icon-btn"
               >
                 <X className="h-5 w-5" strokeWidth={2} />
               </button>
             </div>
-            <DetailBody detail={detail} loading={loading} error={error} />
+            <DetailBody detail={detail} loading={loading} failed={failed} />
           </div>
         </div>
       )}

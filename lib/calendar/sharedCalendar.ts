@@ -12,7 +12,7 @@
  * and the specs all use this same module.
  */
 
-import type { ContentStatus, ContentType } from '@/lib/content/statusSystem';
+import type { ContentType } from '@/lib/content/statusSystem';
 import { formatLabel } from '@/lib/domain';
 
 /**
@@ -32,11 +32,19 @@ export type CalendarShareLink = {
   createdAt: string;
 };
 
-/** One dated piece as it appears on the shared month grid + day list. */
+/**
+ * One dated piece as it appears on the shared month grid + day list.
+ *
+ * No `status`. «Ідея» / «Зняти» / «Змонтувати» is the creator's production
+ * state, not the client's business — and dropping it HERE rather than in the
+ * view means it never reaches the browser at all, instead of being rendered
+ * invisibly into the page's data and readable from view-source. The database
+ * function still returns it; this is the boundary where the client's copy of a
+ * piece is defined.
+ */
 export type SharedPiece = {
   id: string;
   type: SharedContentType;
-  status: ContentStatus;
   title: string;
   refTable: 'carousel_projects' | 'projects' | 'storytelling_projects';
   /** 'YYYY-MM-DD'. Never null — the shared calendar only carries dated pieces. */
@@ -59,7 +67,6 @@ export type SharedPieceDetail = {
   id: string;
   type: SharedContentType;
   title: string;
-  status: ContentStatus;
   scheduledDate: string | null;
   blocks: SharedBlock[];
   /** «5 сторіс» / «8 слайдів» / «6 сцен» — the count, in the format's own noun. */
@@ -112,7 +119,6 @@ export function toSharedPieces(rows: ReadonlyArray<Record<string, unknown>>): Sh
     out.push({
       id: String(row.id),
       type: KIND_TO_TYPE[text(row.content_type)] ?? 'reel',
-      status: (text(row.status) || 'idea') as ContentStatus,
       title: text(row.title),
       refTable,
       scheduledDate: date,
@@ -176,7 +182,6 @@ export function toSharedDetail(payload: unknown): SharedPieceDetail | null {
     id: String(doc.id ?? ''),
     type,
     title: text(doc.title),
-    status: (text(doc.status) || 'idea') as ContentStatus,
     scheduledDate: text(doc.scheduledDate).slice(0, 10) || null,
     blocks,
     countLabel: countLabelFor(type, blocks.length),
