@@ -38,9 +38,14 @@ import {
 const FIELD =
   'w-full rounded-[10px] border border-[color:var(--border)] bg-white px-3 py-2 text-[14px] text-[color:var(--foreground)] outline-none transition-colors focus:border-[color:var(--border-strong)]';
 
-/** Shared metrics: the mirror and the textarea must wrap identically. */
+/**
+ * Shared metrics. The mirror and the textarea must wrap at exactly the same
+ * points, so every property that affects line breaking is set on both — font,
+ * size, line-height, tracking, padding AND border width (the border shifts the
+ * text box, so a mirror without one sits a pixel out).
+ */
 const TEXT_METRICS =
-  'whitespace-pre-wrap break-words font-sans text-[15px] leading-[1.6] tracking-normal';
+  'whitespace-pre-wrap break-words font-sans text-[15px] leading-[1.6] tracking-normal px-3 py-2 border';
 
 function Select<T extends string>({
   value,
@@ -90,6 +95,7 @@ export default function BlockCard({
   onMove: (dir: -1 | 1) => void;
 }) {
   const textRef = useRef<HTMLTextAreaElement>(null);
+  const mirrorRef = useRef<HTMLDivElement>(null);
   const [selection, setSelection] = useState<{ start: number; end: number } | null>(null);
   const [openOverlay, setOpenOverlay] = useState<string | null>(null);
 
@@ -202,21 +208,28 @@ export default function BlockCard({
           />
         )}
 
-        {/* ── the words: mirror + transparent textarea ── */}
+        {/* ── the words, with the anchored phrases underlined ──
+            The highlight layer draws ONLY the highlight: its glyphs are
+            transparent and carry the marks, while the real text is the
+            textarea's own on top. Drawing the text in both is what doubled it
+            on screen. The layer scrolls with the box, since a textarea taller
+            than its rows scrolls internally. */}
         {(isSpoken || block.kind === 'text') && (
           <div className="relative">
             <div
+              ref={mirrorRef}
               aria-hidden
-              className={`pointer-events-none absolute inset-0 px-3 py-2 ${TEXT_METRICS}`}
+              className={`pointer-events-none absolute inset-0 overflow-hidden rounded-[10px] border-transparent ${TEXT_METRICS}`}
+              style={{ color: 'transparent' }}
             >
               {runs.map((run, i) =>
                 run.overlayIds.length > 0 ? (
                   <mark
                     key={i}
-                    className="rounded-[3px] bg-transparent"
+                    className="rounded-[3px]"
                     style={{
-                      color: 'inherit',
-                      backgroundColor: `${color}1F`,
+                      color: 'transparent',
+                      backgroundColor: `${color}24`,
                       boxShadow: `inset 0 -2px 0 ${color}`,
                     }}
                   >
@@ -226,8 +239,6 @@ export default function BlockCard({
                   <span key={i}>{run.text}</span>
                 ),
               )}
-              {/* Trailing newline keeps the mirror's height equal to the box. */}
-              {'\n'}
             </div>
 
             <textarea
@@ -237,13 +248,16 @@ export default function BlockCard({
                 onPatch(isSpoken ? { spoken: e.target.value } : { screenText: e.target.value })
               }
               onSelect={readSelection}
+              onScroll={(e) => {
+                if (mirrorRef.current) mirrorRef.current.scrollTop = e.currentTarget.scrollTop;
+              }}
               onBlur={() => window.setTimeout(() => setSelection(null), 150)}
-              rows={3}
+              rows={4}
               data-testid="block-text"
               placeholder={
                 hint ?? (block.kind === 'text' ? 'Що написано на екрані' : 'Що я кажу, слово в слово')
               }
-              className={`relative w-full resize-y rounded-[10px] border border-[color:var(--border)] bg-transparent px-3 py-2 outline-none focus:border-[color:var(--border-strong)] ${TEXT_METRICS}`}
+              className={`relative w-full resize-y rounded-[10px] border-[color:var(--border)] bg-transparent outline-none focus:border-[color:var(--border-strong)] ${TEXT_METRICS}`}
               style={{ color: 'var(--foreground)', caretColor: 'var(--foreground)' }}
             />
 
