@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireServerEnv } from '@/lib/env';
-import { GROQ_TEXT_MODEL } from '@/lib/ai/groqModel';
+import { chatEndpoint } from '@/lib/ai/aiProvider';
 import { postProcessCarouselRant } from '@/lib/ai/carouselRantPostProcess';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import { aiLimit } from '@/lib/ratelimit';
@@ -160,16 +159,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const apiKey = requireServerEnv('GROQ_API_KEY');
+  const ai = chatEndpoint();
 
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+  const res = await fetch(ai.url, {
     method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${apiKey}`,
-    },
+    headers: ai.headers,
     body: JSON.stringify({
-      model: GROQ_TEXT_MODEL,
+      model: ai.model,
       temperature: 0.7,
       max_tokens: 3000,
       response_format: { type: 'json_object' },

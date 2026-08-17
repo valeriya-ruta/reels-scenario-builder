@@ -14,6 +14,7 @@ import {
   getActorRun,
   startCompetitorActorRun,
 } from '@/lib/ai/competitorReelsApify';
+import { resolveVendor, transcribeFile } from '@/lib/ai/aiProvider';
 import { splitTranscriptIntoScenes } from '@/lib/ai/sceneSegmentation';
 import { templatizeTranscriptToScenes } from '@/lib/ai/transcriptToTemplate';
 import {
@@ -36,7 +37,11 @@ const TRANSCRIPTION_MAX_ATTEMPTS = 3;
 const TRANSCRIPTION_TIMEOUT_MS = 60_000;
 const TRANSCRIPTION_BACKOFF_MS = [1_000, 3_000, 7_000] as const;
 const TRANSCRIPTION_CONCURRENCY = 3;
-const IDEAS_TRANSCRIPTION_PROVIDER = 'groq:whisper-large-v3-turbo';
+/** Reported on the failure webhook, so a bad run says which service produced it. */
+function ideasTranscriptionProvider(): string {
+  const vendor = resolveVendor();
+  return vendor ? `${vendor}:whisper-large-v3-turbo` : 'none';
+}
 const FALLBACK_TRANSCRIPT_MESSAGE =
   'Йой, щось пішло не так! Рута вже знає про це і біжить виправляти. А поки ти чекаєш — ось текст під відео:';
 
@@ -66,23 +71,11 @@ async function transcribeCompetitorMediaFromUrl(url: string): Promise<string> {
   }
 
   const videoBuffer = Buffer.from(videoArrayBuffer);
-  const apiKey = requireServerEnv('GROQ_API_KEY');
-  const formData = new FormData();
-  formData.append('model', 'whisper-large-v3-turbo');
-  formData.append('response_format', 'verbose_json');
-  formData.append('temperature', '0');
-  formData.append(
-    'file',
+  // Whichever STT service this deployment is configured for — Pro has no Groq
+  // key, which is exactly why every transcript here was failing.
+  const sttRes = await transcribeFile(
     new File([new Uint8Array(videoBuffer)], 'reel.mp4', { type: contentType })
   );
-
-  const sttRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: formData,
-  });
   if (!sttRes.ok) {
     const body = await sttRes.text();
     throw new Error(`Помилка транскрипції (${sttRes.status}): ${body.slice(0, 500)}`);
@@ -144,6 +137,8 @@ function parseHttpStatusFromErrorMessage(message: string): number | null {
 function isRetryableTranscriptionError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   if (message.includes('TRANSCRIPTION_TIMEOUT')) return true;
+  // A missing key is configuration, not weather — three attempts cannot fix it.
+  if (message.includes('Missing AI credentials')) return false;
 
   const status = parseHttpStatusFromErrorMessage(message);
   if (status !== null) {
@@ -305,7 +300,7 @@ function reportTranscriptionFailureWebhook(payload: {
         first_attempt_at: payload.firstAttemptAt,
         last_attempt_at: payload.lastAttemptAt,
       },
-      transcription_provider: IDEAS_TRANSCRIPTION_PROVIDER,
+      transcription_provider: ideasTranscriptionProvider(),
     }),
     signal: AbortSignal.timeout(5_000),
   }).catch((error) => {
