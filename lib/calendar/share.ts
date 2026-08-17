@@ -1,6 +1,7 @@
 import 'server-only';
 import { nanoid } from 'nanoid';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
+import { getProScope, type ProScope } from '@/lib/pro/scope';
 import {
   toSharedPieces,
   toSharedDetail,
@@ -15,12 +16,42 @@ export type { CalendarShareLink };
  * Calendar share links — the owner's side (create / read / revoke) and the
  * client's side (resolve a token into a live, read-only calendar).
  *
- * The client's reads go through the two SECURITY DEFINER functions from
- * migration 029 rather than through table reads: the token is the only secret,
- * and it can only be checked where it can be passed as an argument. Nothing in
- * here uses the service-role key, so an anon page never gets a client that can
- * see more than the token names.
+ * The client's reads go through the SECURITY DEFINER functions from migrations
+ * 029/032 rather than through table reads: the token is the only secret, and it
+ * can only be checked where it can be passed as an argument. Nothing in here
+ * uses the service-role key, so an anon page never gets a client that can see
+ * more than the token names.
+ *
+ * A link belongs to ONE blogger (migration 032). Under Ruta Pro a single
+ * operator account holds several, so "share my calendar" without a blogger on it
+ * means "show this client every client's plan" — which is exactly what it did
+ * before 032. Every function here therefore resolves the active scope first and
+ * scopes the link to it, the same way `applyScope` scopes every other read.
  */
+
+/** Which blogger a link is for, derived from the request's Pro scope. */
+type LinkScope =
+  | { ok: true; projectId: string | null }
+  /** The operator is in "All bloggers" — there is no single plan to share. */
+  | { ok: false; reason: 'pick_blogger' };
+
+function scopeToLink(scope: ProScope): LinkScope {
+  if (scope.kind === 'project') return { ok: true, projectId: scope.projectId };
+  if (scope.kind === 'personal') return { ok: true, projectId: null };
+  return { ok: false, reason: 'pick_blogger' };
+}
+
+/**
+ * A link row's blogger filter, as a PostgREST filter string.
+ *
+ * `project_id=is.null` and `project_id=eq.<id>` are different operators, so this
+ * is applied with `.or(...)` — a single-arm `or` — rather than a generic helper
+ * that takes the query builder, which pushed Supabase's builder generics into an
+ * infinitely deep instantiation.
+ */
+function blogger(projectId: string | null): string {
+  return projectId === null ? 'project_id.is.null' : `project_id.eq.${projectId}`;
+}
 
 type LinkRow = {
   id: string;
@@ -44,7 +75,13 @@ function rowToLink(row: LinkRow): CalendarShareLink {
   };
 }
 
-/** The signed-in user's active calendar link, or null if they have none. */
+/**
+ * The active blogger's calendar link, or null if they have none.
+ *
+ * Per BLOGGER, not per account: switching the Pro switcher to another blogger
+ * shows that blogger's own link, because handing two clients the same URL is the
+ * bug this whole scoping exists to prevent.
+ */
 export async function getMyCalendarShareLink(): Promise<CalendarShareLink | null> {
   const supabase = await createServerSupabaseClient();
   const {
@@ -52,16 +89,25 @@ export async function getMyCalendarShareLink(): Promise<CalendarShareLink | null
   } = await supabase.auth.getUser();
   if (!user) return null;
 
+  const scoped = scopeToLink(await getProScope());
+  if (!scoped.ok) return null; // "All bloggers" has no single link
+
   const { data } = await supabase
     .from('calendar_share_links')
     .select(LINK_COLS)
     .eq('owner_user_id', user.id)
     .eq('revoked', false)
+    .or(blogger(scoped.projectId))
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle<LinkRow>();
 
   return data ? rowToLink(data) : null;
+}
+
+/** Whether the current scope can be shared at all (false in "All bloggers"). */
+export async function canShareCalendar(): Promise<boolean> {
+  return scopeToLink(await getProScope()).ok;
 }
 
 /**
@@ -95,11 +141,17 @@ async function createCalendarShareLink(
   } = await supabase.auth.getUser();
   if (!user) return null;
 
+  // The blogger is stamped at creation, from the same scope the plan page is
+  // showing. A link with no blogger on it is a link to everything.
+  const scoped = scopeToLink(await getProScope());
+  if (!scoped.ok) return null;
+
   const { data, error } = await supabase
     .from('calendar_share_links')
     .insert({
       owner_user_id: user.id,
       token: nanoid(24),
+      project_id: scoped.projectId,
       title: title?.trim() || null,
       note: note?.trim() || null,
     })
@@ -121,11 +173,17 @@ export async function revokeCalendarShareLink(): Promise<boolean> {
   } = await supabase.auth.getUser();
   if (!user) return false;
 
+  // Only THIS blogger's link — revoking must not silently kill the links you
+  // handed to your other clients.
+  const scoped = scopeToLink(await getProScope());
+  if (!scoped.ok) return false;
+
   const { error } = await supabase
     .from('calendar_share_links')
     .update({ revoked: true, updated_at: new Date().toISOString() })
     .eq('owner_user_id', user.id)
-    .eq('revoked', false);
+    .eq('revoked', false)
+    .or(blogger(scoped.projectId));
 
   if (error) {
     console.error('[calendar-share] revoke failed:', error.message);
@@ -145,6 +203,9 @@ export async function updateCalendarShareHeader(
   } = await supabase.auth.getUser();
   if (!user) return false;
 
+  const scoped = scopeToLink(await getProScope());
+  if (!scoped.ok) return false;
+
   const { error } = await supabase
     .from('calendar_share_links')
     .update({
@@ -153,7 +214,8 @@ export async function updateCalendarShareHeader(
       updated_at: new Date().toISOString(),
     })
     .eq('owner_user_id', user.id)
-    .eq('revoked', false);
+    .eq('revoked', false)
+    .or(blogger(scoped.projectId));
 
   return !error;
 }
