@@ -112,6 +112,7 @@ export default function PlanCalendar({
   stagedCount,
   stagedOverdue,
   shareLink = null,
+  canShare = true,
   shareTitle = 'Контент-план',
 }: {
   pieces: ContentPiece[];
@@ -119,6 +120,8 @@ export default function PlanCalendar({
   stagedOverdue: number;
   /** The calendar's existing client link, if one has been created. */
   shareLink?: CalendarShareLink | null;
+  /** False in Pro's "All bloggers" view — there is no single plan to share. */
+  canShare?: boolean;
   /** Seeds the header the client sees when the owner has not set one. */
   shareTitle?: string;
 }) {
@@ -216,7 +219,11 @@ export default function PlanCalendar({
         <div className="flex items-center gap-1">
           {/* Sharing lives next to the month, not in a settings screen: the
               thing being shared is the calendar you are looking at. */}
-          <CalendarShareButton initialLink={shareLink} defaultTitle={shareTitle} />
+          <CalendarShareButton
+            initialLink={shareLink}
+            canShare={canShare}
+            defaultTitle={shareTitle}
+          />
           <button
             type="button"
             aria-label="Попередній місяць"

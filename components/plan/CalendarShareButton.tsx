@@ -14,17 +14,27 @@ import type { CalendarShareLink } from '@/lib/calendar/sharedCalendar';
  * «Поділитися» on План — one link that opens this calendar for a client, with no
  * login and nothing they can change.
  *
- * The link is LIVE, not an export: whatever gets planned after it is sent shows
+* The link is LIVE, not an export: whatever gets planned after it is sent shows
  * up on the same URL, which is the whole reason it is a link rather than a PDF.
- * There is exactly one link per account — the button says "share my calendar",
- * so pressing it twice must not mint a second URL to keep track of. Regenerating
- * replaces it (the old one dies), revoking turns it off.
+ *
+ * One link per BLOGGER (migration 032), not per account: under Pro this page is
+ * already showing one blogger's plan, and the link shows exactly that. Pressing
+ * the button twice must not mint a second URL to keep track of, so it returns
+ * the existing one; regenerating replaces it (the old one dies), revoking turns
+ * it off — all scoped to the blogger on screen.
  */
 export default function CalendarShareButton({
   initialLink,
+  canShare = true,
   defaultTitle,
 }: {
   initialLink: CalendarShareLink | null;
+  /**
+   * False in Pro's "All bloggers" view. A link shows ONE blogger's plan, so
+   * there is nothing to create until the switcher is pinned to one — offering
+   * the button anyway is how a client ends up holding every client's calendar.
+   */
+  canShare?: boolean;
   /** Falls back into the header the client sees, when the owner sets none. */
   defaultTitle: string;
 }) {
@@ -133,8 +143,14 @@ export default function CalendarShareButton({
                   Поділитися календарем
                 </h2>
                 <p className="mt-1 text-[13px] leading-relaxed text-[color:var(--text-muted)]">
-                  Клієнт бачить те, що заплановано, і може відкрити будь-який контент — без входу
-                  й без права щось змінити.
+                  {canShare ? (
+                    <>
+                      План <span className="font-semibold text-[color:var(--foreground)]">{defaultTitle}</span>{' '}
+                      — і тільки його. Клієнт відкриває без входу й нічого не змінює.
+                    </>
+                  ) : (
+                    'Клієнт бачить те, що заплановано, і може відкрити будь-який контент — без входу й без права щось змінити.'
+                  )}
                 </p>
               </div>
               <button
@@ -172,7 +188,15 @@ export default function CalendarShareButton({
               className="mb-4 w-full resize-none rounded-[12px] border border-[color:var(--border)] bg-white px-3 py-2.5 text-[14px] text-[color:var(--foreground)] outline-none focus:border-[color:var(--border-strong)]"
             />
 
-            {!link ? (
+            {!canShare ? (
+              <p
+                data-testid="calendar-share-pick-blogger"
+                className="rounded-[12px] border border-dashed border-[color:var(--border)] px-4 py-5 text-center text-[13px] leading-relaxed text-[color:var(--text-muted)]"
+              >
+                Посилання створюється для одного блогера. Обери блогера у верхньому перемикачі —
+                і клієнт побачить тільки його план.
+              </p>
+            ) : !link ? (
               <button
                 type="button"
                 onClick={create}
