@@ -1,7 +1,7 @@
 'use server';
 import { NEW_LABELS } from '@/lib/content/displayTitle';
 
-import { requireAuth } from '@/lib/auth';
+import { requireAuth, requireAuthResult, AUTH_FAILURE_MESSAGE } from '@/lib/auth';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import { getProScope, insertProjectId } from '@/lib/pro/scope';
 import { nanoid } from 'nanoid';
@@ -746,10 +746,13 @@ export async function saveCompetitorReelToScenario(
   reel: { shortCode: string; videoUrl: string; url: string; userNote?: string }
 ): Promise<SaveCompetitorReelToScenarioResult> {
   try {
-    const user = await requireAuth();
-    if (!user) {
-      return { ok: false, error: 'Необхідно увійти в акаунт.' };
+    // Detailed, because a dropped request to the auth server used to surface
+    // here as «Необхідно увійти в акаунт» to someone who was plainly signed in.
+    const auth = await requireAuthResult();
+    if (!auth.user) {
+      return { ok: false, error: AUTH_FAILURE_MESSAGE[auth.reason] };
     }
+    const user = auth.user;
 
     const shortCode = reel.shortCode.trim();
     const videoUrl = reel.videoUrl.trim();

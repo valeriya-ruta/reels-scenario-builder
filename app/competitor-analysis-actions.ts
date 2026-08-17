@@ -1,7 +1,7 @@
 'use server';
 
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
-import { requireAuth } from '@/lib/auth';
+import { requireAuth, requireAuthResult, AUTH_FAILURE_MESSAGE } from '@/lib/auth';
 import { getProScope, applyScope, insertProjectId } from '@/lib/pro/scope';
 import { optionalServerEnv, requireServerEnv } from '@/lib/env';
 import { computeTopReelsPayload } from '@/lib/competitorScoring';
@@ -674,8 +674,9 @@ export async function transcribeCompetitorReelVideo(
   ctx?: TranscribeCompetitorContext
 ): Promise<TranscribeReelVideoResult> {
   try {
-    const user = await requireAuth();
-    if (!user) return { ok: false, error: 'Потрібен вхід.' };
+    const auth = await requireAuthResult();
+    if (!auth.user) return { ok: false, error: AUTH_FAILURE_MESSAGE[auth.reason] };
+    const user = auth.user;
     const url = videoUrl.trim();
     if (!url) return { ok: false, error: 'Немає посилання на відео.' };
 
@@ -823,8 +824,9 @@ export async function retryIdeaReelTranscription(
   scanId: string,
   shortCode: string
 ): Promise<RetryIdeaReelTranscriptionResult> {
-  const user = await requireAuth();
-  if (!user) return { ok: false, error: 'Потрібен вхід.' };
+  const auth = await requireAuthResult();
+  if (!auth.user) return { ok: false, error: AUTH_FAILURE_MESSAGE[auth.reason] };
+  const user = auth.user;
   const supabase = await createServerSupabaseClient();
   const { data: scanRow, error } = await supabase
     .from('idea_scans')
