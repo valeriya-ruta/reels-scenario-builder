@@ -5,6 +5,7 @@ import {
   effectiveAudio,
   emptyBlock,
   resolveOverlays,
+  shotGroups,
   shotKey,
   shotList,
   shotSummary,
@@ -244,5 +245,80 @@ test.describe('reel blocks — progress keys', () => {
     ];
     const all = [...shotList(blocks).map(shotKey), ...editList(blocks).map(editKey)];
     expect(new Set(all).size).toBe(all.length);
+  });
+});
+
+/**
+ * The shot list is grouped by the TYPE of work, because that is how filming
+ * actually happens: one sitting for the whole text, then a separate hunt for
+ * the cutaways. A list in reel order sends you back and forth between the two.
+ */
+test.describe('reel blocks — the shot list grouped by type', () => {
+  const talkingReel = [
+    block({ id: 'a', kind: 'talk', spoken: 'Перший абзац' }),
+    block({
+      id: 'b',
+      kind: 'talk',
+      spoken: 'Другий абзац',
+      overlays: [
+        overlay({ id: 'ov1', kind: 'video', note: 'кадри з офісу', anchorText: 'Другий', anchorStart: 0 }),
+      ],
+    }),
+    block({ id: 'c', kind: 'talk', spoken: 'Третій абзац' }),
+  ];
+
+  test('a plain talking head is ONE row carrying the whole text', () => {
+    const talk = shotGroups(talkingReel).find((g) => g.id === 'talk');
+    expect(talk?.items).toHaveLength(1);
+    expect(talk?.items[0].saying).toBe('Перший абзац\n\nДругий абзац\n\nТретій абзац');
+    expect(talk?.items[0].keys).toEqual(['a:take', 'b:take', 'c:take']);
+  });
+
+  test('b-roll asked for mid-sentence gets its own pile, with its cue', () => {
+    const video = shotGroups(talkingReel).find((g) => g.id === 'ov-video');
+    expect(video?.items).toHaveLength(1);
+    expect(video?.items[0].what).toBe('кадри з офісу');
+    expect(video?.items[0].cue).toBe('Другий');
+  });
+
+  test('filming it and placing it in the edit are two separate ticks', () => {
+    const shot = shotList(talkingReel).find((s) => s.group === 'ov-video')!;
+    const edits = editList(talkingReel).map(editKey);
+    expect(shotKey(shot)).toBe('b:shot:ov:ov1');
+    expect(edits).toContain('b:edit:ov:ov1');
+    expect(edits).not.toContain(shotKey(shot));
+  });
+
+  test('a take with its own setup note stays a separate row', () => {
+    const talk = shotGroups([
+      block({ id: 'a', kind: 'talk', spoken: 'У кадрі' }),
+      block({ id: 'b', kind: 'talk', spoken: 'На вулиці', recordNote: 'Зняти на вулиці' }),
+    ]).find((g) => g.id === 'talk');
+
+    expect(talk?.items.map((i) => i.what)).toEqual(['Весь текст підряд', 'Зняти на вулиці']);
+    expect(talk?.items[1].keys).toEqual(['b:take']);
+  });
+
+  test('two speakers do not end up in one pile', () => {
+    const talk = shotGroups([
+      block({ id: 'a', kind: 'dialogue', speaker: 'Вона', spoken: 'Раз' }),
+      block({ id: 'b', kind: 'dialogue', speaker: 'Він', spoken: 'Два' }),
+      block({ id: 'c', kind: 'dialogue', speaker: 'Вона', spoken: 'Три' }),
+    ]).find((g) => g.id === 'talk');
+
+    expect(talk?.items).toHaveLength(2);
+    expect(talk?.items.find((i) => i.what.startsWith('Вона'))?.saying).toBe('Раз\n\nТри');
+  });
+
+  test('assets split into what to film and what to find', () => {
+    const ids = shotGroups([
+      block({ id: 'a', kind: 'broll', assetKind: 'film', assetNote: 'кава' }),
+      block({ id: 'b', kind: 'broll', assetKind: 'find', assetNote: 'тренд' }),
+    ]).map((g) => g.id);
+    expect(ids).toEqual(['film', 'find']);
+  });
+
+  test('an empty reel has no groups rather than empty ones', () => {
+    expect(shotGroups([])).toEqual([]);
   });
 });

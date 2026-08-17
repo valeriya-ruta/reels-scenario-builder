@@ -285,7 +285,7 @@ export type ShotItem = {
    * index would not be.
    */
   blockId: string;
-  slot: 'take' | 'asset';
+  slot: 'take' | 'asset' | `shot:ov:${string}`;
   kind: BlockKind;
   /** «Зняти» / «Знайти» / null when it is simply the creator talking. */
   action: AssetKind | null;
@@ -294,7 +294,31 @@ export type ShotItem = {
   /** The words said during it, so the shot is filmed with its text in hand. */
   saying: string | null;
   url: string | null;
+  /** Which pile of work this belongs to — see `shotGroups`. */
+  group: ShotGroupId;
+  /** Whose take it is, so two people's lines don't end up in one pile. */
+  speaker: string | null;
+  /** For b-roll asked for mid-sentence: the words it lands on. */
+  cue: string | null;
 };
+
+/**
+ * The piles a shot list splits into. You do not shoot a reel by walking down it
+ * once: you sit down and say the whole text, then you go and get the cutaways.
+ */
+export type ShotGroupId = 'talk' | 'film' | 'find' | 'screenshot' | 'photo' | 'ov-video' | 'ov-image';
+
+export const SHOT_GROUP_LABELS: Record<ShotGroupId, string> = {
+  talk: 'Говоряща голова',
+  film: 'Зняти окремо',
+  find: 'Знайти',
+  screenshot: 'Скріншоти',
+  photo: 'Фото',
+  'ov-video': 'Відео поверх',
+  'ov-image': 'Фото поверх',
+};
+
+const SHOT_GROUP_ORDER: ShotGroupId[] = ['talk', 'film', 'ov-video', 'find', 'ov-image', 'screenshot', 'photo'];
 
 /**
  * The shot list: everything that has to exist before an edit can start.
@@ -324,6 +348,9 @@ export function shotList(blocks: ReadonlyArray<ReelBlock>): ShotItem[] {
           : (b.recordNote ?? '').trim(),
         saying,
         url: null,
+        group: 'talk',
+        speaker: EMPTY(b.speaker) ? null : b.speaker!.trim(),
+        cue: null,
       });
     }
 
@@ -337,10 +364,133 @@ export function shotList(blocks: ReadonlyArray<ReelBlock>): ShotItem[] {
         what: EMPTY(b.assetNote) ? 'Відео' : (b.assetNote ?? '').trim(),
         saying: b.kind === 'broll' ? saying : null,
         url: EMPTY(b.assetUrl) ? null : (b.assetUrl ?? '').trim(),
+        group: b.assetKind ?? 'film',
+        speaker: null,
+        cue: null,
+      });
+    }
+
+    // Footage asked for mid-sentence («поверх цього — відео з офісу») is a thing
+    // somebody has to GO AND GET, so it belongs on the shot list and not only in
+    // the editing instructions. Its own slot, `shot:ov:`, keeps "filmed" and
+    // "placed in the edit" as two separate ticks — they are two separate jobs.
+    for (const o of b.overlays) {
+      if (o.kind !== 'video' && o.kind !== 'image') continue;
+      out.push({
+        at: i + 1,
+        blockId: b.id,
+        slot: `shot:ov:${o.id}`,
+        kind: 'broll',
+        action: null,
+        what: EMPTY(o.note) ? OVERLAY_LABELS[o.kind] : o.note.trim(),
+        saying: null,
+        url: EMPTY(o.url) ? null : (o.url ?? '').trim(),
+        group: o.kind === 'video' ? 'ov-video' : 'ov-image',
+        speaker: null,
+        cue: EMPTY(o.anchorText) ? null : o.anchorText.trim(),
       });
     }
   });
   return out;
+}
+
+/** One row of the grouped shot list — several takes can share a row. */
+export type GroupedShot = {
+  /** Every tick key behind the row, so a merged row ticks all of them at once. */
+  keys: string[];
+  what: string;
+  saying: string | null;
+  cue: string | null;
+  url: string | null;
+  action: AssetKind | null;
+  kind: BlockKind;
+  /** Position in the reel, or null when the row merges several. */
+  at: number | null;
+};
+
+export type ShotGroup = { id: ShotGroupId; title: string; items: GroupedShot[] };
+
+/**
+ * The shot list as piles of work rather than a walk down the reel.
+ *
+ * Nobody films a talking head one paragraph at a time — you sit down once and
+ * say the whole thing. So every plain take merges into a single row carrying the
+ * full text, and only takes with their own setup note («зняти на вулиці») stay
+ * separate, because those really are separate sittings. Everything else — the
+ * cutaways to film, the clips to find, the b-roll asked for mid-sentence —
+ * lands in its own pile, which is how you actually collect it.
+ */
+export function shotGroups(blocks: ReadonlyArray<ReelBlock>): ShotGroup[] {
+  const shots = shotList(blocks);
+  const byGroup = new Map<ShotGroupId, ShotItem[]>();
+  for (const s of shots) {
+    const list = byGroup.get(s.group);
+    if (list) list.push(s);
+    else byGroup.set(s.group, [s]);
+  }
+
+  const groups: ShotGroup[] = [];
+  for (const id of SHOT_GROUP_ORDER) {
+    const items = byGroup.get(id);
+    if (!items || items.length === 0) continue;
+    groups.push({
+      id,
+      title: SHOT_GROUP_LABELS[id],
+      items: id === 'talk' ? mergeTakes(items) : items.map(oneRow),
+    });
+  }
+  return groups;
+}
+
+function oneRow(s: ShotItem): GroupedShot {
+  return {
+    keys: [shotKey(s)],
+    what: s.what,
+    saying: s.saying,
+    cue: s.cue,
+    url: s.url,
+    action: s.action,
+    kind: s.kind,
+    at: s.at,
+  };
+}
+
+/** Plain takes collapse into one row per speaker; noted setups stay their own. */
+function mergeTakes(items: ShotItem[]): GroupedShot[] {
+  const plain = new Map<string, ShotItem[]>();
+  const noted: GroupedShot[] = [];
+
+  for (const s of items) {
+    const isPlain = s.what === 'Говорю в камеру' || s.what === `${s.speaker} говорить`;
+    if (!isPlain) {
+      noted.push(oneRow(s));
+      continue;
+    }
+    const who = s.speaker ?? '';
+    const list = plain.get(who);
+    if (list) list.push(s);
+    else plain.set(who, [s]);
+  }
+
+  const merged: GroupedShot[] = [];
+  for (const [who, list] of plain) {
+    const text = list
+      .map((s) => (s.saying ?? '').trim())
+      .filter(Boolean)
+      .join('\n\n');
+    merged.push({
+      keys: list.map(shotKey),
+      what: who ? `${who} — весь текст` : 'Весь текст підряд',
+      saying: text || null,
+      cue: null,
+      url: null,
+      action: null,
+      kind: list[0].kind,
+      at: list.length === 1 ? list[0].at : null,
+    });
+  }
+
+  return [...merged, ...noted];
 }
 
 /**
@@ -417,11 +567,15 @@ export function shotKey(shot: Pick<ShotItem, 'blockId' | 'slot'>): string {
 /** «3 зняти · 2 знайти» — what the reel costs, before anyone opens it. */
 export function shotSummary(blocks: ReadonlyArray<ReelBlock>): string {
   const shots = shotList(blocks);
-  const toFilm = shots.filter((s) => s.action === null || s.action === 'film' || s.action === 'photo').length;
-  const toFind = shots.filter((s) => s.action === 'find' || s.action === 'screenshot').length;
+  const overlay = shots.filter((s) => s.group === 'ov-video' || s.group === 'ov-image');
+  const rest = shots.filter((s) => !overlay.includes(s));
+  const toFilm = rest.filter((s) => s.action === null || s.action === 'film' || s.action === 'photo').length;
+  const toFind = rest.filter((s) => s.action === 'find' || s.action === 'screenshot').length;
   const parts: string[] = [];
   if (toFilm) parts.push(`${toFilm} зняти`);
   if (toFind) parts.push(`${toFind} знайти`);
+  // B-roll asked for inside the text is neither exactly — it is «ще й оце зверху».
+  if (overlay.length) parts.push(`${overlay.length} поверх`);
   return parts.join(' · ');
 }
 

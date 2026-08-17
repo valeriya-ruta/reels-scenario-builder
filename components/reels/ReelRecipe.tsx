@@ -1,13 +1,14 @@
 'use client';
 
 import { Camera, Check, Clapperboard, Link2, Search } from 'lucide-react';
+import CopyTextButton from '@/components/reels/CopyTextButton';
 import {
   ASSET_LABELS,
   BLOCK_COLORS,
   BLOCK_LABELS,
   editKey,
   editList,
-  shotKey,
+  shotGroups,
   shotList,
   spokenScript,
   type ReelBlock,
@@ -42,6 +43,7 @@ export default function ReelRecipe({
   done?: ReadonlySet<string>;
   onToggleDone?: (key: string, next: boolean) => void;
 }) {
+  const groups = shotGroups(blocks);
   const shots = shotList(blocks);
   const edits = editList(blocks);
   const script = spokenScript(blocks);
@@ -62,101 +64,137 @@ export default function ReelRecipe({
               Тут поки нічого знімати.
             </p>
           ) : (
-            <ol className="flex flex-col gap-2">
-              {shots.map((s, i) => {
-                const key = shotKey(s);
-                const isDone = done?.has(key) ?? false;
-                return (
-                <li
-                  key={i}
-                  data-testid="shot-item"
-                  data-done={isDone ? 'true' : 'false'}
-                  className="flex items-start gap-3 rounded-[14px] border border-[color:var(--border)] bg-[color:var(--background)] p-3.5 transition-opacity"
-                  style={{ boxShadow: 'var(--elev-1)', opacity: isDone ? 0.55 : 1 }}
-                >
-                  {/* Ticking exists only where a handler was given — the builder
-                      shows the same list without it, since the person writing
-                      the reel is not the person crossing shots off. */}
-                  {onToggleDone ? (
-                    <button
-                      type="button"
-                      onClick={() => onToggleDone(key, !isDone)}
-                      aria-pressed={isDone}
-                      aria-label={isDone ? 'Зняти позначку' : 'Позначити як знято'}
-                      data-testid="shot-done"
-                      className="mt-0.5 flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-[7px] border-2 transition-colors"
-                      style={{
-                        borderColor: isDone ? BLOCK_COLORS[s.kind] : 'var(--border-strong)',
-                        backgroundColor: isDone ? BLOCK_COLORS[s.kind] : 'transparent',
-                      }}
-                    >
-                      {isDone && <Check className="h-3.5 w-3.5 text-white" strokeWidth={3} />}
-                    </button>
-                  ) : (
-                    <span
-                      className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-[7px] text-[11px] font-bold tabular-nums text-white"
-                      style={{ backgroundColor: BLOCK_COLORS[s.kind] }}
-                    >
-                      {s.at}
+            /* Grouped by TYPE of work, not by reel order: you sit down once and
+               say the whole text, then you go and collect the cutaways. Walking
+               down the reel would send you back and forth between the two. */
+            <div className="flex flex-col gap-5">
+              {groups.map((g) => (
+                <div key={g.id} data-testid="shot-group" data-group={g.id}>
+                  <h3 className="mb-1.5 flex items-center gap-2 text-[12.5px] font-bold text-[color:var(--foreground)]">
+                    {g.title}
+                    <span className="text-[11.5px] font-semibold text-[color:var(--text-muted)]">
+                      {g.items.length}
                     </span>
-                  )}
+                  </h3>
 
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      {s.action && (
-                        <span
-                          className="rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide"
-                          style={{
-                            backgroundColor: s.action === 'film' || s.action === 'photo' ? '#0F8A6A1A' : '#C08C281A',
-                            color: s.action === 'film' || s.action === 'photo' ? '#0F8A6A' : '#8A6410',
-                          }}
+                  <ol className="flex flex-col gap-2">
+                    {g.items.map((s, i) => {
+                      const isDone = s.keys.length > 0 && s.keys.every((k) => done?.has(k) ?? false);
+                      return (
+                        <li
+                          key={s.keys[0] ?? i}
+                          data-testid="shot-item"
+                          data-done={isDone ? 'true' : 'false'}
+                          className="flex items-start gap-3 rounded-[14px] border border-[color:var(--border)] bg-[color:var(--background)] p-3.5 transition-opacity"
+                          style={{ boxShadow: 'var(--elev-1)', opacity: isDone ? 0.55 : 1 }}
                         >
-                          {ASSET_LABELS[s.action]}
-                        </span>
-                      )}
-                      <span
-                        className="text-[14.5px] font-semibold leading-snug text-[color:var(--foreground)]"
-                        style={{ textDecoration: isDone ? 'line-through' : undefined }}
-                      >
-                        {s.what}
-                      </span>
-                    </div>
+                          {/* Ticking exists only where a handler was given — the
+                              builder shows the same list without it, since the
+                              person writing the reel is not the person crossing
+                              shots off. A merged row ticks all its takes. */}
+                          {onToggleDone ? (
+                            <button
+                              type="button"
+                              onClick={() => s.keys.forEach((k) => onToggleDone(k, !isDone))}
+                              aria-pressed={isDone}
+                              aria-label={isDone ? 'Зняти позначку' : 'Позначити як знято'}
+                              data-testid="shot-done"
+                              className="mt-0.5 flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-[7px] border-2 transition-colors"
+                              style={{
+                                borderColor: isDone ? BLOCK_COLORS[s.kind] : 'var(--border-strong)',
+                                backgroundColor: isDone ? BLOCK_COLORS[s.kind] : 'transparent',
+                              }}
+                            >
+                              {isDone && <Check className="h-3.5 w-3.5 text-white" strokeWidth={3} />}
+                            </button>
+                          ) : (
+                            <span
+                              className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-[7px] text-[11px] font-bold tabular-nums text-white"
+                              style={{ backgroundColor: BLOCK_COLORS[s.kind] }}
+                            >
+                              {s.at ?? s.keys.length}
+                            </span>
+                          )}
 
-                    {/* The words said during the shot travel WITH it — you film
-                        with the line in hand, not by cross-referencing. */}
-                    {s.saying && (
-                      <p className="mt-1.5 whitespace-pre-wrap border-l-2 pl-2.5 text-[13.5px] leading-relaxed text-[color:var(--foreground)]"
-                         style={{ borderColor: 'var(--border-strong)' }}>
-                        {s.saying}
-                      </p>
-                    )}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                              {s.action && (
+                                <span
+                                  className="rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide"
+                                  style={{
+                                    backgroundColor:
+                                      s.action === 'film' || s.action === 'photo' ? '#0F8A6A1A' : '#C08C281A',
+                                    color: s.action === 'film' || s.action === 'photo' ? '#0F8A6A' : '#8A6410',
+                                  }}
+                                >
+                                  {ASSET_LABELS[s.action]}
+                                </span>
+                              )}
+                              <span
+                                className="text-[14.5px] font-semibold leading-snug text-[color:var(--foreground)]"
+                                style={{ textDecoration: isDone ? 'line-through' : undefined }}
+                              >
+                                {s.what}
+                              </span>
+                            </div>
 
-                    {s.url && (
-                      <a
-                        href={s.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-1.5 inline-flex items-center gap-1.5 text-[12.5px] font-medium text-[color:var(--accent)] hover:underline"
-                      >
-                        <Link2 className="h-3.5 w-3.5" />
-                        Референс
-                      </a>
-                    )}
-                  </div>
-                </li>
-                );
-              })}
-            </ol>
+                            {/* Where the cutaway lands, in her own words — the
+                                only cue anyone has before there is a timeline. */}
+                            {s.cue && (
+                              <p className="mt-1 text-[12.5px] italic leading-snug text-[color:var(--text-muted)]">
+                                на «{s.cue}»
+                              </p>
+                            )}
+
+                            {/* The words said during the shot travel WITH it —
+                                you film with the line in hand. */}
+                            {s.saying && (
+                              <>
+                                <p
+                                  className="mt-1.5 whitespace-pre-wrap border-l-2 pl-2.5 text-[13.5px] leading-relaxed text-[color:var(--foreground)]"
+                                  style={{ borderColor: 'var(--border-strong)' }}
+                                >
+                                  {s.saying}
+                                </p>
+                                <div className="mt-2">
+                                  <CopyTextButton text={s.saying} label="Копіювати текст" />
+                                </div>
+                              </>
+                            )}
+
+                            {s.url && (
+                              <a
+                                href={s.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="mt-1.5 inline-flex items-center gap-1.5 text-[12.5px] font-medium text-[color:var(--accent)] hover:underline"
+                              >
+                                <Link2 className="h-3.5 w-3.5" />
+                                Референс
+                              </a>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                </div>
+              ))}
+            </div>
           )}
         </section>
       )}
 
       {show('script') && script && (
         <section data-testid="recipe-script">
-          <h2 className="mb-2.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--text-muted)]">
-            <Search className="h-3.5 w-3.5" strokeWidth={2.2} />
-            Текст
-          </h2>
+          <div className="mb-2.5 flex items-center justify-between gap-3">
+            <h2 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--text-muted)]">
+              <Search className="h-3.5 w-3.5" strokeWidth={2.2} />
+              Текст
+            </h2>
+            {/* Straight into the teleprompter — that is where this text is read. */}
+            <CopyTextButton text={script} label="Копіювати для суфлера" />
+          </div>
           <div
             className="whitespace-pre-wrap rounded-[14px] border border-[color:var(--border)] bg-[color:var(--background)] p-4 text-[15px] leading-relaxed text-[color:var(--foreground)]"
             style={{ boxShadow: 'var(--elev-1)' }}
