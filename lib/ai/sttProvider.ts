@@ -1,12 +1,15 @@
 import 'server-only';
 
 import { transcribeFile } from '@/lib/ai/aiProvider';
+import { NO_SPEECH_ERROR, isNoSpeechTranscript, segmentsSayNoSpeech } from '@/lib/ai/noSpeech';
 import { isAbsoluteHttpUrlString } from '@/lib/isAbsoluteHttpUrl';
 
 export interface TranscriptSegment {
   startSec: number;
   endSec: number;
   text: string;
+  /** Whisper's own "there was nothing here" score, when the provider returns it. */
+  noSpeechProb?: number;
 }
 
 export interface TranscriptResult {
@@ -21,6 +24,7 @@ interface GroqSegment {
   start?: number;
   end?: number;
   text?: string;
+  no_speech_prob?: number;
 }
 
 interface GroqTranscriptionResponse {
@@ -39,6 +43,9 @@ function normalizeSegments(segments: GroqSegment[] | undefined): TranscriptSegme
       startSec: Number(segment.start ?? 0),
       endSec: Number(segment.end ?? 0),
       text: (segment.text ?? '').trim(),
+      ...(typeof segment.no_speech_prob === 'number'
+        ? { noSpeechProb: segment.no_speech_prob }
+        : {}),
     }))
     .filter((segment) => segment.text.length > 0);
 }
@@ -74,6 +81,11 @@ async function parseTranscriptionResponse(sttRes: Response): Promise<TranscriptR
   }
 
   const segments = normalizeSegments(parsed.segments);
+  // Whisper answers even when nobody spoke, so "success" is not the same as
+  // "there was speech" — see lib/ai/noSpeech.
+  if (segmentsSayNoSpeech(segments) || isNoSpeechTranscript(transcript)) {
+    throw new Error(NO_SPEECH_ERROR);
+  }
   return {
     language: parsed.language ?? null,
     transcript,

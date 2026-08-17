@@ -15,6 +15,7 @@ import {
   startCompetitorActorRun,
 } from '@/lib/ai/competitorReelsApify';
 import { resolveVendor, transcribeFile } from '@/lib/ai/aiProvider';
+import { NO_SPEECH_ERROR, isNoSpeechError, isNoSpeechTranscript } from '@/lib/ai/noSpeech';
 import { splitTranscriptIntoScenes } from '@/lib/ai/sceneSegmentation';
 import { templatizeTranscriptToScenes } from '@/lib/ai/transcriptToTemplate';
 import {
@@ -44,6 +45,9 @@ function ideasTranscriptionProvider(): string {
 }
 const FALLBACK_TRANSCRIPT_MESSAGE =
   'Йой, щось пішло не так! Рута вже знає про це і біжить виправляти. А поки ти чекаєш — ось текст під відео:';
+/** Nothing broke — the reel simply has no talking. Saying otherwise is a lie. */
+const NO_SPEECH_TRANSCRIPT_MESSAGE =
+  'У цьому рілсі немає мовлення — лише музика або текст на екрані. Ось текст під відео:';
 
 interface GroqTranscriptionResponse {
   text?: string;
@@ -85,6 +89,11 @@ async function transcribeCompetitorMediaFromUrl(url: string): Promise<string> {
   const transcript = (parsed.text ?? '').trim();
   if (!transcript) {
     throw new Error('Transcript is empty. Try another reel URL.');
+  }
+  // Whisper invents subtitle credits and «*music*» when nobody is speaking, and
+  // the API calls that a success. Do not pass it off as the reel's script.
+  if (isNoSpeechTranscript(transcript)) {
+    throw new Error(NO_SPEECH_ERROR);
   }
   return transcript;
 }
@@ -139,6 +148,8 @@ function isRetryableTranscriptionError(error: unknown): boolean {
   if (message.includes('TRANSCRIPTION_TIMEOUT')) return true;
   // A missing key is configuration, not weather — three attempts cannot fix it.
   if (message.includes('Missing AI credentials')) return false;
+  // Nor can three attempts put speech into a video that has none.
+  if (message.startsWith('NO_SPEECH')) return false;
 
   const status = parseHttpStatusFromErrorMessage(message);
   if (status !== null) {
@@ -701,7 +712,8 @@ export async function transcribeCompetitorReelVideo(
           .eq('id', ctx.scanId)
           .eq('user_id', user.id)
           .maybeSingle();
-        if (scanRow) {
+        // A silent video is not an incident — do not page anyone about it.
+        if (scanRow && !isNoSpeechError(transcriptResult.error)) {
           reportTranscriptionFailureWebhook({
             scanId: ctx.scanId,
             userId: user.id,
@@ -890,7 +902,10 @@ export async function retryIdeaReelTranscription(
   });
 
   const caption = reelCaptionFromRaw((scanRow as IdeaScanRow).raw_reels, shortCode) || reel.hook || '';
-  const fallbackTranscript = `${FALLBACK_TRANSCRIPT_MESSAGE}\n\n${caption}`.trim();
+  const lead = isNoSpeechError(retryResult.error)
+    ? NO_SPEECH_TRANSCRIPT_MESSAGE
+    : FALLBACK_TRANSCRIPT_MESSAGE;
+  const fallbackTranscript = `${lead}\n\n${caption}`.trim();
   const templatePayload = await buildTemplatePayloadFromTranscript(caption);
   await updateIdeaScanTranscriptEntry(scanId, user.id, shortCode, {
     transcript: fallbackTranscript,
