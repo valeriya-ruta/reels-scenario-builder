@@ -354,7 +354,10 @@ export function shotList(blocks: ReadonlyArray<ReelBlock>): ShotItem[] {
       });
     }
 
-    if (!EMPTY(b.assetNote) || b.assetKind) {
+    // A sound block keeps its note in the same field as a cutaway's, but a song
+    // is not something anyone points a camera at — finding it and laying it under
+    // the picture is editing work, and `editList` already carries it as «Звук: …».
+    if (b.kind !== 'sound' && (!EMPTY(b.assetNote) || b.assetKind)) {
       out.push({
         at: i + 1,
         blockId: b.id,
@@ -501,7 +504,14 @@ function mergeTakes(items: ShotItem[]): GroupedShot[] {
  * and the note are one apiece. So ticking «зроблено» survives adding another
  * overlay above it, which a positional index would not.
  */
-export type EditItem = { at: number; what: string; blockId: string; slot: string };
+export type EditItem = {
+  at: number;
+  what: string;
+  blockId: string;
+  slot: string;
+  /** Reference link, where the block carries one — a song has to be findable. */
+  url?: string | null;
+};
 
 /** The key an edit tick is stored under. */
 export function editKey(item: Pick<EditItem, 'blockId' | 'slot'>): string {
@@ -543,7 +553,16 @@ export function editList(blocks: ReadonlyArray<ReelBlock>): EditItem[] {
       out.push({ at, blockId: b.id, slot: 'edit:audio', what: 'Без звуку' });
 
     if (b.kind === 'sound' && !EMPTY(b.assetNote)) {
-      out.push({ at, blockId: b.id, slot: 'edit:sound', what: `Звук: ${(b.assetNote ?? '').trim()}` });
+      // The link travels WITH the instruction: this is the only place the song
+      // appears now that it is off the shot list, and «знайди цей звук» without
+      // the reference is a scavenger hunt.
+      out.push({
+        at,
+        blockId: b.id,
+        slot: 'edit:sound',
+        what: `Звук: ${(b.assetNote ?? '').trim()}`,
+        url: EMPTY(b.assetUrl) ? null : (b.assetUrl ?? '').trim(),
+      });
     }
     if (b.kind === 'broll' && (b.assetKind === 'find' || b.assetKind === 'screenshot')) {
       out.push({
@@ -551,6 +570,7 @@ export function editList(blocks: ReadonlyArray<ReelBlock>): EditItem[] {
         blockId: b.id,
         slot: 'edit:asset',
         what: `${ASSET_LABELS[b.assetKind]}: ${EMPTY(b.assetNote) ? 'відео' : (b.assetNote ?? '').trim()}`,
+        url: EMPTY(b.assetUrl) ? null : (b.assetUrl ?? '').trim(),
       });
     }
     if (!EMPTY(b.editNote))
