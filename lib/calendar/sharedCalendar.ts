@@ -13,7 +13,16 @@
  */
 
 import type { ContentType } from '@/lib/content/statusSystem';
-import { formatLabel } from '@/lib/domain';
+import {
+  ASSET_LABELS,
+  AUDIO_LABELS,
+  BLOCK_LABELS,
+  OVERLAY_LABELS,
+  type AssetKind,
+  type AudioSource,
+  type BlockKind,
+  type OverlayKind,
+} from '@/lib/reels/blocks';
 
 /**
  * The types a shared calendar can carry. Ideas are excluded by construction, not
@@ -109,6 +118,50 @@ export function countLabelFor(type: SharedContentType, n: number): string {
   return `${n} сторіс`;
 }
 
+/**
+ * One reel block → the client's block.
+ *
+ * The heading says what KIND of thing this is and, for an asset, what has to be
+ * done to get it — «Зняти: руки крупно» — because the first question a client
+ * asks a plan is "what do I have to do". The body is the words. The meta line
+ * carries only what was actually filled in: how to shoot, how to edit, the
+ * add-ons hanging off phrases, and the sound when it is not the obvious one.
+ */
+function reelBlockToShared(b: Record<string, unknown>, i: number): SharedBlock {
+  const kind = (text(b.blockKind) || 'talk') as BlockKind;
+  const speaker = text(b.speaker);
+  const assetKind = text(b.assetKind) as AssetKind | '';
+  const assetNote = text(b.assetNote);
+  const audio = text(b.audioSource) as AudioSource | '';
+
+  let heading = BLOCK_LABELS[kind] ?? `Блок ${i + 1}`;
+  if (kind === 'dialogue' && speaker) heading = speaker;
+  if ((kind === 'broll' || kind === 'sound') && (assetKind || assetNote)) {
+    const action = assetKind ? ASSET_LABELS[assetKind] : BLOCK_LABELS[kind];
+    heading = assetNote ? `${action}: ${assetNote}` : action;
+  }
+
+  const meta: string[] = [];
+  const screenText = text(b.screenText);
+  if (screenText) meta.push(`Текст на екрані: «${screenText}»`);
+  if (text(b.recordNote)) meta.push(`Знімаємо: ${text(b.recordNote)}`);
+  // Sound only earns a line when it is not what the picture already implies.
+  if (audio && audio !== 'sync') meta.push(AUDIO_LABELS[audio]);
+
+  for (const raw of asArray(b.overlays)) {
+    const label = OVERLAY_LABELS[(text(raw.kind) || 'note') as OverlayKind] ?? 'Вставка';
+    const note = text(raw.note);
+    const anchor = text(raw.anchorText);
+    const what = note ? `${label}: ${note}` : label;
+    meta.push(anchor ? `На «${anchor}» — ${what}` : what);
+  }
+
+  if (text(b.editNote)) meta.push(`Монтаж: ${text(b.editNote)}`);
+  if (text(b.assetUrl)) meta.push(text(b.assetUrl));
+
+  return { heading, body: text(b.spoken), meta };
+}
+
 /** Rows from `calendar_share_pieces` → the calendar's own shape. */
 export function toSharedPieces(rows: ReadonlyArray<Record<string, unknown>>): SharedPiece[] {
   const out: SharedPiece[] = [];
@@ -161,17 +214,7 @@ export function toSharedDetail(payload: unknown): SharedPieceDetail | null {
           ].filter(Boolean),
         }))
       : type === 'reel'
-        ? raw.map((b, i) => ({
-            heading: text(b.name) || `Сцена ${i + 1}`,
-            body: text(b.lines),
-            meta: [
-              [text(b.framing), text(b.shotSize)]
-                .filter(Boolean)
-                .map((v) => formatLabel(v))
-                .join(' · '),
-              text(b.actorNote) ? `Нотатка: ${text(b.actorNote)}` : '',
-            ].filter(Boolean),
-          }))
+        ? raw.map((b, i) => reelBlockToShared(b, i))
         : raw.map((b, i) => ({
             heading: text(b.title) || `Слайд ${i + 1}`,
             body: text(b.body),

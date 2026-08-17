@@ -1,0 +1,175 @@
+import { test, expect } from '@playwright/test';
+import {
+  editList,
+  effectiveAudio,
+  emptyBlock,
+  resolveOverlays,
+  shotList,
+  shotSummary,
+  spokenScript,
+  textRuns,
+  type Overlay,
+  type ReelBlock,
+} from '@/lib/reels/blocks';
+
+/**
+ * The shot list and the edit list are DERIVED from the blocks, and the client's
+ * shared page renders the same derivation the builder shows. So these are the
+ * rules that decide what someone is told to film — and the anchoring that has to
+ * survive the script being rewritten around it.
+ */
+
+const block = (over: Partial<ReelBlock> = {}): ReelBlock => ({
+  ...emptyBlock('talk', 'p1', 0, 'b1'),
+  ...over,
+});
+
+const overlay = (over: Partial<Overlay> = {}): Overlay => ({
+  id: 'o1',
+  anchorText: '',
+  anchorStart: 0,
+  kind: 'image',
+  note: '',
+  ...over,
+});
+
+test.describe('reel blocks — sound is its own axis', () => {
+  test('someone on camera is heard; everything else is silent unless said', () => {
+    expect(effectiveAudio(block({ kind: 'talk' }))).toBe('sync');
+    expect(effectiveAudio(block({ kind: 'dialogue' }))).toBe('sync');
+    expect(effectiveAudio(block({ kind: 'text', audioSource: null }))).toBe('mute');
+  });
+
+  test('a cutaway is born carrying the voice over it', () => {
+    const b = emptyBlock('broll', 'p1', 1, 'b2');
+    expect(b.audioSource).toBe('voiceover');
+    expect(b.assetKind).toBe('film');
+  });
+
+  test('the edit list states the sound only when it is not the obvious one', () => {
+    const talking = editList([block({ kind: 'talk', spoken: 'Привіт' })]);
+    expect(talking.some((e) => e.what.includes('Звук із кадру'))).toBe(false);
+
+    const cutaway = editList([
+      block({ kind: 'broll', assetKind: 'film', assetNote: 'кава', audioSource: 'voiceover' }),
+    ]);
+    expect(cutaway.some((e) => e.what === 'Голос продовжується поверх цього кадру')).toBe(true);
+  });
+});
+
+test.describe('reel blocks — what has to be captured', () => {
+  test('a talking block is a shot, and carries its words to the set', () => {
+    const [shot] = shotList([block({ kind: 'talk', spoken: 'Скільки це коштує?' })]);
+    expect(shot.action).toBeNull();
+    expect(shot.saying).toBe('Скільки це коштує?');
+  });
+
+  test('a dialogue shot is labelled with who is speaking', () => {
+    const [shot] = shotList([block({ kind: 'dialogue', speaker: 'Вона', spoken: 'Ні' })]);
+    expect(shot.what).toBe('Вона говорить');
+  });
+
+  test('b-roll appears whether it is filmed or merely found', () => {
+    const shots = shotList([
+      block({ kind: 'broll', assetKind: 'film', assetNote: 'руки крупно' }),
+      block({ kind: 'broll', assetKind: 'find', assetNote: 'архівне відео' }),
+    ]);
+    expect(shots.map((s) => s.action)).toEqual(['film', 'find']);
+    // "which videos do we need" includes the ones nobody has to film.
+    expect(shots[1].what).toBe('архівне відео');
+  });
+
+  test('empty blocks never reach the shot list', () => {
+    expect(shotList([block({ kind: 'talk' })])).toEqual([]);
+  });
+
+  test('the summary splits filming from finding', () => {
+    const s = shotSummary([
+      block({ kind: 'talk', spoken: 'Привіт' }),
+      block({ kind: 'broll', assetKind: 'film', assetNote: 'кава' }),
+      block({ kind: 'broll', assetKind: 'find', assetNote: 'сток' }),
+    ]);
+    expect(s).toBe('2 зняти · 1 знайти');
+  });
+});
+
+test.describe('reel blocks — add-ons anchored to phrases', () => {
+  const text = 'Це коштує дорого, але дорого — не завжди погано';
+  // Offsets are computed, not counted by hand: these are the positions a real
+  // text selection would report.
+  const first = text.indexOf('дорого');
+  const second = text.indexOf('дорого', first + 1);
+
+  test('an anchor resolves at its exact offset', () => {
+    const o = overlay({ anchorText: 'дорого', anchorStart: first });
+    const [r] = resolveOverlays(text, [o]);
+    expect([r.start, r.end]).toEqual([first, first + 6]);
+    expect(r.detached).toBe(false);
+  });
+
+  test('a repeated phrase keeps the anchor nearest where it was made', () => {
+    const [r] = resolveOverlays(text, [overlay({ id: 'o2', anchorText: 'дорого', anchorStart: second })]);
+    // Both occurrences match; the one that was selected is the one that wins.
+    expect(r.start).toBe(second);
+  });
+
+  test('editing the text above an anchor re-finds it rather than losing it', () => {
+    const prefix = 'Слухай, ';
+    const o = overlay({ anchorText: 'дорого', anchorStart: first });
+    const [r] = resolveOverlays(`${prefix}${text}`, [o]);
+    expect(r.detached).toBe(false);
+    expect(r.start).toBe(first + prefix.length);
+  });
+
+  test('a deleted phrase detaches the add-on instead of deleting it', () => {
+    const o = overlay({ anchorText: 'дорого', anchorStart: 11 });
+    const [r] = resolveOverlays('Це коштує нормально', [o]);
+    expect(r.detached).toBe(true);
+    expect(r.start).toBeNull();
+  });
+
+  test('runs split the text so anchored phrases can be underlined', () => {
+    const runs = textRuns('Це дорого справді', [
+      overlay({ anchorText: 'дорого', anchorStart: 3 }),
+    ]);
+    expect(runs.map((r) => r.text)).toEqual(['Це ', 'дорого', ' справді']);
+    expect(runs[1].overlayIds).toEqual(['o1']);
+  });
+
+  test('the edit list reads as an instruction with its cue', () => {
+    const items = editList([
+      block({
+        kind: 'talk',
+        spoken: 'Це коштує дорого',
+        overlays: [
+          overlay({
+            anchorText: 'дорого',
+            anchorStart: 'Це коштує дорого'.indexOf('дорого'),
+            kind: 'image',
+            note: 'скріншот цін',
+          }),
+        ],
+      }),
+    ]);
+    expect(items[0].what).toBe('на «дорого» — Фото: скріншот цін');
+  });
+});
+
+test.describe('reel blocks — the script', () => {
+  test('dialogue lines carry their speaker, monologue does not', () => {
+    const script = spokenScript([
+      block({ kind: 'talk', spoken: 'Почнемо' }),
+      block({ kind: 'dialogue', speaker: 'Вона', spoken: 'Ні' }),
+    ]);
+    expect(script).toBe('Почнемо\n\nВона: Ні');
+  });
+
+  test('blocks with nothing spoken leave no gap in the script', () => {
+    const script = spokenScript([
+      block({ kind: 'talk', spoken: 'Привіт' }),
+      block({ kind: 'broll', assetNote: 'кава' }),
+      block({ kind: 'talk', spoken: 'Бувай' }),
+    ]);
+    expect(script).toBe('Привіт\n\nБувай');
+  });
+});
