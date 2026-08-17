@@ -235,6 +235,12 @@ export interface StorytellingProject {
   set_id?: string | null;
   set_index?: number | null;
   set_size?: number | null;
+  /**
+   * Title of the BOARD this day belongs to (migration 028), denormalized onto
+   * every row of the set. Null/absent = never named as a board, so the board
+   * title is derived from the days' names instead.
+   */
+  set_name?: string | null;
   /** План calendar placement (YYYY-MM-DD) or null if unscheduled (task 86d3d23nj). */
   scheduled_date?: string | null;
   /** Content status for the status ring/picker (Status system). */

@@ -15,13 +15,13 @@ import { generateStoriesFromRant } from '@/lib/ai/rantToStories';
 import { aiLimit } from '@/lib/ratelimit';
 import { proposeSpread, isConsecutive } from '@/lib/content/proposeSpread';
 import {
-  dayName,
+  boardTitle,
   nextSetIndex,
   proposeNextDayDate,
   resequenceSet,
-  setTitle,
   sortDays,
 } from '@/lib/storytelling/board';
+import { isPlaceholderTitle, NEW_LABELS } from '@/lib/content/displayTitle';
 import { deriveStorytellingName, isUnnamedStorytelling } from '@/lib/storytelling/autoName';
 import type { Slide } from '@/lib/ai/rantToStories';
 
@@ -36,6 +36,46 @@ export async function updateStorytellingProjectName(projectId: string, name: str
     .update({ name, updated_at: new Date().toISOString() })
     .eq('id', projectId)
     .eq('user_id', user.id);
+}
+
+/**
+ * Rename the BOARD (the set), not its days.
+ *
+ * The board has no row of its own, so its title is denormalized onto every row
+ * of the set (`set_name`, migration 028) — the same shape `set_size` already
+ * uses. Nothing writes a day's `name` here: that is the whole point. A board
+ * rename used to rewrite the days that shared the old stem, so naming the saga
+ * silently renamed column 1.
+ *
+ * `{ ok: false, reason: 'no_column' }` means migration 028 has not been applied
+ * yet; the caller falls back to the old stem rename so renaming keeps working
+ * (with the old two-way behaviour) until it lands.
+ */
+export async function updateStorytellingSetName(
+  setId: string,
+  name: string,
+): Promise<{ ok: true } | { ok: false; reason: 'no_column' | 'failed' }> {
+  const user = await requireAuth();
+  if (!user) return { ok: false, reason: 'failed' };
+  const trimmed = name.trim().slice(0, 120);
+  if (!trimmed) return { ok: false, reason: 'failed' };
+
+  const supabase = await createServerSupabaseClient();
+  const { error } = await supabase
+    .from('storytelling_projects')
+    .update({ set_name: trimmed, updated_at: new Date().toISOString() })
+    .eq('set_id', setId)
+    .eq('user_id', user.id);
+
+  if (error) {
+    // PostgREST reports an unknown column as PGRST204 / 42703 depending on path.
+    const missingColumn =
+      error.code === 'PGRST204' || error.code === '42703' || /set_name/i.test(error.message ?? '');
+    if (missingColumn) return { ok: false, reason: 'no_column' };
+    console.error('updateStorytellingSetName', error);
+    return { ok: false, reason: 'failed' };
+  }
+  return { ok: true };
 }
 
 export async function deleteStorytellingProject(projectId: string) {
@@ -116,6 +156,32 @@ async function writeSetTags(
 }
 
 /**
+ * Write the board's title onto every row of the set (`set_name`, migration 028).
+ * Returns false when the column is not there yet, so callers can carry on
+ * without it rather than failing the whole action.
+ *
+ * A placeholder («Новий сторітел») is NOT stored: pinning it would freeze the
+ * board's title at the stand-in name forever, when what should happen is that
+ * the board keeps deriving its title until a day names itself or the user names
+ * the board on purpose.
+ */
+async function writeSetName(
+  supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
+  userId: string,
+  setId: string,
+  name: string,
+): Promise<boolean> {
+  const trimmed = (name ?? '').trim().slice(0, 120);
+  if (!trimmed || isPlaceholderTitle(trimmed)) return false;
+  const { error } = await supabase
+    .from('storytelling_projects')
+    .update({ set_name: trimmed })
+    .eq('set_id', setId)
+    .eq('user_id', userId);
+  return !error;
+}
+
+/**
  * Add a day to the board: a NEW storytelling next to the anchor, in the same
  * set, scheduled on the next open day and starting at Ідея with one empty card.
  *
@@ -130,9 +196,12 @@ export async function addStorytellingDay(
   if (!user) return { ok: false, error: 'UNAUTHORIZED' };
 
   const supabase = await createServerSupabaseClient();
+  // `*` rather than a column list: `set_name` (migration 028) is read here, and
+  // naming it explicitly would make adding a day fail outright on a database
+  // where the migration has not been applied yet.
   const { data: anchor } = await supabase
     .from('storytelling_projects')
-    .select('id, name, set_id, set_index, created_at, scheduled_date, project_id')
+    .select('*')
     .eq('id', anchorProjectId)
     .eq('user_id', user.id)
     .single();
@@ -144,6 +213,7 @@ export async function addStorytellingDay(
     name: string;
     set_id: string | null;
     set_index: number | null;
+    set_name?: string | null;
     created_at: string;
     scheduled_date: string | null;
     project_id?: string | null;
@@ -154,7 +224,7 @@ export async function addStorytellingDay(
   if (anchorRow.set_id) {
     const { data } = await supabase
       .from('storytelling_projects')
-      .select('id, name, set_id, set_index, created_at, scheduled_date')
+      .select('*')
       .eq('set_id', anchorRow.set_id)
       .eq('user_id', user.id);
     if (data && data.length > 0) siblings = data as Sibling[];
@@ -163,7 +233,16 @@ export async function addStorytellingDay(
   // A standalone becomes a set of two the moment a second day is added.
   const setId = anchorRow.set_id ?? globalThis.crypto.randomUUID();
   const index = nextSetIndex(siblings);
-  const name = dayName(setTitle(siblings.map((s) => s.name ?? '')), index);
+  // A new column arrives UNNAMED. It used to be minted as «<board> — день N»,
+  // which is why an empty column showed up already wearing the board's title —
+  // and why it could never name itself from what was written in it
+  // (`isUnnamedStorytelling` only fills a placeholder). The board's own title
+  // lives in `set_name`, so nothing is lost by leaving the day nameless.
+  const name = NEW_LABELS.story;
+  // The board keeps its title when a standalone becomes a set: whatever the
+  // board was called (stored name, or the stem derived from the days) is written
+  // as the set's own name, so it stops depending on any one day's `name`.
+  const boardName = boardTitle(siblings.map((s) => ({ name: s.name ?? '', set_name: s.set_name })));
   const today = todayDayKey();
   const scheduledDate = proposeNextDayDate(
     siblings.map((s) => s.scheduled_date),
@@ -234,6 +313,8 @@ export async function addStorytellingDay(
   ];
   const tags = resequenceSet(ordered, setId);
   await writeSetTags(supabase, user.id, tags);
+  // …and the board's own title, on every row of the set including the new one.
+  const namedSet = await writeSetName(supabase, user.id, setId, boardName);
 
   const tag = tags.find((t) => t.id === project.id);
   revalidatePath('/', 'layout');
@@ -241,7 +322,11 @@ export async function addStorytellingDay(
   return {
     ok: true,
     day: {
-      project: { ...(project as StorytellingProject), ...(tag ?? {}) },
+      project: {
+        ...(project as StorytellingProject),
+        ...(tag ?? {}),
+        ...(namedSet ? { set_name: boardName } : {}),
+      },
       columnId: column.id as string,
       storyId: (story?.id as string) ?? (ids?.storyId ?? ''),
     },
@@ -714,6 +799,10 @@ export async function createStorytellingProjectFromRant(
   if (created.length === 0) {
     return { ok: false, error: 'Не вдалося зберегти сторіс. Спробуй ще раз.' };
   }
+
+  // The generated saga is a BOARD, so it gets a board name of its own — not one
+  // borrowed from whichever day happens to sit first (migration 028).
+  if (setId) await writeSetName(supabase, user.id, setId, baseName);
 
   // The braindump reviews these as a fan-out; nothing is created silently.
   return {

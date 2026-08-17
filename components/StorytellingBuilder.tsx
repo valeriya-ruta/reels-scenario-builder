@@ -12,6 +12,7 @@ import {
   reorderStorytellingDays,
   reorderStorytellingStories,
   updateStorytellingProjectName,
+  updateStorytellingSetName,
   type SetTag,
 } from '@/app/storytelling-actions';
 import EditorTopBar from '@/components/ui/EditorTopBar';
@@ -20,14 +21,13 @@ import SourceDumpChip from '@/components/braindump/SourceDumpChip';
 import { genClientId, nextOrderIndex, makeOptimisticStory } from '@/lib/storytelling/optimistic';
 import {
   boardSummary,
-  dayName,
+  boardTitle,
   nextSetIndex,
   renameSetStem,
-  setTitle,
   totalStories,
   type BoardDay,
 } from '@/lib/storytelling/board';
-import { displayTitle } from '@/lib/content/displayTitle';
+import { displayTitle, isPlaceholderTitle, NEW_LABELS } from '@/lib/content/displayTitle';
 import { dayHeaderLabel } from '@/lib/content/calendar';
 import { onStorytellingAutoNamed } from '@/lib/storytelling/autoNameEvent';
 
@@ -85,13 +85,22 @@ export default function StorytellingBuilder({ initialDays, currentId }: Props) {
   const [addingDay, setAddingDay] = useState(false);
 
   const isSet = days.length > 1;
+  // A board of one IS its storytelling, so its title is that day's name. A set
+  // has a title of its own (`set_name`), falling back to the days' shared stem
+  // for sets made before the board had a name to store — see `boardTitle`.
   const title = useMemo(
     () =>
       isSet
-        ? setTitle(days.map((d) => displayTitle(d.project.name, 'story')))
+        ? boardTitle(
+            days.map((d) => ({
+              name: displayTitle(d.project.name, 'story'),
+              set_name: d.project.set_name,
+            })),
+          )
         : displayTitle(days[0]?.project.name ?? '', 'story'),
     [days, isSet],
   );
+  const setId = days.find((d) => d.project.set_id)?.project.set_id ?? null;
   // The chip belongs to the day you opened; if that one was just deleted, the
   // board's first day stands in.
   const sourceId = days.some((d) => d.project.id === currentId) ? currentId : days[0]?.project.id;
@@ -162,12 +171,16 @@ export default function StorytellingBuilder({ initialDays, currentId }: Props) {
       project: {
         id: projectId,
         user_id: days[0]?.project.user_id ?? '',
-        name: dayName(setTitle(days.map((d) => d.project.name)), index),
+        // A new column arrives unnamed and names itself from its first card —
+        // it must NOT be born wearing the board's title (see addStorytellingDay).
+        name: NEW_LABELS.story,
         created_at: now,
         updated_at: now,
         set_id: days[0]?.project.set_id ?? null,
         set_index: index,
         set_size: days.length + 1,
+        // Mirrors the server: a placeholder is never pinned as the board's name.
+        set_name: days[0]?.project.set_name ?? (isPlaceholderTitle(title) ? null : title),
         scheduled_date: null,
         status: 'idea',
       },
@@ -189,7 +202,7 @@ export default function StorytellingBuilder({ initialDays, currentId }: Props) {
         showError('Не вдалося додати сторітел. Спробуй ще раз.');
       })
       .finally(() => setAddingDay(false));
-  }, [days, currentId, addingDay, patchDay, applyTags, showError]);
+  }, [days, currentId, addingDay, title, patchDay, applyTags, showError]);
 
   const handleDeleteDay = useCallback(
     (dayId: string) => {
@@ -339,9 +352,17 @@ export default function StorytellingBuilder({ initialDays, currentId }: Props) {
   }, [days, isSet, title, copyText]);
 
   /**
-   * Rename the whole board. A single story owns its name outright; a set has no
-   * row of its own, so the new stem is written into the days that carry the old
-   * one (days renamed by hand keep their names — see `renameSetStem`).
+   * Rename the whole board — and ONLY the board.
+   *
+   * A single story owns its name outright, so there the board name IS the day's
+   * name. A set carries its title in `set_name` on every one of its rows
+   * (migration 028), so renaming the saga touches no column's name: naming used
+   * to be a two-way sync, where renaming the board rewrote column 1 and renaming
+   * column 1 renamed the board.
+   *
+   * The legacy stem rename is kept as the fallback for a database where 028 has
+   * not been applied yet — worse behaviour beats a rename that silently does
+   * nothing.
    */
   const handleRenameBoard = useCallback(
     (next: string) => {
@@ -350,14 +371,25 @@ export default function StorytellingBuilder({ initialDays, currentId }: Props) {
         if (only) handleRenameDay(only.project.id, next);
         return;
       }
-      const renames = renameSetStem(
-        days.map((d) => ({ id: d.project.id, name: displayTitle(d.project.name, 'story') })),
-        title,
-        next,
-      );
-      for (const rename of renames) handleRenameDay(rename.id, rename.name);
+      if (!setId) return;
+
+      const previous = title;
+      setDays((prev) => prev.map((d) => ({ ...d, project: { ...d.project, set_name: next } })));
+
+      void updateStorytellingSetName(setId, next).then((res) => {
+        if (res.ok || res.reason !== 'no_column') return;
+        // Migration 028 is not in yet: fall back to the old stem rewrite so the
+        // board still visibly renames.
+        setDays((prev) => prev.map((d) => ({ ...d, project: { ...d.project, set_name: null } })));
+        const renames = renameSetStem(
+          days.map((d) => ({ id: d.project.id, name: displayTitle(d.project.name, 'story') })),
+          previous,
+          next,
+        );
+        for (const rename of renames) handleRenameDay(rename.id, rename.name);
+      });
     },
-    [days, isSet, title, handleRenameDay],
+    [days, isSet, setId, title, handleRenameDay],
   );
 
   return (
@@ -420,10 +452,21 @@ export default function StorytellingBuilder({ initialDays, currentId }: Props) {
             existed, which meant the multi-story view was invisible until you had
             already guessed it was there. The «+» column at the end is what makes
             it visible: the shape of the board is on screen from the first story. */}
+        {/* No scroll snapping. Mandatory snap meant the board could only ever
+            rest with a column flush to the left edge, so with three columns the
+            middle one was never centred — it stuck to whichever edge it was
+            nearest and fought every small drag. Free scrolling lets the board
+            sit wherever the user leaves it. */}
         <div
           data-testid="story-board"
-          className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-4 overflow-x-auto px-4 pb-2"
-          style={{ scrollbarWidth: 'thin', scrollbarColor: '#d4d4d8 transparent' }}
+          className="-mx-4 flex gap-4 overflow-x-auto px-4 pb-2"
+          style={{
+            scrollbarWidth: 'thin',
+            scrollbarColor: '#d4d4d8 transparent',
+            // Keep the momentum/rubber-band feel iOS gives a free-scrolling row.
+            WebkitOverflowScrolling: 'touch',
+            overscrollBehaviorX: 'contain',
+          }}
         >
           {days.map((day, index) => (
             <DayColumn
@@ -451,7 +494,7 @@ export default function StorytellingBuilder({ initialDays, currentId }: Props) {
             onClick={handleAddDay}
             disabled={addingDay}
             data-testid="add-column"
-            className="flex w-[62vw] shrink-0 snap-start flex-col items-center justify-center gap-2 self-start rounded-[16px] border-2 border-dashed border-[color:var(--border)] bg-[color:var(--surface1)]/60 p-6 text-center transition-colors hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface1)] disabled:opacity-60 sm:w-[240px]"
+            className="flex w-[62vw] shrink-0 flex-col items-center justify-center gap-2 self-start rounded-[16px] border-2 border-dashed border-[color:var(--border)] bg-[color:var(--surface1)]/60 p-6 text-center transition-colors hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface1)] disabled:opacity-60 sm:w-[240px]"
             style={{ minHeight: 180 }}
           >
             <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-zinc-400 shadow-sm">

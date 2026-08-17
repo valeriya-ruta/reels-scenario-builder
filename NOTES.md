@@ -417,3 +417,41 @@ on tokens. Carousel *slide settings* deliberately untouched (only refined) per R
 
 **Verified live**: computed styles on production confirm canvas `#f7f7f5`, foreground `#17171a`,
 radius/elevation scales and `.app-card` all rendering. Build + tsc clean, 30 logic tests green.
+
+---
+
+# Calendar + storytelling UI fixes — 2026-08-17
+
+Branch: `claude/calendar-storytelling-ui-fixes-d86zr1`
+
+**⚠️ Two migrations need applying by Kunj before the new behaviour is live:**
+`supabase/migrations/028_storytelling_set_name.sql` and
+`supabase/migrations/029_calendar_share_links.sql`. Both are additive, and both are safe to sit
+unapplied — 028 falls back to the old derived board title, 029 only affects the share button.
+
+**Calendar sharing (the priority)** — `/plan` is no longer "Soon" in the desktop sidebar (it has
+existed as a route the whole time), and it now carries a share button. One link per account opens a
+read-only copy of the calendar at `/share/calendar/<token>`: month grid → tap a day → what is
+planned that day → tap a piece → its scenes / slides / stories in full. Live, not a snapshot;
+regenerate replaces the token, revoke kills it.
+
+The client is anon, so the reads go through three SECURITY DEFINER functions that take the token as
+an argument (`calendar_share_meta` / `calendar_share_pieces` / `calendar_share_piece`) rather than
+through anon RLS policies — an "anyone may read active links" policy would have handed every user's
+token to anyone who queried the table. Verified against a real Postgres 16: cross-owner reads,
+undated pieces, unknown tokens and revoked links all return nothing, and anon sees 0 rows of
+`calendar_share_links` even with a table-level SELECT grant.
+
+**Fixes**
+- Calendar weeks start **Monday** (`monthGrid` + `WEEKDAY_LABELS`).
+- Dates read «вт, 18 сер» — `dayHeaderLabel` carries the weekday, so every date chip does.
+- Storytelling column names **wrap** (3 lines) instead of being clipped to «…».
+- Board name and column names are **independent** (`set_name`, migration 028). Renaming the board
+  no longer rewrites column 1, renaming column 1 no longer renames the board, and a new column
+  arrives unnamed so it can name itself from its first card.
+- The board **no longer scroll-snaps** — mandatory snap is why the middle of three columns could
+  never sit centred.
+
+**Verified**: `tsc` + `next build` clean, 224 logic specs green (10 new for the shared calendar, 4
+for the board title, Mon-first + weekday assertions rewritten in `plan-calendar.logic.spec.ts`),
+eslint clean on every touched file.

@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import {
   boardSummary,
+  boardTitle,
   buildBoardDays,
   dayName,
   nextSetIndex,
@@ -255,5 +256,50 @@ test.describe('renaming the board', () => {
     expect(renameSetStem([day('a', 'Злам року')], 'Злам року', 'Злам року')).toEqual([]);
     expect(renameSetStem([day('a', 'Злам року')], 'Злам року', '   ')).toEqual([]);
     expect(renameSetStem([day('a', 'Злам року')], '', 'Нове')).toEqual([]);
+  });
+});
+
+/**
+ * The board's own name (migration 028). The title used to be DERIVED from the
+ * days' names, which made naming a two-way sync: renaming the board rewrote
+ * column 1, and renaming column 1 renamed the board. `set_name` is the board's
+ * own title; the derived stem survives only as the fallback for sets made before
+ * the column existed.
+ */
+test.describe('storytelling board — the board owns its name', () => {
+  test('a stored set name wins over anything the days are called', () => {
+    expect(
+      boardTitle([
+        { name: 'Я зупинилась і зрозуміла, що так далі не можна', set_name: 'Злам року' },
+        { name: 'Що я зробила наступного дня', set_name: 'Злам року' },
+      ]),
+    ).toBe('Злам року');
+  });
+
+  test('renaming a day cannot move the board title', () => {
+    const before = boardTitle([
+      { name: 'День перший', set_name: 'Злам року' },
+      { name: 'День другий', set_name: 'Злам року' },
+    ]);
+    const after = boardTitle([
+      { name: 'Щось геть інше', set_name: 'Злам року' },
+      { name: 'День другий', set_name: 'Злам року' },
+    ]);
+    expect(after).toBe(before);
+  });
+
+  test('a set with no stored name still shows its shared stem (pre-028 rows)', () => {
+    expect(
+      boardTitle([
+        { name: 'Злам року', set_name: null },
+        { name: 'Злам року — день 2' },
+      ]),
+    ).toBe('Злам року');
+  });
+
+  test('one named row is enough — the name is denormalized onto the whole set', () => {
+    expect(
+      boardTitle([{ name: 'a', set_name: '  ' }, { name: 'b', set_name: 'Злам року' }]),
+    ).toBe('Злам року');
   });
 });

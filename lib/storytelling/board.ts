@@ -121,6 +121,24 @@ export function dayName(base: string, index: number): string {
 }
 
 /**
+ * What the board is CALLED — the stored board name when it has one, the derived
+ * stem when it does not.
+ *
+ * The board owns its title (`set_name`, migration 028) instead of borrowing the
+ * days' names. That is what stops the naming from being a two-way sync: renaming
+ * the board writes `set_name` and nothing else, renaming a day writes `name` and
+ * nothing else. `setTitle` stays as the fallback so every set created before the
+ * column existed still shows the title it shows today.
+ */
+export function boardTitle(
+  days: ReadonlyArray<{ name: string; set_name?: string | null }>,
+): string {
+  const stored = days.map((d) => (d.set_name ?? '').trim()).find((n) => n.length > 0);
+  if (stored) return stored;
+  return setTitle(days.map((d) => d.name ?? ''));
+}
+
+/**
  * What the whole board is called.
  *
  * There is no parent row to hold a saga title (that parent is exactly what broke

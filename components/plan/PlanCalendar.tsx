@@ -24,8 +24,10 @@ import {
 } from '@/lib/content/contentStatusStore';
 import { contentHref } from '@/lib/content/contentPiece';
 import PlanCreateMenu from '@/components/plan/PlanCreateMenu';
+import CalendarShareButton from '@/components/plan/CalendarShareButton';
 import StagingPressureCard from '@/components/staging/StagingPressureCard';
 import type { ContentPiece } from '@/lib/content/contentPiece';
+import type { CalendarShareLink } from '@/lib/calendar/sharedCalendar';
 import {
   monthGrid,
   monthLabel,
@@ -109,10 +111,16 @@ export default function PlanCalendar({
   pieces,
   stagedCount,
   stagedOverdue,
+  shareLink = null,
+  shareTitle = 'Контент-план',
 }: {
   pieces: ContentPiece[];
   stagedCount: number;
   stagedOverdue: number;
+  /** The calendar's existing client link, if one has been created. */
+  shareLink?: CalendarShareLink | null;
+  /** Seeds the header the client sees when the owner has not set one. */
+  shareTitle?: string;
 }) {
   const now = new Date();
   const todayKey = dateKey(now.getFullYear(), now.getMonth(), now.getDate());
@@ -206,6 +214,9 @@ export default function PlanCalendar({
           </p>
         </div>
         <div className="flex items-center gap-1">
+          {/* Sharing lives next to the month, not in a settings screen: the
+              thing being shared is the calendar you are looking at. */}
+          <CalendarShareButton initialLink={shareLink} defaultTitle={shareTitle} />
           <button
             type="button"
             aria-label="Попередній місяць"
