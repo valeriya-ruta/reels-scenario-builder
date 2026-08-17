@@ -10,8 +10,9 @@ name: Deploy Ruta Pro
 #
 # Public build env (Supabase URL + anon key + edition flag) is baked from the
 # committed .env.production, so the build is self-contained. Add the secret AI
-# keys (GROQ_API_KEY, APIFY_*, etc.) as env vars on the ruta-pro Vercel project
-# afterwards to light up the AI features.
+# keys (OPENROUTER_API_KEY or GROQ_API_KEY, APIFY_*, etc.) as env vars on the
+# ruta-pro Vercel project afterwards to light up the AI features — one AI key
+# covers both generation and Whisper transcription.
 
 on:
   push:

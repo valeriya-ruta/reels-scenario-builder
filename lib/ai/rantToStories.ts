@@ -1,5 +1,4 @@
-import { requireServerEnv } from '@/lib/env';
-import { GROQ_TEXT_MODEL } from '@/lib/ai/groqModel';
+import { chatEndpoint } from '@/lib/ai/aiProvider';
 import { normalizeOutput } from '@/lib/ai/storiesNormalize';
 import type { StoriesOutput } from '@/lib/ai/storiesNormalize';
 
@@ -149,15 +148,12 @@ export async function generateStoriesFromRant(rant: string, name = ''): Promise<
   }
   const outputLanguage = detectOutputLanguage(trimmed);
 
-  const apiKey = requireServerEnv('GROQ_API_KEY');
-  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+  const ai = chatEndpoint();
+  const response = await fetch(ai.url, {
     method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${apiKey}`,
-    },
+    headers: ai.headers,
     body: JSON.stringify({
-      model: GROQ_TEXT_MODEL,
+      model: ai.model,
       temperature: 0.7,
       response_format: { type: 'json_object' },
       messages: [
