@@ -7,6 +7,7 @@ import ScheduleChip from '@/components/content/ScheduleChip';
 import StatusPill from '@/components/content/StatusPill';
 import BlockCard from '@/components/reels/BlockCard';
 import ReelRecipe from '@/components/reels/ReelRecipe';
+import ReelShareButton from '@/components/reels/ReelShareButton';
 import {
   BLOCK_HINTS,
   BLOCK_KINDS,
@@ -74,9 +75,12 @@ function toPatch(patch: Partial<ReelBlock>): BlockPatch {
 export default function ReelBuilder({
   project,
   initialBlocks,
+  shareToken = null,
 }: {
   project: Project;
   initialBlocks: ReelBlock[];
+  /** Existing share link for this reel, if one was already created. */
+  shareToken?: string | null;
 }) {
   const [blocks, setBlocks] = useState<ReelBlock[]>(initialBlocks);
   const [tab, setTab] = useState<Tab>('write');
@@ -169,6 +173,7 @@ export default function ReelBuilder({
           backHref="/projects"
           title={project.name}
           kind="reel"
+          trailing={<ReelShareButton reelId={project.id} initialToken={shareToken} />}
           meta={
             <div className="flex flex-wrap items-center gap-2">
               <StatusPill refTable="projects" id={project.id} type="reel" initialStatus={project.status ?? 'idea'} />

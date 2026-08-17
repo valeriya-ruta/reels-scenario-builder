@@ -4,6 +4,11 @@ import { requireAuth } from '@/lib/auth';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import { toReelBlock, type ReelBlock } from '@/lib/reels/blocks';
 import { findPreset } from '@/lib/reels/presets';
+import {
+  ensureReelShareLink,
+  regenerateReelShareLink,
+  revokeReelShareLink,
+} from '@/lib/reels/share';
 
 /**
  * Reel blocks — the writes behind the builder.
@@ -180,4 +185,22 @@ export async function applyReelPreset(
     return { ok: false };
   }
   return { ok: true, blocks: data.map((r) => toReelBlock(r as Record<string, unknown>)) };
+}
+
+// ── Sharing one reel ────────────────────────────────────────────────────────
+
+export type ReelShareResult = { ok: true; token: string } | { ok: false };
+
+export async function createReelShareLinkAction(reelId: string): Promise<ReelShareResult> {
+  const link = await ensureReelShareLink(reelId);
+  return link ? { ok: true, token: link.token } : { ok: false };
+}
+
+export async function regenerateReelShareLinkAction(reelId: string): Promise<ReelShareResult> {
+  const link = await regenerateReelShareLink(reelId);
+  return link ? { ok: true, token: link.token } : { ok: false };
+}
+
+export async function revokeReelShareLinkAction(reelId: string): Promise<{ ok: boolean }> {
+  return { ok: await revokeReelShareLink(reelId) };
 }
