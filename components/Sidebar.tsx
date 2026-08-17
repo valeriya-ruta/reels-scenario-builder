@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, type ComponentType } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { Plus, ChevronDown, Mic, Play, LayoutGrid, Circle, type LucideIcon } from 'lucide-react';
+import { Plus, ChevronDown, Mic, Play, LayoutGrid, Circle, CalendarDays, type LucideIcon } from 'lucide-react';
 import { createClient } from '@/lib/supabaseClient';
 import { useNavBadges, type NavBadgeKey } from '@/components/NavBadgeContext';
 import { CONTENT_TYPES } from '@/lib/contentTypes';
@@ -44,8 +44,17 @@ const navItems: NavItem[] = [
     matchPrefixes: ['/insights', '/competitor-analysis'],
     active: true,
   },
+  {
+    // The calendar has existed as /plan since the mobile nav shipped — the
+    // sidebar was still advertising it as "Soon", so on desktop the whole
+    // planning surface was unreachable.
+    label: 'Календар',
+    href: '/plan',
+    matchPrefixes: ['/plan'],
+    active: true,
+    icon: CalendarDays,
+  },
   { label: 'Статистика', href: null, matchPrefixes: [], active: false },
-  { label: 'Календар', href: null, matchPrefixes: [], active: false },
 ];
 
 /**

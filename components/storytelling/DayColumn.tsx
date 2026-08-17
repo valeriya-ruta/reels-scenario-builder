@@ -66,14 +66,15 @@ export default function DayColumn({
       data-day-id={project.id}
       // A lone story keeps a comfortable reading width — it is being written, not
       // scanned — while still sitting in the board's row so the «+» column is
-      // visible beside it. Columns of a set are narrower and snap one at a time.
+      // visible beside it. Columns of a set are narrower so more than one day
+      // is on screen at a time.
       className={
         isSet
-          ? 'flex w-[86vw] shrink-0 snap-start flex-col sm:w-[360px]'
+          ? 'flex w-[86vw] shrink-0 flex-col sm:w-[360px]'
           // 80vw, not the full width: the «+» column has to peek in from the
           // right, or on a phone the board looks like a single page again and
           // the whole point is invisible.
-          : 'flex w-[80vw] shrink-0 snap-start flex-col sm:w-[min(560px,60vw)]'
+          : 'flex w-[80vw] shrink-0 flex-col sm:w-[min(560px,60vw)]'
       }
     >
       <div className="mb-3 px-1">
@@ -82,8 +83,8 @@ export default function DayColumn({
             column chrome appears only once there is more than one day. */}
         {isSet && (
         <div className="group flex items-start justify-between gap-2">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <span className="inline-flex h-[22px] shrink-0 items-center justify-center rounded-[7px] bg-[color:var(--accent-soft)] px-2 text-[11px] font-bold tabular-nums text-[color:var(--accent)]">
+          <div className="flex min-w-0 flex-1 items-start gap-2">
+            <span className="mt-[3px] inline-flex h-[22px] shrink-0 items-center justify-center rounded-[7px] bg-[color:var(--accent-soft)] px-2 text-[11px] font-bold tabular-nums text-[color:var(--accent)]">
               {index + 1}
             </span>
             {editingName ? (
@@ -109,12 +110,21 @@ export default function DayColumn({
                 }}
                 data-testid="day-name"
                 title="Перейменувати"
-                className="flex min-w-0 flex-1 items-center gap-1.5 rounded-[8px] px-1 py-0.5 text-left transition-colors hover:bg-[color:var(--surface1)]"
+                className="flex min-w-0 flex-1 items-start gap-1.5 rounded-[8px] px-1 py-0.5 text-left transition-colors hover:bg-[color:var(--surface1)]"
               >
-                <span className="truncate text-[15px] font-bold tracking-tight text-[color:var(--foreground)]">
+                {/* Wraps instead of truncating: a storytelling is named after
+                    what it says, so its name is a SENTENCE. Clipping it to
+                    «Я зупинилась і зро…» hid exactly the part that tells the
+                    columns apart. Three lines is the cap — past that the header
+                    would push the cards off the screen. */}
+                <span className="line-clamp-3 min-w-0 flex-1 break-words text-[15px] font-bold leading-snug tracking-tight text-[color:var(--foreground)]">
                   {displayTitle(project.name, 'story')}
                 </span>
-                <Pencil className="h-3 w-3 shrink-0 text-[color:var(--text-muted)]" strokeWidth={2} aria-hidden />
+                <Pencil
+                  className="mt-1 h-3 w-3 shrink-0 text-[color:var(--text-muted)]"
+                  strokeWidth={2}
+                  aria-hidden
+                />
               </button>
             )}
           </div>

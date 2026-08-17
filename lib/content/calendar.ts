@@ -26,8 +26,17 @@ export function dateKey(year: number, month0: number, day: number): string {
   return `${year}-${pad(month0 + 1)}-${pad(day)}`;
 }
 
-/** Ukrainian weekday headers, Sunday-first (SUN–SAT, per the calendar spec). */
-export const WEEKDAY_LABELS = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+/**
+ * Ukrainian weekday headers, MONDAY-first (Пн–Нд).
+ *
+ * The week here starts on Monday because that is the week the user actually
+ * plans in — a content week runs Mon→Sun, and a Sunday-first grid put the
+ * weekend on both ends of the row.
+ */
+export const WEEKDAY_LABELS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
+
+/** Short weekday names indexed by JS `getUTCDay()` (0=Sun…6=Sat). */
+const WEEKDAY_SHORT_BY_DAY = ['нд', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
 
 const MONTH_LABELS = [
   'Січень', 'Лютий', 'Березень', 'Квітень', 'Травень', 'Червень',
@@ -42,10 +51,26 @@ const SHORT_MONTH_LABELS = [
   'СІЧ', 'ЛЮТ', 'БЕР', 'КВІ', 'ТРА', 'ЧЕР', 'ЛИП', 'СЕР', 'ВЕР', 'ЖОВ', 'ЛИС', 'ГРУ',
 ];
 
-/** Detail-panel header for a 'YYYY-MM-DD' key, e.g. "23 БЕР". */
+/**
+ * A dated label for a 'YYYY-MM-DD' key, e.g. «вт, 18 сер».
+ *
+ * The weekday is part of the date, not decoration: «18 сер» tells you nothing
+ * about whether that is a working day, and a plan is read in weekdays. Used by
+ * every date chip (schedule chip, cards, day panel), so they all say the same
+ * thing.
+ */
 export function dayHeaderLabel(key: string): string {
+  const [y, m, d] = key.split('-').map(Number);
+  const month = SHORT_MONTH_LABELS[(m - 1 + 12) % 12]?.toLowerCase() ?? '';
+  const date = new Date(Date.UTC(y, (m || 1) - 1, d || 1));
+  const weekday = WEEKDAY_SHORT_BY_DAY[date.getUTCDay()] ?? '';
+  return weekday ? `${weekday}, ${d} ${month}` : `${d} ${month}`;
+}
+
+/** Just the day + month, no weekday — for places already grouped by weekday. */
+export function dayMonthLabel(key: string): string {
   const [, m, d] = key.split('-').map(Number);
-  return `${d} ${SHORT_MONTH_LABELS[(m - 1 + 12) % 12] ?? ''}`;
+  return `${d} ${SHORT_MONTH_LABELS[(m - 1 + 12) % 12]?.toLowerCase() ?? ''}`;
 }
 
 /** Move (year, month0) by `delta` months, normalizing overflow. */
@@ -55,12 +80,13 @@ export function shiftMonth(year: number, month0: number, delta: number): { year:
 }
 
 /**
- * A 6-week (42-cell) Sunday-first grid for the given month, including the
+ * A 6-week (42-cell) MONDAY-first grid for the given month, including the
  * leading/trailing spillover days so the grid is always rectangular.
  */
 export function monthGrid(year: number, month0: number, todayKey?: string): CalendarCell[] {
   const first = new Date(Date.UTC(year, month0, 1));
-  const firstWeekday = first.getUTCDay(); // 0=Sun..6=Sat — Sunday-first grid
+  // 0=Sun..6=Sat → 0=Mon..6=Sun, so the grid's first column is Monday.
+  const firstWeekday = (first.getUTCDay() + 6) % 7;
   const start = new Date(first);
   start.setUTCDate(first.getUTCDate() - firstWeekday);
 
@@ -100,7 +126,9 @@ const WEEKDAY_FULL = ['неділя', 'понеділок', 'вівторок', 
 export function agendaHeading(key: string, todayKey: string): string {
   const [y, m, d] = key.split('-').map(Number);
   const date = new Date(Date.UTC(y, (m || 1) - 1, d || 1));
-  const short = `${d} ${SHORT_MONTH_LABELS[(m - 1 + 12) % 12]?.toLowerCase() ?? ''}`;
+  // No weekday here — this heading spells the weekday out in full below, and
+  // «Сьогодні» / «Завтра» already say which day it is.
+  const short = dayMonthLabel(key);
 
   if (key === todayKey) return `Сьогодні · ${short}`;
 

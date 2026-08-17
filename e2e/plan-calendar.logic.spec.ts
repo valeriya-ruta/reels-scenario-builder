@@ -10,7 +10,7 @@ import {
 import type { ContentPiece } from '../lib/content/contentPiece';
 
 /**
- * Core-logic spec for the План content calendar (task 86d3d23nj): the Sun-first
+ * Core-logic spec for the План content calendar (task 86d3d23nj): the Mon-first
  * month grid, month navigation, and grouping content by scheduled_date (which
  * drives the per-day count badge).
  */
@@ -30,30 +30,39 @@ function piece(id: string, scheduledDate: string | null): ContentPiece {
 }
 
 test.describe('план calendar — grid + grouping', () => {
-  test('weekday headers are Sunday-first', () => {
-    expect(WEEKDAY_LABELS[0]).toBe('Нд');
-    expect(WEEKDAY_LABELS[6]).toBe('Сб');
+  test('weekday headers are Monday-first', () => {
+    expect(WEEKDAY_LABELS[0]).toBe('Пн');
+    expect(WEEKDAY_LABELS[5]).toBe('Сб');
+    expect(WEEKDAY_LABELS[6]).toBe('Нд');
   });
 
-  test('month grid is a rectangular 42-cell Sun-first grid', () => {
-    // March 2026: 1 Mar 2026 is a Sunday, so the grid starts exactly on the 1st.
-    const cells = monthGrid(2026, 2); // month0=2 → March
+  test('month grid is a rectangular 42-cell Mon-first grid', () => {
+    // June 2026: 1 Jun 2026 is a Monday, so the grid starts exactly on the 1st.
+    const cells = monthGrid(2026, 5); // month0=5 → June
     expect(cells).toHaveLength(42);
-    expect(cells[0].key).toBe('2026-03-01');
+    expect(cells[0].key).toBe('2026-06-01');
     expect(cells[0].inMonth).toBe(true);
-    // 31 days in March → last in-month cell is the 31st.
+    // 30 days in June → last in-month cell is the 30th.
     const inMonth = cells.filter((c) => c.inMonth);
     expect(inMonth[0].day).toBe(1);
-    expect(inMonth[inMonth.length - 1].day).toBe(31);
-    expect(inMonth).toHaveLength(31);
+    expect(inMonth[inMonth.length - 1].day).toBe(30);
+    expect(inMonth).toHaveLength(30);
   });
 
-  test('leading spillover fills when the 1st is not a Sunday', () => {
-    // April 2026: 1 Apr 2026 is a Wednesday → 3 leading spillover days (Sun–Tue).
+  test('leading spillover fills when the 1st is not a Monday', () => {
+    // April 2026: 1 Apr 2026 is a Wednesday → 2 leading spillover days (Mon–Tue).
     const cells = monthGrid(2026, 3);
     expect(cells[0].inMonth).toBe(false);
-    expect(cells[3].key).toBe('2026-04-01');
-    expect(cells[3].inMonth).toBe(true);
+    expect(cells[0].key).toBe('2026-03-30'); // the Monday of that week
+    expect(cells[2].key).toBe('2026-04-01');
+    expect(cells[2].inMonth).toBe(true);
+  });
+
+  test('a Sunday 1st gets a full leading week, never a Sunday-first row', () => {
+    // 1 Mar 2026 is a Sunday → it sits in the LAST column, after 6 spillover days.
+    const cells = monthGrid(2026, 2);
+    expect(cells[0].key).toBe('2026-02-23');
+    expect(cells[6].key).toBe('2026-03-01');
   });
 
   test('today flag only set for the matching key', () => {
@@ -80,8 +89,10 @@ test.describe('план calendar — grid + grouping', () => {
     expect([...map.values()].flat()).toHaveLength(3);
   });
 
-  test('dateKey pads and dayHeaderLabel formats the panel header', () => {
+  test('dateKey pads and dayHeaderLabel carries the weekday', () => {
     expect(dateKey(2026, 2, 3)).toBe('2026-03-03');
-    expect(dayHeaderLabel('2026-03-23')).toBe('23 БЕР');
+    // 23 Mar 2026 is a Monday; a date without its weekday is half a date.
+    expect(dayHeaderLabel('2026-03-23')).toBe('пн, 23 бер');
+    expect(dayHeaderLabel('2026-08-18')).toBe('вт, 18 сер');
   });
 });
