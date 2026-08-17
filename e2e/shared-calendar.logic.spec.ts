@@ -102,23 +102,43 @@ test.describe('shared calendar — piece → detail blocks', () => {
     expect(detail?.blocks[1].meta).toEqual([]);
   });
 
-  test('a reel keeps a scene’s own name, and falls back to its number', () => {
+  test('a reel tells the client what to DO, block by block', () => {
     const detail = toSharedDetail({
       kind: 'reel',
       id: 'r1',
       title: 'Рілс про ціни',
-      status: 'script',
       scheduledDate: '2026-08-19',
       blocks: [
-        { name: 'Хук', lines: 'Скільки коштує?', framing: 'close_up', actorNote: 'усміхнутись' },
-        { name: null, lines: 'І ось чому.', framing: null, shotSize: null, actorNote: null },
+        {
+          blockKind: 'talk',
+          spoken: 'Скільки це коштує?',
+          recordNote: 'крупний план',
+          overlays: [{ anchorText: 'коштує', kind: 'image', note: 'скріншот цін' }],
+        },
+        { blockKind: 'dialogue', speaker: 'Вона', spoken: 'Дорого.' },
+        {
+          blockKind: 'broll',
+          assetKind: 'find',
+          assetNote: 'архівне відео',
+          audioSource: 'voiceover',
+        },
       ],
     });
-    expect(detail?.blocks[0].heading).toBe('Хук');
-    expect(detail?.blocks[0].meta[1]).toBe('Нотатка: усміхнутись');
-    expect(detail?.blocks[1].heading).toBe('Сцена 2');
-    expect(detail?.blocks[1].meta).toEqual([]);
-    expect(detail?.countLabel).toBe('2 сцени');
+
+    // A talking block: the words are the body, the doing is the meta.
+    expect(detail?.blocks[0].heading).toBe('Говорю в камеру');
+    expect(detail?.blocks[0].body).toBe('Скільки це коштує?');
+    expect(detail?.blocks[0].meta).toContain('Знімаємо: крупний план');
+    expect(detail?.blocks[0].meta).toContain('На «коштує» — Фото: скріншот цін');
+
+    // Dialogue is headed by whoever says it.
+    expect(detail?.blocks[1].heading).toBe('Вона');
+
+    // An asset states the ACTION first — the client's first question.
+    expect(detail?.blocks[2].heading).toBe('Знайти: архівне відео');
+    expect(detail?.blocks[2].meta).toContain('Голос поверх');
+
+    expect(detail?.countLabel).toBe('3 сцени');
   });
 
   test('a carousel becomes its slides, titled or numbered', () => {
