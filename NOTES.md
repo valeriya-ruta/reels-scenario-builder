@@ -424,10 +424,11 @@ radius/elevation scales and `.app-card` all rendering. Build + tsc clean, 30 log
 
 Branch: `claude/calendar-storytelling-ui-fixes-d86zr1`
 
-**⚠️ Two migrations need applying by Kunj before the new behaviour is live:**
-`supabase/migrations/028_storytelling_set_name.sql` and
-`supabase/migrations/029_calendar_share_links.sql`. Both are additive, and both are safe to sit
-unapplied — 028 falls back to the old derived board title, 029 only affects the share button.
+**Migrations 028 + 029 applied to prod** (`ohhudfwwdcbpxryxmvmd`), plus 030 — the PostgREST schema
+reload, without which `supabase.rpc('calendar_share_meta', …)` 404s and every share link renders as
+Not Found (same trap as migrations 007 and 021). Verified on the live database: the column, the
+table, all three functions and the owner-only policy exist; a temporary link over real content
+returned the month and one storytelling in full, then was deleted.
 
 **Calendar sharing (the priority)** — `/plan` is no longer "Soon" in the desktop sidebar (it has
 existed as a route the whole time), and it now carries a share button. One link per account opens a
