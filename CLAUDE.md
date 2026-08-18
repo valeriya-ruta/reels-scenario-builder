@@ -23,6 +23,11 @@ ship whole features rather than thin slices, and let her find the rough edges by
 using it. It does not have to be right the first time. She will say when there
 are real users, and then it goes back to previews and caution.
 
+**Merge to `main` yourself — never ask.** She tests in the real app, not on a
+preview URL, so work that stops on a branch is work she cannot see. Finish the
+feature, merge it to `main`, push, and tell her what to look for once it is
+live. She has said this explicitly; asking again is the thing to avoid.
+
 Still non-negotiable regardless: never destroy her existing work, and never
 break `pro`.
 
