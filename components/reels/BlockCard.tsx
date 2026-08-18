@@ -178,8 +178,11 @@ export default function BlockCard({
     if (files.length === 0) return;
     e.preventDefault();
 
-    const clipRow = (e.target as HTMLElement | null)?.closest?.('[data-clip-id]');
-    const clipId = clipRow?.getAttribute('data-clip-id') ?? null;
+    const target = e.target as HTMLElement | null;
+    const clipId = target?.closest?.('[data-clip-id]')?.getAttribute('data-clip-id') ?? null;
+    // An add-on card is where «на цих словах вискакує ось це» is written, so a
+    // picture pasted into one is a picture of that thing, not of the block.
+    const overlayId = target?.closest?.('[data-overlay-id]')?.getAttribute('data-overlay-id') ?? null;
 
     setPasting(true);
     setPasteError(null);
@@ -194,6 +197,8 @@ export default function BlockCard({
           onPatch({
             clips: blockClips(block).map((c) => (c.id === clipId ? { ...c, image: res.url } : c)),
           });
+        } else if (overlayId) {
+          patchOverlay(overlayId, { url: res.url });
         } else {
           const image: RefImage = { id: newClipId().replace('cl_', 'img_'), url: res.url };
           onPatch({ images: [...block.images, image] });
@@ -591,6 +596,7 @@ export default function BlockCard({
           <div
             key={o.id}
             data-testid="overlay-card"
+            data-overlay-id={o.id}
             className="rounded-[12px] border bg-[color:var(--background)] p-2.5"
             style={{
               borderColor: openOverlay === o.id ? color : 'var(--border)',
@@ -635,9 +641,10 @@ export default function BlockCard({
             <input
               value={o.url ?? ''}
               onChange={(e) => patchOverlay(o.id, { url: e.target.value })}
-              placeholder="Посилання"
+              placeholder="Посилання або встав картинку"
               className="mt-1 w-full rounded-[8px] border border-[color:var(--border)] bg-white px-2 py-1 text-[12px] outline-none focus:border-[color:var(--border-strong)]"
             />
+            <ReferenceMedia url={o.url} compact />
           </div>
         ))}
       </div>

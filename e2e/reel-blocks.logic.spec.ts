@@ -530,3 +530,43 @@ test.describe('the reel, for someone who has never seen it', () => {
     expect(beat.seconds).toBeGreaterThan(0);
   });
 });
+
+/**
+ * An add-on is «на цих словах вискакує ось це». Whatever "this" is — a link or
+ * a pasted picture — has to travel to the person editing, or the instruction
+ * describes something they cannot see.
+ */
+test.describe('what an add-on points at reaches the edit', () => {
+  test('an overlay carries its reference', () => {
+    const items = editList([
+      block({
+        id: 'a',
+        kind: 'talk',
+        spoken: 'Це коштує дорого',
+        overlays: [
+          overlay({
+            id: 'o1',
+            anchorText: 'дорого',
+            anchorStart: 'Це коштує дорого'.indexOf('дорого'),
+            kind: 'image',
+            note: 'скріншот цін',
+            url: 'https://example.com/prices.png',
+          }),
+        ],
+      }),
+    ]);
+    expect(items.find((e) => e.slot === 'edit:ov:o1')?.url).toBe('https://example.com/prices.png');
+  });
+
+  test('an overlay with nothing attached carries nothing', () => {
+    const items = editList([
+      block({
+        id: 'a',
+        kind: 'talk',
+        spoken: 'Слова',
+        overlays: [overlay({ id: 'o1', anchorText: 'Слова', anchorStart: 0, note: 'зум' })],
+      }),
+    ]);
+    expect(items.find((e) => e.slot === 'edit:ov:o1')?.url).toBeNull();
+  });
+});

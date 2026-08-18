@@ -69,6 +69,8 @@ export interface Project {
   default_audio_source?: string | null;
   /** «Про що цей рілс» — the brief, shown first on the share (migration 044). */
   overview?: string | null;
+  /** Reel-wide references: links and pasted pictures (migration 047). */
+  reference_media?: unknown;
 }
 
 export interface Location {

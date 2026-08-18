@@ -8,6 +8,7 @@ import StatusPill from '@/components/content/StatusPill';
 import BlockCard from '@/components/reels/BlockCard';
 import ReelRecipe from '@/components/reels/ReelRecipe';
 import ReelShareButton from '@/components/reels/ReelShareButton';
+import ReelReferences from '@/components/reels/ReelReferences';
 import {
   BLOCK_HINTS,
   BLOCK_KINDS,
@@ -22,9 +23,11 @@ import {
   shotKey,
   shotList,
   shotSummary,
+  toRefImages,
   type AudioSource,
   type BlockKind,
   type ReelBlock,
+  type RefImage,
 } from '@/lib/reels/blocks';
 import { REEL_PRESETS } from '@/lib/reels/presets';
 import { updateProjectName } from '@/app/actions';
@@ -36,6 +39,7 @@ import {
   reorderReelBlocks,
   setReelDefaultAudio,
   setReelOverview,
+  setReelReferences,
   updateReelBlock,
   type BlockPatch,
 } from '@/app/reel-block-actions';
@@ -164,6 +168,25 @@ export default function ReelBuilder({
       });
     },
     [persist, project.id],
+  );
+
+  // References for the whole reel, kept next to the brief: «отак має виглядати
+  // рілс» has no single block to hang off.
+  const [references, setReferences] = useState<RefImage[]>(() =>
+    toRefImages(project.reference_media),
+  );
+  const saveReferences = useCallback(
+    (next: RefImage[]) => {
+      const previous = references;
+      setReferences(next);
+      void setReelReferences(project.id, next).then((res) => {
+        if (!res.ok) {
+          setReferences(previous);
+          setError('Не вдалося зберегти референси.');
+        }
+      });
+    },
+    [project.id, references],
   );
 
   const duplicate = useCallback(
@@ -360,6 +383,8 @@ export default function ReelBuilder({
           />
         </div>
 
+        <ReelReferences reelId={project.id} references={references} onChange={saveReferences} />
+
         <div
           role="tablist"
           className="mb-5 flex w-fit gap-1 rounded-[14px] border border-[color:var(--border)] bg-[color:var(--surface1)] p-1"
@@ -517,6 +542,7 @@ export default function ReelBuilder({
               done={done}
               reelAudio={reelAudio}
               overview={tab === 'edit' ? overview : null}
+              references={tab === 'edit' ? references : undefined}
             />
           </>
         )}
