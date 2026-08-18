@@ -366,6 +366,10 @@ export default function ReelTextScreen({
   // ── header ────────────────────────────────────────────────────────────────
 
   const seconds = useMemo(() => estimateSeconds(blocks), [blocks]);
+  const hasContent = useMemo(
+    () => blocks.some((b) => (b.spoken ?? '').trim() || b.clips.length > 0 || b.overlays.length > 0),
+    [blocks],
+  );
   const overlayCount = useMemo(
     () => blocks.reduce((n, b) => n + b.overlays.length, 0),
     [blocks],
@@ -455,13 +459,18 @@ export default function ReelTextScreen({
           )}
         </div>
 
-        <button
-          type="button"
-          onClick={addSilentCard}
-          className="mt-4 w-full rounded-[14px] border-2 border-dashed border-[color:var(--border)] px-4 py-4 text-[14px] font-medium text-[color:var(--text-muted)]"
-        >
-          + Кадр без слів
-        </button>
+        {/* An empty reel is a blank note, not a form. The dashed box is an
+            instruction to do something before there is anything to do it to,
+            so it appears only once the reel has content. */}
+        {hasContent ? (
+          <button
+            type="button"
+            onClick={addSilentCard}
+            className="mt-4 w-full rounded-[14px] border-2 border-dashed border-[color:var(--border)] px-4 py-4 text-[14px] font-medium text-[color:var(--text-muted)]"
+          >
+            + Кадр без слів
+          </button>
+        ) : null}
       </div>
 
       {/* Selection bar — rises above the action bar, on the keyboard, because

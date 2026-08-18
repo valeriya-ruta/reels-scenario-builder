@@ -6,7 +6,7 @@ import SwipeableContentList from '@/components/content/SwipeableContentList';
 import type { ContentPiece } from '@/lib/content/contentPiece';
 import type { ContentStatus } from '@/lib/content/statusSystem';
 import { attachPreviews } from '@/lib/content/contentPreview';
-import { NEW_LABELS, displayTitle } from '@/lib/content/displayTitle';
+import { displayTitle } from '@/lib/content/displayTitle';
 
 export const dynamic = 'force-dynamic';
 
@@ -69,24 +69,17 @@ export default async function ProjectsPage() {
   );
 }
 
+/**
+ * ➕ no longer creates an untitled reel and drops her into the editor.
+ *
+ * It opens Створення, where she picks how the reel starts — наговорити,
+ * написати, or from a Reels link. Creating the row is that screen's job, since
+ * two of the three doors have text to put in it before it is worth existing.
+ */
 async function createReelProject() {
   'use server';
   const user = await requireAuth();
   if (!user) return;
-
-  const supabase = await createServerSupabaseClient();
-  const { data: project, error } = await supabase
-    .from('projects')
-    .insert({ name: NEW_LABELS.reel, crew_mode: 'with_crew', user_id: user.id, project_type: 'reels' })
-    .select()
-    .single();
-
-  if (error) {
-    console.error('Error creating project:', error);
-    return;
-  }
-  if (project) {
-    const { redirect: redirectFn } = await import('next/navigation');
-    redirectFn(`/project/${project.id}`);
-  }
+  const { redirect: redirectFn } = await import('next/navigation');
+  redirectFn('/reel/new');
 }
