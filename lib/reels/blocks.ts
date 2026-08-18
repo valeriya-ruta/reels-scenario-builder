@@ -590,6 +590,86 @@ function mergeTakes(items: ShotItem[]): GroupedShot[] {
 }
 
 /**
+ * One beat of the reel, as a person who has never seen it reads it.
+ *
+ * The shot list and the edit list answer "what do I have to do". Neither
+ * answers "what IS this reel", which is the first thing anyone opening a link
+ * needs: what happens on screen, in order, with the words that go over it.
+ * Without it the page opens on six «знайти» rows and no context at all.
+ */
+export type FlowBeat = {
+  at: number;
+  blockId: string;
+  kind: BlockKind;
+  /** «Говорю в камеру», «Відео / нарізка» … */
+  label: string;
+  /** What the viewer sees, one line per shot. */
+  onScreen: string[];
+  /** What is said out loud over it. */
+  saying: string | null;
+  /** Words burnt onto the picture. */
+  screenText: string[];
+  /** What is heard, and whether that differs from the rest of the reel. */
+  audio: AudioSource;
+  audioDiffers: boolean;
+  /** Roughly how long this beat runs. */
+  seconds: number;
+};
+
+/** The reel, top to bottom — the answer to "what is this". */
+export function flowBeats(
+  blocks: ReadonlyArray<ReelBlock>,
+  reelAudio?: AudioSource | null,
+): FlowBeat[] {
+  const out: FlowBeat[] = [];
+  blocks.forEach((b, i) => {
+    if (isBlockEmpty(b)) return;
+
+    const saying = EMPTY(b.spoken) ? null : (b.spoken ?? '').trim();
+    const clips = blockClips(b);
+    const onScreen: string[] = [];
+    const screenText: string[] = [];
+
+    if (b.kind === 'talk' || b.kind === 'dialogue') {
+      onScreen.push(
+        EMPTY(b.recordNote)
+          ? b.kind === 'dialogue' && !EMPTY(b.speaker)
+            ? `${b.speaker!.trim()} говорить у кадрі`
+            : 'Ти в кадрі, говориш'
+          : (b.recordNote ?? '').trim(),
+      );
+    }
+
+    for (const c of clips) {
+      if (isClipEmpty(c)) continue;
+      onScreen.push(EMPTY(c.what) ? 'Кадр' : c.what.trim());
+      if (!EMPTY(c.screenText)) screenText.push((c.screenText ?? '').trim());
+    }
+
+    if (b.kind === 'sound' && !EMPTY(b.assetNote)) {
+      onScreen.push(`Звук: ${(b.assetNote ?? '').trim()}`);
+    }
+    if (!EMPTY(b.screenText)) screenText.push((b.screenText ?? '').trim());
+    if (b.kind === 'text' && onScreen.length === 0) onScreen.push('Тільки текст на екрані');
+
+    const words = (saying ?? '').split(/\s+/).filter(Boolean).length;
+    out.push({
+      at: i + 1,
+      blockId: b.id,
+      kind: b.kind,
+      label: BLOCK_LABELS[b.kind],
+      onScreen,
+      saying,
+      screenText,
+      audio: effectiveAudio(b, reelAudio),
+      audioDiffers: !!b.audioSource && b.audioSource !== (reelAudio ?? null),
+      seconds: words > 0 ? Math.max(1, Math.round(words / 2.6)) : 2,
+    });
+  });
+  return out;
+}
+
+/**
  * One editing instruction, as it appears on the edit list.
  *
  * `slot` identifies WHICH instruction of that block this is, by its source
