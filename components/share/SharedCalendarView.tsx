@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CalendarDays, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, Maximize2, Minimize2, X } from 'lucide-react';
+import ReelRecipe from '@/components/reels/ReelRecipe';
 import {
   monthGrid,
   monthLabel,
@@ -81,10 +82,15 @@ function DetailBody({
   detail,
   loading,
   failed,
+  expanded,
+  onToggleExpand,
 }: {
   detail: SharedPieceDetail | null;
   loading: boolean;
   failed: boolean;
+  /** Whether this is already the full-screen copy. */
+  expanded?: boolean;
+  onToggleExpand?: () => void;
 }) {
   if (failed) {
     return (
@@ -100,20 +106,63 @@ function DetailBody({
   }
 
   const title = displayTitle(detail.title, detail.type);
+  const reel = detail.reel;
   return (
     <div data-testid="shared-detail">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--text-muted)]">
-        {TYPE_LABELS[detail.type]}
-        {detail.scheduledDate ? ` · ${dayHeaderLabel(detail.scheduledDate)}` : ''}
-      </p>
-      <h2 className="mt-1 break-words text-[20px] font-bold leading-tight tracking-tight text-[color:var(--foreground)]">
-        {title}
-      </h2>
-      <p className="mt-2 text-[12px] font-medium text-[color:var(--text-muted)]">
-        {detail.countLabel}
-      </p>
+      <div className="flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--text-muted)]">
+            {TYPE_LABELS[detail.type]}
+            {detail.scheduledDate ? ` · ${dayHeaderLabel(detail.scheduledDate)}` : ''}
+          </p>
+          <h2 className="mt-1 break-words text-[20px] font-bold leading-tight tracking-tight text-[color:var(--foreground)]">
+            {title}
+          </h2>
+          <p className="mt-2 text-[12px] font-medium text-[color:var(--text-muted)]">
+            {detail.countLabel}
+          </p>
+        </div>
 
-      {detail.blocks.length === 0 ? (
+        {/* A reel is long — three columns of storyboard, a shot list and the
+            script. Reading that in a sheet over a calendar is the complaint;
+            this opens the same content over the whole screen. */}
+        {onToggleExpand && (
+          <button
+            type="button"
+            onClick={onToggleExpand}
+            data-testid="shared-detail-expand"
+            aria-label={expanded ? 'Згорнути' : 'На весь екран'}
+            title={expanded ? 'Згорнути' : 'На весь екран'}
+            className="app-icon-btn shrink-0"
+          >
+            {expanded ? (
+              <Minimize2 className="h-4.5 w-4.5" strokeWidth={2} />
+            ) : (
+              <Maximize2 className="h-4.5 w-4.5" strokeWidth={2} />
+            )}
+          </button>
+        )}
+      </div>
+
+      {/* The whole reel, rendered by the component the reel share link uses —
+          brief and references first, then what happens beat by beat, then what
+          has to be shot or found. */}
+      {reel ? (
+        reel.blocks.length === 0 ? (
+          <p className="mt-6 rounded-[16px] border border-dashed border-[color:var(--border)] px-4 py-8 text-center text-[13px] text-[color:var(--text-muted)]">
+            Тут ще порожньо.
+          </p>
+        ) : (
+          <div className="mt-4">
+            <ReelRecipe
+              blocks={reel.blocks}
+              reelAudio={reel.audio}
+              overview={reel.overview}
+              references={reel.references}
+            />
+          </div>
+        )
+      ) : detail.blocks.length === 0 ? (
         <p className="mt-6 rounded-[16px] border border-dashed border-[color:var(--border)] px-4 py-8 text-center text-[13px] text-[color:var(--text-muted)]">
           Тут ще порожньо.
         </p>
@@ -184,6 +233,8 @@ export default function SharedCalendarView({
   );
   // The phone's sheet is raised only by a real tap, never by the auto-open.
   const [sheetOpen, setSheetOpen] = useState(false);
+  // Reading one piece over the whole screen, calendar and all out of the way.
+  const [expanded, setExpanded] = useState(false);
   const [detail, setDetail] = useState<SharedPieceDetail | null>(null);
   // Which piece FAILED, rather than a bare message: keyed this way, moving to
   // another piece clears the error by itself and no effect has to reset state.
@@ -211,6 +262,7 @@ export default function SharedCalendarView({
     (dayKey: string) => {
       setSelectedDay(dayKey);
       setSheetOpen(false);
+      setExpanded(false);
       setOpenPiece(byDay.get(dayKey)?.[0] ?? null);
     },
     [byDay],
@@ -240,16 +292,19 @@ export default function SharedCalendarView({
     };
   }, [openPiece, token]);
 
-  // Escape closes the phone's sheet. It does not clear the selection — the
-  // desktop column has nothing to close, it just shows the current piece.
+  // Escape backs out one layer: full screen first, then the phone's sheet. It
+  // does not clear the selection — the desktop column has nothing to close, it
+  // just shows the current piece.
   useEffect(() => {
-    if (!sheetOpen) return;
+    if (!sheetOpen && !expanded) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setSheetOpen(false);
+      if (e.key !== 'Escape') return;
+      if (expanded) setExpanded(false);
+      else setSheetOpen(false);
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [sheetOpen]);
+  }, [sheetOpen, expanded]);
 
   return (
     <div className="min-h-[100dvh]" style={{ background: 'var(--canvas)' }}>
@@ -392,15 +447,43 @@ export default function SharedCalendarView({
           {openPiece && (
             <div className="hidden min-w-0 flex-1 md:block">
               <div className="app-card sticky top-6 max-h-[calc(100dvh-48px)] overflow-y-auto p-5">
-                <DetailBody detail={detail} loading={loading} failed={failed} />
+                <DetailBody
+                  detail={detail}
+                  loading={loading}
+                  failed={failed}
+                  onToggleExpand={() => setExpanded(true)}
+                />
               </div>
             </div>
           )}
         </div>
       </div>
 
+      {/* Full screen: the same piece with nothing else on the page. A reel is
+          the reason this exists — its storyboard does not fit a phone sheet
+          over a month grid, and there is no separate link to send someone to. */}
+      {openPiece && expanded && (
+        <div
+          className="fixed inset-0 z-[60] overflow-y-auto"
+          style={{ background: 'var(--canvas)' }}
+          role="dialog"
+          aria-modal="true"
+          data-testid="shared-detail-full"
+        >
+          <div className="mx-auto w-full max-w-[1100px] px-4 pb-16 pt-5 md:px-8">
+            <DetailBody
+              detail={detail}
+              loading={loading}
+              failed={failed}
+              expanded
+              onToggleExpand={() => setExpanded(false)}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Mobile: the same detail as a full-height sheet. */}
-      {openPiece && sheetOpen && (
+      {openPiece && sheetOpen && !expanded && (
         <div className="fixed inset-0 z-50 flex flex-col bg-black/40 md:hidden" role="dialog" aria-modal="true">
           <button
             type="button"
@@ -422,7 +505,12 @@ export default function SharedCalendarView({
                 <X className="h-5 w-5" strokeWidth={2} />
               </button>
             </div>
-            <DetailBody detail={detail} loading={loading} failed={failed} />
+            <DetailBody
+              detail={detail}
+              loading={loading}
+              failed={failed}
+              onToggleExpand={() => setExpanded(true)}
+            />
           </div>
         </div>
       )}

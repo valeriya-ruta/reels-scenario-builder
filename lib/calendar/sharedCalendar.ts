@@ -14,14 +14,12 @@
 
 import type { ContentType } from '@/lib/content/statusSystem';
 import {
-  ASSET_LABELS,
-  AUDIO_LABELS,
-  BLOCK_LABELS,
-  OVERLAY_LABELS,
-  type AssetKind,
+  AUDIO_SOURCES,
+  toRefImages,
+  toReelBlock,
   type AudioSource,
-  type BlockKind,
-  type OverlayKind,
+  type ReelBlock,
+  type RefImage,
 } from '@/lib/reels/blocks';
 
 /**
@@ -72,12 +70,34 @@ export type SharedBlock = {
   meta: string[];
 };
 
+/**
+ * A reel, whole, exactly as the builder and the reel share link hold it.
+ *
+ * Not a summary. The calendar used to paraphrase a reel into headings and meta
+ * lines, which was written before a cutaway could hold clips — so the reels
+ * that are pure video, the ones a client most needs explained, arrived as
+ * «Відео / нарізка · Ще не написано». Carrying the real blocks means the
+ * calendar renders the SAME page the reel link does, and cannot fall behind it
+ * again.
+ */
+export type SharedReelDetail = {
+  blocks: ReelBlock[];
+  /** «Про що цей рілс» — the brief. */
+  overview: string | null;
+  /** The reel's own sound, which each block falls back to. */
+  audio: AudioSource | null;
+  references: RefImage[];
+};
+
 export type SharedPieceDetail = {
   id: string;
   type: SharedContentType;
   title: string;
   scheduledDate: string | null;
+  /** Story cards and carousel slides. Empty for a reel — see `reel`. */
   blocks: SharedBlock[];
+  /** Present only for reels. */
+  reel?: SharedReelDetail;
   /** «5 сторіс» / «8 слайдів» / «6 сцен» — the count, in the format's own noun. */
   countLabel: string;
 };
@@ -119,47 +139,21 @@ export function countLabelFor(type: SharedContentType, n: number): string {
 }
 
 /**
- * One reel block → the client's block.
+ * The reel half of the payload (migration 048).
  *
- * The heading says what KIND of thing this is and, for an asset, what has to be
- * done to get it — «Зняти: руки крупно» — because the first question a client
- * asks a plan is "what do I have to do". The body is the words. The meta line
- * carries only what was actually filled in: how to shoot, how to edit, the
- * add-ons hanging off phrases, and the sound when it is not the obvious one.
+ * The block objects carry the table's own column names, so they go through
+ * `toReelBlock` — the single parser the builder, the reel share and the card
+ * previews already use. Adding a field to the reel model can therefore never
+ * leave this reader behind, which is exactly how `clips` went missing here.
  */
-function reelBlockToShared(b: Record<string, unknown>, i: number): SharedBlock {
-  const kind = (text(b.blockKind) || 'talk') as BlockKind;
-  const speaker = text(b.speaker);
-  const assetKind = text(b.assetKind) as AssetKind | '';
-  const assetNote = text(b.assetNote);
-  const audio = text(b.audioSource) as AudioSource | '';
-
-  let heading = BLOCK_LABELS[kind] ?? `Блок ${i + 1}`;
-  if (kind === 'dialogue' && speaker) heading = speaker;
-  if ((kind === 'broll' || kind === 'sound') && (assetKind || assetNote)) {
-    const action = assetKind ? ASSET_LABELS[assetKind] : BLOCK_LABELS[kind];
-    heading = assetNote ? `${action}: ${assetNote}` : action;
-  }
-
-  const meta: string[] = [];
-  const screenText = text(b.screenText);
-  if (screenText) meta.push(`Текст на екрані: «${screenText}»`);
-  if (text(b.recordNote)) meta.push(`Знімаємо: ${text(b.recordNote)}`);
-  // Sound only earns a line when it is not what the picture already implies.
-  if (audio && audio !== 'sync') meta.push(AUDIO_LABELS[audio]);
-
-  for (const raw of asArray(b.overlays)) {
-    const label = OVERLAY_LABELS[(text(raw.kind) || 'note') as OverlayKind] ?? 'Вставка';
-    const note = text(raw.note);
-    const anchor = text(raw.anchorText);
-    const what = note ? `${label}: ${note}` : label;
-    meta.push(anchor ? `На «${anchor}» — ${what}` : what);
-  }
-
-  if (text(b.editNote)) meta.push(`Монтаж: ${text(b.editNote)}`);
-  if (text(b.assetUrl)) meta.push(text(b.assetUrl));
-
-  return { heading, body: text(b.spoken), meta };
+function toSharedReel(doc: Record<string, unknown>): SharedReelDetail {
+  const audio = text(doc.reelAudio) as AudioSource;
+  return {
+    blocks: asArray(doc.blocks).map((b) => toReelBlock(b)),
+    overview: text(doc.overview) || null,
+    audio: AUDIO_SOURCES.includes(audio) ? audio : null,
+    references: toRefImages(doc.references),
+  };
 }
 
 /** Rows from `calendar_share_pieces` → the calendar's own shape. */
@@ -203,8 +197,14 @@ export function toSharedDetail(payload: unknown): SharedPieceDetail | null {
   if (!type) return null;
 
   const raw = asArray(doc.blocks);
-  const blocks: SharedBlock[] =
-    type === 'story'
+
+  // A reel is not flattened into headings and meta lines: it is handed over
+  // whole and rendered by the same component the reel share link uses.
+  const reel = type === 'reel' ? toSharedReel(doc) : undefined;
+
+  const blocks: SharedBlock[] = reel
+    ? []
+    : type === 'story'
       ? raw.map((b, i) => ({
           heading: `Сторіс ${i + 1}`,
           body: text(b.text),
@@ -213,13 +213,11 @@ export function toSharedDetail(payload: unknown): SharedPieceDetail | null {
             text(b.engagement) ? `Інтерактив: ${text(b.engagement)}` : '',
           ].filter(Boolean),
         }))
-      : type === 'reel'
-        ? raw.map((b, i) => reelBlockToShared(b, i))
-        : raw.map((b, i) => ({
-            heading: text(b.title) || `Слайд ${i + 1}`,
-            body: text(b.body),
-            meta: [],
-          }));
+      : raw.map((b, i) => ({
+          heading: text(b.title) || `Слайд ${i + 1}`,
+          body: text(b.body),
+          meta: [],
+        }));
 
   return {
     id: String(doc.id ?? ''),
@@ -227,6 +225,7 @@ export function toSharedDetail(payload: unknown): SharedPieceDetail | null {
     title: text(doc.title),
     scheduledDate: text(doc.scheduledDate).slice(0, 10) || null,
     blocks,
-    countLabel: countLabelFor(type, blocks.length),
+    ...(reel ? { reel } : {}),
+    countLabel: countLabelFor(type, reel ? reel.blocks.length : blocks.length),
   };
 }
