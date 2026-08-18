@@ -4,6 +4,7 @@ import {
   editList,
   effectiveAudio,
   emptyBlock,
+  flowBeats,
   resolveOverlays,
   shotGroups,
   shotKey,
@@ -465,5 +466,67 @@ test.describe("the reel's own sound", () => {
   test('with no reel sound, the old per-block behaviour is unchanged', () => {
     const solo = [block({ id: 'a', kind: 'broll', assetNote: 'кадр', audioSource: 'voiceover' })];
     expect(editList(solo).filter((e) => e.slot === 'edit:audio')).toHaveLength(1);
+  });
+});
+
+/**
+ * The shared page used to open on «Знайти × 6» and never say what the reel WAS.
+ * `flowBeats` is that missing answer: the reel top to bottom — what is said,
+ * what is seen, what is heard — for someone who did not write it.
+ */
+test.describe('the reel, for someone who has never seen it', () => {
+  test('a talking beat says who is on screen and what they say', () => {
+    const [beat] = flowBeats([block({ id: 'a', kind: 'talk', spoken: 'Привіт, це я' })]);
+    expect(beat.saying).toBe('Привіт, це я');
+    expect(beat.onScreen).toEqual(['Ти в кадрі, говориш']);
+  });
+
+  test('a setup note replaces the generic line, since it IS the framing', () => {
+    const [beat] = flowBeats([
+      block({ id: 'a', kind: 'talk', spoken: 'Слухай', recordNote: 'Крупний план, вікно за спиною' }),
+    ]);
+    expect(beat.onScreen).toEqual(['Крупний план, вікно за спиною']);
+  });
+
+  test('a dialogue names the speaker', () => {
+    const [beat] = flowBeats([block({ id: 'a', kind: 'dialogue', speaker: 'Вона', spoken: 'Ні' })]);
+    expect(beat.onScreen[0]).toBe('Вона говорить у кадрі');
+  });
+
+  test('a silent cutaway sequence still describes itself, clip by clip', () => {
+    const [beat] = flowBeats([
+      block({
+        id: 'b',
+        kind: 'broll',
+        clips: [
+          { id: 'c1', what: 'Руки гортають блокнот', screenText: 'рік тому' },
+          { id: 'c2', what: 'Нарізка з виступу' },
+        ],
+      }),
+    ]);
+    expect(beat.saying).toBeNull();
+    expect(beat.onScreen).toEqual(['Руки гортають блокнот', 'Нарізка з виступу']);
+    expect(beat.screenText).toEqual(['рік тому']);
+  });
+
+  test('sound is mentioned only when it differs from the rest of the reel', () => {
+    const reel = [
+      block({ id: 'a', kind: 'talk', spoken: 'Один' }),
+      block({ id: 'b', kind: 'talk', spoken: 'Два', audioSource: 'voiceover' }),
+    ];
+    const beats = flowBeats(reel, 'trend');
+    expect(beats[0].audioDiffers).toBe(false);
+    expect(beats[1].audioDiffers).toBe(true);
+  });
+
+  test('empty blocks are not beats', () => {
+    expect(flowBeats([block({ id: 'a', kind: 'talk' })])).toHaveLength(0);
+  });
+
+  test('every beat carries a rough length, so the reel has a shape', () => {
+    const [beat] = flowBeats([
+      block({ id: 'a', kind: 'talk', spoken: 'одне два три чотири пʼять шість сім вісім девʼять десять' }),
+    ]);
+    expect(beat.seconds).toBeGreaterThan(0);
   });
 });

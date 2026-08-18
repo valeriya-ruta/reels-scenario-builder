@@ -10,9 +10,11 @@ import {
   editKey,
   editList,
   estimateSeconds,
+  flowBeats,
   formatDuration,
   shotKey,
   shotList,
+  shotSummary,
   type AudioSource,
   type ReelBlock,
 } from '@/lib/reels/blocks';
@@ -41,6 +43,17 @@ type SharedReel = {
   defaultAudio: string | null;
   blocks: ReelBlock[];
 };
+
+/** The first thing said or shown — a one-line answer to "what is this reel". */
+function openingLine(blocks: ReelBlock[]): string | null {
+  const beats = flowBeats(blocks);
+  for (const beat of beats) {
+    const line = beat.saying ?? beat.screenText[0] ?? beat.onScreen[0] ?? '';
+    const clean = line.trim().replace(/\s+/g, ' ');
+    if (clean) return clean.length > 160 ? `${clean.slice(0, 157)}…` : clean;
+  }
+  return null;
+}
 
 /** The reel's sound, as a value the block model understands. */
 function reelAudioOf(r: SharedReel): AudioSource | null {
@@ -161,6 +174,13 @@ export default function SharedReelSet({
           >
             {displayTitle(reel.title, 'reel')}
           </p>
+          {/* A title alone does not say what a reel is — the opening line does,
+              and picking one out of fifteen is the whole job of this list. */}
+          {openingLine(reel.blocks) && (
+            <p className="mt-0.5 line-clamp-2 text-[12.5px] leading-snug text-[color:var(--text-muted)]">
+              {openingLine(reel.blocks)}
+            </p>
+          )}
           <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-[color:var(--text-muted)]">
             <span className="inline-flex items-center gap-1">
               <Clock className="h-3.5 w-3.5" />~{formatDuration(seconds)}
@@ -201,7 +221,16 @@ export default function SharedReelSet({
           <p className="mt-1 text-[13px] font-medium text-[color:var(--text-muted)]">
             ~{formatDuration(estimateSeconds(reel.blocks))}
             {reel.scheduledDate ? ` · ${dayHeaderLabel(reel.scheduledDate)}` : ''}
+            {shotSummary(reel.blocks) ? ` · ${shotSummary(reel.blocks)}` : ''}
           </p>
+
+          {/* The opening line IS what the reel is about. Someone who has never
+              seen it should not have to read a shot list to find that out. */}
+          {openingLine(reel.blocks) && (
+            <p className="mt-2 max-w-prose text-[14px] italic leading-relaxed text-[color:var(--text-muted)]">
+              «{openingLine(reel.blocks)}»
+            </p>
+          )}
         </div>
 
         {opts.canFocus && (
@@ -246,6 +275,10 @@ export default function SharedReelSet({
       <h1 className="mt-1 break-words text-[26px] font-bold leading-tight tracking-tight text-[color:var(--foreground)]">
         {title?.trim() || 'Рілси на зйомку'}
       </h1>
+      <p className="mt-2 max-w-prose text-[13.5px] leading-relaxed text-[color:var(--text-muted)]">
+        Обери рілс зліва. Для кожного видно, як він іде — що кажеш, що на екрані,
+        що робить монтаж — і що треба зняти чи знайти. Познач галочкою, коли зроблено.
+      </p>
       {note?.trim() ? (
         <p className="mt-2 max-w-prose whitespace-pre-wrap text-[14px] leading-relaxed text-[color:var(--text-muted)]">
           {note}

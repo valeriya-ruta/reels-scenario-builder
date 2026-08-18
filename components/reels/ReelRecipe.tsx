@@ -9,8 +9,7 @@ import {
   BLOCK_LABELS,
   editItemsForBlock,
   editKey,
-  editList,
-  isBlockEmpty,
+  flowBeats,
   shotGroups,
   shotList,
   spokenScript,
@@ -20,16 +19,25 @@ import {
 } from '@/lib/reels/blocks';
 
 /**
- * A reel read as the two jobs that follow writing it: what to capture, and what
- * to do with it afterwards.
+ * A reel, for everyone who did not write it.
  *
- * The SAME component renders the builder's «Що знімаємо» / «Монтаж» tabs and the
- * client's shared page. That is deliberate — the whole promise of the share link
- * is that the client sees exactly what the author sees, and two components
- * rendering one list is how they quietly stop agreeing.
+ * «Як іде рілс» comes first and is three columns wide: what is SAID, what is
+ * SEEN, what the editor DOES — one row per beat. Read across, a row is a
+ * sentence; read down, the columns are the whole reel. Opening on the shot list
+ * instead, as this page used to, hands someone six «знайти» rows and no idea
+ * what they are for.
  *
- * Everything here is derived from the blocks by `shotList` / `editList`; nothing
- * is stored, so a shot list cannot go stale against the script it came from.
+ * «Що знімаємо» follows, grouped by type of work, because collecting material
+ * is a different job from understanding the reel and is done in a different
+ * order.
+ *
+ * The SAME component renders the builder's tabs and the client's shared page.
+ * That is deliberate — the whole promise of the share link is that the client
+ * sees exactly what the author sees, and two components rendering one list is
+ * how they quietly stop agreeing.
+ *
+ * Everything is derived from the blocks; nothing is stored, so none of it can
+ * go stale against the script it came from.
  */
 
 export default function ReelRecipe({
@@ -51,15 +59,227 @@ export default function ReelRecipe({
   /** The reel's own sound — stated once instead of on every block. */
   reelAudio?: AudioSource | null;
 }) {
+  const beats = flowBeats(blocks, reelAudio);
   const groups = shotGroups(blocks);
   const shots = shotList(blocks);
-  const edits = editList(blocks, reelAudio);
   const script = spokenScript(blocks);
 
   const show = (section: 'shoot' | 'edit' | 'script') => !only || only === section;
 
   return (
     <div className="flex flex-col gap-6">
+      {show('edit') && (
+        <section data-testid="recipe-flow">
+          <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--text-muted)]">
+              <Clapperboard className="h-3.5 w-3.5" strokeWidth={2.2} />
+              Як іде рілс
+            </h2>
+            <div className="flex items-center gap-2">
+              {/* The reel's sound, said ONCE. Repeating it under every beat read
+                  as many separate cues for what is one decision. */}
+              {reelAudio && (
+                <span
+                  className="rounded-full px-2.5 py-1 text-[11.5px] font-semibold"
+                  style={{ backgroundColor: 'var(--surface1)', color: 'var(--text-muted)' }}
+                  data-testid="reel-audio-note"
+                >
+                  Весь рілс: {AUDIO_LABELS[reelAudio].toLowerCase()}
+                </span>
+              )}
+              {script && <CopyTextButton text={script} label="Копіювати текст" />}
+            </div>
+          </div>
+
+          {beats.length === 0 ? (
+            <p className="rounded-[14px] border border-dashed border-[color:var(--border)] px-4 py-6 text-center text-[13px] text-[color:var(--text-muted)]">
+              Цей рілс ще порожній.
+            </p>
+          ) : (
+            <>
+              {/* Three columns, one row per beat: what is SAID, what is SEEN,
+                  what the editor DOES. Read left to right, a beat is a sentence;
+                  read top to bottom, the three columns are the whole reel. This
+                  is the answer to "what is this reel about", which neither the
+                  shot list nor the edit list ever gave. */}
+              <div className="mb-1.5 hidden grid-cols-[1.1fr_1fr_1fr] gap-3 px-3 md:grid">
+                {['Що кажеш', 'Що на екрані', 'Що в монтажі'].map((h) => (
+                  <span
+                    key={h}
+                    className="text-[10.5px] font-bold uppercase tracking-wide text-[color:var(--text-muted)]"
+                  >
+                    {h}
+                  </span>
+                ))}
+              </div>
+
+              <ol className="flex flex-col gap-2">
+                {beats.map((beat) => {
+                  const b = blocks.find((x) => x.id === beat.blockId);
+                  const items = b ? editItemsForBlock(b, beat.at, reelAudio) : [];
+                  const runs = b ? textRuns(beat.saying, b.overlays) : [];
+                  const color = BLOCK_COLORS[beat.kind];
+
+                  return (
+                    <li
+                      key={beat.blockId}
+                      data-testid="flow-beat"
+                      className="rounded-[14px] border border-[color:var(--border)] bg-[color:var(--background)] p-3"
+                      style={{ boxShadow: 'var(--elev-1)' }}
+                    >
+                      <div className="grid gap-3 md:grid-cols-[1.1fr_1fr_1fr]">
+                        {/* ── what is said ── */}
+                        <div className="min-w-0">
+                          <div className="mb-1.5 flex items-center gap-2">
+                            <span
+                              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] text-[10.5px] font-bold tabular-nums text-white"
+                              style={{ backgroundColor: color }}
+                            >
+                              {beat.at}
+                            </span>
+                            <span className="text-[10.5px] font-bold uppercase tracking-wide text-[color:var(--text-muted)]">
+                              {beat.label} · ~{beat.seconds}с
+                            </span>
+                          </div>
+
+                          {beat.saying ? (
+                            <p className="whitespace-pre-wrap text-[14.5px] leading-relaxed text-[color:var(--foreground)]">
+                              {runs.map((run, ri) =>
+                                run.overlayIds.length > 0 ? (
+                                  <mark
+                                    key={ri}
+                                    className="rounded-[3px]"
+                                    style={{
+                                      backgroundColor: `${color}24`,
+                                      boxShadow: `inset 0 -2px 0 ${color}`,
+                                      color: 'inherit',
+                                    }}
+                                  >
+                                    {run.text}
+                                  </mark>
+                                ) : (
+                                  <span key={ri}>{run.text}</span>
+                                ),
+                              )}
+                            </p>
+                          ) : (
+                            <p className="text-[13px] italic text-[color:var(--text-muted)]">
+                              нічого не кажеш
+                            </p>
+                          )}
+                        </div>
+
+                        {/* ── what is seen ── */}
+                        <div className="min-w-0 md:border-l md:border-[color:var(--border)] md:pl-3">
+                          <p className="mb-1 text-[10.5px] font-bold uppercase tracking-wide text-[color:var(--text-muted)] md:hidden">
+                            Що на екрані
+                          </p>
+                          <ul className="flex flex-col gap-1">
+                            {beat.onScreen.map((line, li) => (
+                              <li
+                                key={li}
+                                className="text-[13.5px] leading-snug text-[color:var(--foreground)]"
+                              >
+                                {line}
+                              </li>
+                            ))}
+                          </ul>
+                          {beat.screenText.map((t, ti) => (
+                            <p
+                              key={ti}
+                              className="mt-1.5 inline-block rounded-[6px] px-2 py-1 text-[12.5px] font-semibold"
+                              style={{ backgroundColor: `${color}18`, color: 'var(--foreground)' }}
+                            >
+                              напис: «{t}»
+                            </p>
+                          ))}
+                          {beat.audioDiffers && (
+                            <p className="mt-1.5 text-[12px] text-[color:var(--text-muted)]">
+                              звук: {AUDIO_LABELS[beat.audio].toLowerCase()}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* ── what the editor does ── */}
+                        <div className="min-w-0 md:border-l md:border-[color:var(--border)] md:pl-3">
+                          <p className="mb-1 text-[10.5px] font-bold uppercase tracking-wide text-[color:var(--text-muted)] md:hidden">
+                            Що в монтажі
+                          </p>
+                          {items.length === 0 ? (
+                            <p className="text-[13px] italic text-[color:var(--text-muted)]">
+                              нічого окремого
+                            </p>
+                          ) : (
+                            <ul className="flex flex-col gap-1.5">
+                              {items.map((e) => {
+                                const key = editKey(e);
+                                const isDone = done?.has(key) ?? false;
+                                return (
+                                  <li
+                                    key={key}
+                                    data-testid="edit-item"
+                                    data-done={isDone ? 'true' : 'false'}
+                                    className="flex items-start gap-2 transition-opacity"
+                                    style={{ opacity: isDone ? 0.55 : 1 }}
+                                  >
+                                    {onToggleDone ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => onToggleDone(key, !isDone)}
+                                        aria-pressed={isDone}
+                                        aria-label={isDone ? 'Зняти позначку' : 'Позначити як зроблено'}
+                                        data-testid="edit-done"
+                                        className="mt-px flex h-4.5 w-4.5 shrink-0 cursor-pointer items-center justify-center rounded-[5px] border-2 transition-colors"
+                                        style={{
+                                          height: 18,
+                                          width: 18,
+                                          borderColor: isDone ? '#0F8A6A' : 'var(--border-strong)',
+                                          backgroundColor: isDone ? '#0F8A6A' : 'transparent',
+                                        }}
+                                      >
+                                        {isDone && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
+                                      </button>
+                                    ) : (
+                                      <span
+                                        className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full"
+                                        style={{ backgroundColor: 'var(--border-strong)' }}
+                                      />
+                                    )}
+                                    <span className="min-w-0 flex-1">
+                                      <span
+                                        className="text-[13px] leading-relaxed text-[color:var(--foreground)]"
+                                        style={{ textDecoration: isDone ? 'line-through' : undefined }}
+                                      >
+                                        {e.what}
+                                      </span>
+                                      {e.url && (
+                                        <a
+                                          href={e.url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="ml-1.5 inline-flex items-center gap-1 align-middle text-[12px] font-medium text-[color:var(--accent)] hover:underline"
+                                        >
+                                          <Link2 className="h-3.5 w-3.5" />
+                                          Референс
+                                        </a>
+                                      )}
+                                    </span>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          )}
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+            </>
+          )}
+        </section>
+      )}
+
       {show('shoot') && (
         <section data-testid="recipe-shoot">
           <h2 className="mb-2.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--text-muted)]">
@@ -200,7 +420,7 @@ export default function ReelRecipe({
         </section>
       )}
 
-      {show('script') && script && (
+      {only === 'script' && script && (
         <section data-testid="recipe-script">
           <div className="mb-2.5 flex items-center justify-between gap-3">
             <h2 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--text-muted)]">
@@ -216,150 +436,6 @@ export default function ReelRecipe({
           >
             {script}
           </div>
-        </section>
-      )}
-
-      {show('edit') && (
-        <section data-testid="recipe-edit">
-          <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
-            <h2 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--text-muted)]">
-              <Clapperboard className="h-3.5 w-3.5" strokeWidth={2.2} />
-              Монтаж
-            </h2>
-            {/* The reel's sound, said ONCE. Repeating it under every block read
-                as eight separate cues for what is one decision. */}
-            {reelAudio && (
-              <span
-                className="rounded-full px-2.5 py-1 text-[11.5px] font-semibold"
-                style={{ backgroundColor: 'var(--surface1)', color: 'var(--text-muted)' }}
-                data-testid="reel-audio-note"
-              >
-                Весь рілс: {AUDIO_LABELS[reelAudio].toLowerCase()}
-              </span>
-            )}
-          </div>
-
-          {edits.length === 0 ? (
-            <p className="rounded-[14px] border border-dashed border-[color:var(--border)] px-4 py-6 text-center text-[13px] text-[color:var(--text-muted)]">
-              Окремих вказівок для монтажу немає — просто збери по порядку.
-            </p>
-          ) : (
-            /* Read down the SCRIPT, not down a task list: the words, then what
-               happens over them. An editor works to what is being said — a
-               column of instructions detached from the text is a puzzle. */
-            <ol className="flex flex-col gap-3">
-              {blocks.map((b, i) => {
-                if (isBlockEmpty(b)) return null;
-                const items = editItemsForBlock(b, i + 1, reelAudio);
-                const body = (b.spoken ?? b.screenText ?? '').trim();
-                if (items.length === 0 && !body) return null;
-                const runs = textRuns(body, b.overlays);
-                const color = BLOCK_COLORS[b.kind];
-
-                return (
-                  <li
-                    key={b.id}
-                    data-testid="edit-block"
-                    className="rounded-[14px] border border-[color:var(--border)] bg-[color:var(--background)] p-3.5"
-                    style={{ boxShadow: 'var(--elev-1)' }}
-                  >
-                    <div className="mb-2 flex items-center gap-2">
-                      <span
-                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] text-[10.5px] font-bold tabular-nums text-white"
-                        style={{ backgroundColor: color }}
-                      >
-                        {i + 1}
-                      </span>
-                      <span className="text-[11.5px] font-semibold uppercase tracking-wide text-[color:var(--text-muted)]">
-                        {BLOCK_LABELS[b.kind]}
-                      </span>
-                    </div>
-
-                    {/* The words, with the anchored phrases marked — so «коли
-                        кажу оце» is visible rather than described. */}
-                    {body && (
-                      <p className="mb-2.5 whitespace-pre-wrap text-[14.5px] leading-relaxed text-[color:var(--foreground)]">
-                        {runs.map((run, ri) =>
-                          run.overlayIds.length > 0 ? (
-                            <mark
-                              key={ri}
-                              className="rounded-[3px]"
-                              style={{
-                                backgroundColor: `${color}24`,
-                                boxShadow: `inset 0 -2px 0 ${color}`,
-                                color: 'inherit',
-                              }}
-                            >
-                              {run.text}
-                            </mark>
-                          ) : (
-                            <span key={ri}>{run.text}</span>
-                          ),
-                        )}
-                      </p>
-                    )}
-
-                    <ul className="flex flex-col gap-1.5">
-                      {items.map((e) => {
-                        const key = editKey(e);
-                        const isDone = done?.has(key) ?? false;
-                        return (
-                          <li
-                            key={key}
-                            data-testid="edit-item"
-                            data-done={isDone ? 'true' : 'false'}
-                            className="flex items-start gap-2.5 rounded-[10px] bg-[color:var(--surface1)]/70 px-3 py-2 transition-opacity"
-                            style={{ opacity: isDone ? 0.55 : 1 }}
-                          >
-                            {onToggleDone ? (
-                              <button
-                                type="button"
-                                onClick={() => onToggleDone(key, !isDone)}
-                                aria-pressed={isDone}
-                                aria-label={isDone ? 'Зняти позначку' : 'Позначити як зроблено'}
-                                data-testid="edit-done"
-                                className="mt-px flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded-[6px] border-2 transition-colors"
-                                style={{
-                                  borderColor: isDone ? '#0F8A6A' : 'var(--border-strong)',
-                                  backgroundColor: isDone ? '#0F8A6A' : 'transparent',
-                                }}
-                              >
-                                {isDone && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
-                              </button>
-                            ) : (
-                              <span
-                                className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full"
-                                style={{ backgroundColor: 'var(--border-strong)' }}
-                              />
-                            )}
-                            <span className="min-w-0 flex-1">
-                              <span
-                                className="text-[13.5px] leading-relaxed text-[color:var(--foreground)]"
-                                style={{ textDecoration: isDone ? 'line-through' : undefined }}
-                              >
-                                {e.what}
-                              </span>
-                              {e.url && (
-                                <a
-                                  href={e.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="ml-2 inline-flex items-center gap-1 align-middle text-[12.5px] font-medium text-[color:var(--accent)] hover:underline"
-                                >
-                                  <Link2 className="h-3.5 w-3.5" />
-                                  Референс
-                                </a>
-                              )}
-                            </span>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </li>
-                );
-              })}
-            </ol>
-          )}
         </section>
       )}
 
