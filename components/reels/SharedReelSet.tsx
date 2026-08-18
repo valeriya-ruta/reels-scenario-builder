@@ -6,12 +6,14 @@ import ReelRecipe from '@/components/reels/ReelRecipe';
 import { displayTitle } from '@/lib/content/displayTitle';
 import { dayHeaderLabel } from '@/lib/content/calendar';
 import {
+  AUDIO_LABELS,
   editKey,
   editList,
   estimateSeconds,
   formatDuration,
   shotKey,
   shotList,
+  type AudioSource,
   type ReelBlock,
 } from '@/lib/reels/blocks';
 
@@ -36,12 +38,18 @@ type SharedReel = {
   id: string;
   title: string;
   scheduledDate: string | null;
+  defaultAudio: string | null;
   blocks: ReelBlock[];
 };
 
+/** The reel's sound, as a value the block model understands. */
+function reelAudioOf(r: SharedReel): AudioSource | null {
+  return AUDIO_LABELS[r.defaultAudio as AudioSource] ? (r.defaultAudio as AudioSource) : null;
+}
+
 /** How much of one reel is already done — shown on its row in the list. */
-function progressOf(blocks: ReelBlock[], done: ReadonlySet<string>) {
-  const keys = [...shotList(blocks).map(shotKey), ...editList(blocks).map(editKey)];
+function progressOf(blocks: ReelBlock[], done: ReadonlySet<string>, audio: AudioSource | null) {
+  const keys = [...shotList(blocks).map(shotKey), ...editList(blocks, audio).map(editKey)];
   const finished = keys.filter((k) => done.has(k)).length;
   return { total: keys.length, finished };
 }
@@ -113,7 +121,7 @@ export default function SharedReelSet({
       reels.map((r) => ({
         reel: r,
         seconds: estimateSeconds(r.blocks),
-        ...progressOf(r.blocks, done),
+        ...progressOf(r.blocks, done, reelAudioOf(r)),
       })),
     [reels, done],
   );
@@ -219,7 +227,12 @@ export default function SharedReelSet({
           Цей рілс ще порожній.
         </p>
       ) : (
-        <ReelRecipe blocks={reel.blocks} done={done} onToggleDone={toggle} />
+        <ReelRecipe
+          blocks={reel.blocks}
+          done={done}
+          onToggleDone={toggle}
+          reelAudio={reelAudioOf(reel)}
+        />
       )}
     </>
   );

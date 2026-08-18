@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, Link2, Plus, Trash2, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Copy, Link2, Plus, Trash2, X } from 'lucide-react';
 import {
   ASSET_KINDS,
   ASSET_LABELS,
@@ -13,12 +13,14 @@ import {
   BLOCK_LABELS,
   OVERLAY_KINDS,
   OVERLAY_LABELS,
+  blockClips,
   effectiveAudio,
   resolveOverlays,
   textRuns,
   type AssetKind,
   type AudioSource,
   type BlockKind,
+  type Clip,
   type Overlay,
   type OverlayKind,
   type ReelBlock,
@@ -46,6 +48,11 @@ const FIELD =
  */
 const TEXT_METRICS =
   'whitespace-pre-wrap break-words font-sans text-[15px] leading-[1.6] tracking-normal px-3 py-2 border';
+
+/** Outside the component: an id is minted in an event, never during a render. */
+function newClipId(): string {
+  return `cl_${Math.random().toString(36).slice(2, 10)}`;
+}
 
 function Select<T extends string>({
   value,
@@ -81,8 +88,10 @@ export default function BlockCard({
   index,
   total,
   hint,
+  reelAudio,
   onPatch,
   onDelete,
+  onDuplicate,
   onMove,
 }: {
   block: ReelBlock;
@@ -90,8 +99,11 @@ export default function BlockCard({
   total: number;
   /** Placeholder seeded by a preset — what to write here. */
   hint?: string;
+  /** The reel's own sound, shown as the fallback this block inherits. */
+  reelAudio?: AudioSource | null;
   onPatch: (patch: Partial<ReelBlock>) => void;
   onDelete: () => void;
+  onDuplicate: () => void;
   onMove: (dir: -1 | 1) => void;
 }) {
   const textRef = useRef<HTMLTextAreaElement>(null);
@@ -127,6 +139,30 @@ export default function BlockCard({
     setOpenOverlay(overlay.id);
   };
 
+  // A cutaway's shots. A legacy block keeps its single asset in the block's own
+  // columns; the first edit moves it into `clips` and clears them, so there is
+  // never more than one source of truth for what has to be shot.
+  const clips = blockClips(block);
+  const writeClips = (next: Clip[]) =>
+    onPatch({ clips: next, assetNote: null, assetKind: null, assetUrl: null });
+
+  const addClip = () =>
+    writeClips([...clips, { id: newClipId(), what: '', assetKind: block.assetKind ?? 'film' }]);
+
+  const patchClip = (id: string, patch: Partial<Clip>) =>
+    writeClips(clips.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+
+  const removeClip = (id: string) => writeClips(clips.filter((c) => c.id !== id));
+
+  const moveClip = (id: string, dir: -1 | 1) => {
+    const from = clips.findIndex((c) => c.id === id);
+    const to = from + dir;
+    if (from < 0 || to < 0 || to >= clips.length) return;
+    const next = [...clips];
+    [next[from], next[to]] = [next[to], next[from]];
+    writeClips(next);
+  };
+
   const patchOverlay = (id: string, patch: Partial<Overlay>) =>
     onPatch({ overlays: block.overlays.map((o) => (o.id === id ? { ...o, ...patch } : o)) });
 
@@ -158,13 +194,17 @@ export default function BlockCard({
           {/* Sound is a separate axis from picture — this is the control that
               makes «б-рол із тим самим голосом зверху» expressible. */}
           <Select
-            value={effectiveAudio(block)}
+            value={effectiveAudio(block, reelAudio)}
             options={AUDIO_SOURCES}
             labels={AUDIO_LABELS}
             onChange={(audioSource: AudioSource) => onPatch({ audioSource })}
           />
           <span className="text-[11.5px] text-[color:var(--text-muted)]">
-            {AUDIO_HINTS[effectiveAudio(block)]}
+            {block.audioSource
+              ? AUDIO_HINTS[effectiveAudio(block, reelAudio)]
+              : reelAudio
+                ? 'як у всього рілса'
+                : AUDIO_HINTS[effectiveAudio(block, reelAudio)]}
           </span>
 
           <div className="ml-auto flex items-center gap-0.5">
@@ -185,6 +225,15 @@ export default function BlockCard({
               className="cursor-pointer rounded-md p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-30"
             >
               <ChevronDown className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={onDuplicate}
+              aria-label="Дублювати блок"
+              data-testid="duplicate-block"
+              className="cursor-pointer rounded-md p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
+            >
+              <Copy className="h-4 w-4" />
             </button>
             <button
               type="button"
@@ -277,38 +326,128 @@ export default function BlockCard({
           </div>
         )}
 
-        {/* ── what has to be captured ── */}
-        {(block.kind === 'broll' || block.kind === 'sound') && (
-          <div className="flex flex-wrap items-center gap-2">
-            {block.kind === 'broll' && (
-              <Select
-                value={block.assetKind}
-                options={ASSET_KINDS}
-                labels={ASSET_LABELS}
-                onChange={(assetKind: AssetKind) => onPatch({ assetKind })}
-                placeholder="Що робимо"
-              />
-            )}
-            <input
-              value={block.assetNote ?? ''}
-              onChange={(e) => onPatch({ assetNote: e.target.value })}
-              placeholder={hint ?? (block.kind === 'sound' ? 'Який звук / тренд' : 'Що на кадрі')}
-              data-testid="block-asset"
-              className={`${FIELD} flex-1`}
-            />
+        {/* ── the shots inside a cutaway ──
+            A rapid sequence is one block with many clips, not many blocks: each
+            row is a shot, its words on screen, and its own sound if it has one. */}
+        {block.kind === 'broll' && (
+          <div className="flex flex-col gap-2" data-testid="clip-list">
+            {clips.map((c, ci) => (
+              <div
+                key={c.id}
+                data-testid="clip-row"
+                className="rounded-[12px] border border-[color:var(--border)] bg-[color:var(--surface1)]/50 p-2.5"
+              >
+                <div className="mb-1.5 flex items-center gap-2">
+                  <span
+                    className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] text-[10.5px] font-bold tabular-nums text-white"
+                    style={{ backgroundColor: color }}
+                  >
+                    {ci + 1}
+                  </span>
+                  <Select
+                    value={c.assetKind ?? block.assetKind ?? 'film'}
+                    options={ASSET_KINDS}
+                    labels={ASSET_LABELS}
+                    onChange={(assetKind: AssetKind) => patchClip(c.id, { assetKind })}
+                  />
+                  <input
+                    value={c.what}
+                    onChange={(e) => patchClip(c.id, { what: e.target.value })}
+                    placeholder={ci === 0 ? (hint ?? 'Що на кадрі') : 'Що на кадрі'}
+                    data-testid="clip-what"
+                    className={`${FIELD} flex-1 text-[13.5px]`}
+                  />
+                  <div className="flex shrink-0 items-center gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => moveClip(c.id, -1)}
+                      disabled={ci === 0}
+                      aria-label="Кадр вище"
+                      className="cursor-pointer rounded-md p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-30"
+                    >
+                      <ChevronUp className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveClip(c.id, 1)}
+                      disabled={ci === clips.length - 1}
+                      aria-label="Кадр нижче"
+                      className="cursor-pointer rounded-md p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-30"
+                    >
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeClip(c.id)}
+                      aria-label="Прибрати кадр"
+                      data-testid="delete-clip"
+                      className="cursor-pointer rounded-md p-1 text-zinc-400 hover:bg-red-50 hover:text-red-500"
+                    >
+                      <X className="h-3.5 w-3.5" strokeWidth={2.2} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    value={c.screenText ?? ''}
+                    onChange={(e) => patchClip(c.id, { screenText: e.target.value })}
+                    placeholder="Напис поверх"
+                    data-testid="clip-screen"
+                    className={`${FIELD} text-[13px]`}
+                  />
+                  <input
+                    value={c.soundNote ?? ''}
+                    onChange={(e) => patchClip(c.id, { soundNote: e.target.value })}
+                    placeholder="Звук поверх (якщо інший)"
+                    className={`${FIELD} text-[13px]`}
+                  />
+                </div>
+
+                <div className="mt-1.5 flex items-center gap-2">
+                  <Link2 className="h-3.5 w-3.5 shrink-0 text-[color:var(--text-muted)]" />
+                  <input
+                    value={c.url ?? ''}
+                    onChange={(e) => patchClip(c.id, { url: e.target.value })}
+                    placeholder="Посилання на референс"
+                    className={`${FIELD} text-[12.5px]`}
+                  />
+                </div>
+              </div>
+            ))}
+
+            <button
+              type="button"
+              onClick={addClip}
+              data-testid="add-clip"
+              className="flex cursor-pointer items-center justify-center gap-1.5 rounded-[10px] border border-dashed border-[color:var(--border-strong)] px-3 py-2 text-[12.5px] font-semibold text-[color:var(--text-muted)] transition-colors hover:text-[color:var(--foreground)]"
+            >
+              <Plus className="h-3.5 w-3.5" strokeWidth={2.4} />
+              {clips.length === 0 ? 'Додати кадр' : 'Ще кадр'}
+            </button>
           </div>
         )}
 
-        {(block.kind === 'broll' || block.kind === 'sound') && (
-          <div className="mt-2 flex items-center gap-2">
-            <Link2 className="h-3.5 w-3.5 shrink-0 text-[color:var(--text-muted)]" />
+        {/* ── a sound block: one track, no picture ── */}
+        {block.kind === 'sound' && (
+          <>
             <input
-              value={block.assetUrl ?? ''}
-              onChange={(e) => onPatch({ assetUrl: e.target.value })}
-              placeholder="Посилання на референс"
-              className={`${FIELD} text-[13px]`}
+              value={block.assetNote ?? ''}
+              onChange={(e) => onPatch({ assetNote: e.target.value })}
+              placeholder={hint ?? 'Який звук / тренд'}
+              data-testid="block-asset"
+              className={`${FIELD} w-full`}
             />
-          </div>
+            <div className="mt-2 flex items-center gap-2">
+              <Link2 className="h-3.5 w-3.5 shrink-0 text-[color:var(--text-muted)]" />
+              <input
+                value={block.assetUrl ?? ''}
+                onChange={(e) => onPatch({ assetUrl: e.target.value })}
+                placeholder="Посилання на референс"
+                className={`${FIELD} text-[13px]`}
+              />
+            </div>
+          </>
         )}
 
         <div className="mt-2 grid grid-cols-2 gap-2">
