@@ -82,6 +82,16 @@ export type RefImage = {
   note?: string;
 };
 
+/** Parse a stored `[{id,url,note?}]` list — block pictures and reel references
+ *  are the same shape, because a reference is a URL whichever way it arrived. */
+export function toRefImages(value: unknown): RefImage[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (i): i is RefImage =>
+      !!i && typeof i === 'object' && typeof (i as RefImage).url === 'string' && !!(i as RefImage).url,
+  );
+}
+
 export const OVERLAY_KINDS: readonly OverlayKind[] = ['image', 'video', 'text', 'sound', 'note'];
 
 export const OVERLAY_LABELS: Record<OverlayKind, string> = {
@@ -763,7 +773,16 @@ export function editItemsForBlock(
       const label = OVERLAY_LABELS[o.kind] ?? 'Вставка';
       const what = EMPTY(o.note) ? label : `${label}: ${o.note.trim()}`;
       const cue = EMPTY(o.anchorText) ? '' : `на «${o.anchorText.trim()}» — `;
-      out.push({ at, blockId: b.id, slot: `edit:ov:${o.id}`, what: `${cue}${what}` });
+      out.push({
+        at,
+        blockId: b.id,
+        slot: `edit:ov:${o.id}`,
+        what: `${cue}${what}`,
+        // Whatever was attached to the phrase — a link or a pasted picture —
+        // has to reach the person doing the edit, or the add-on is a sentence
+        // about a thing they cannot see.
+        url: EMPTY(o.url) ? null : (o.url ?? '').trim(),
+      });
     }
 
     // Sound only earns a line when it is NOT what the picture implies — saying
@@ -905,9 +924,7 @@ export function toReelBlock(row: BlockRow): ReelBlock {
     clips: (Array.isArray(row.clips) ? row.clips : []).filter(
       (c): c is Clip => !!c && typeof c === 'object',
     ),
-    images: (Array.isArray(row.images) ? row.images : []).filter(
-      (i): i is RefImage => !!i && typeof i === 'object' && typeof (i as RefImage).url === 'string',
-    ),
+    images: toRefImages(row.images),
     audioSource: AUDIO_SOURCES.includes(row.audio_source as AudioSource)
       ? (row.audio_source as AudioSource)
       : null,

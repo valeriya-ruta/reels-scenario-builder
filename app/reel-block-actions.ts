@@ -303,6 +303,34 @@ export async function setReelOverview(
   return { ok: true };
 }
 
+/** Reel-wide references — the links and pictures that belong to the whole
+ *  thing rather than to one beat (migration 047). */
+export async function setReelReferences(
+  projectId: string,
+  references: { id: string; url: string; note?: string }[],
+): Promise<{ ok: boolean }> {
+  const user = await requireAuth();
+  if (!user) return { ok: false };
+  const supabase = await createServerSupabaseClient();
+  // Only http(s) is stored: a `javascript:` "reference" would be rendered on a
+  // page that gets sent to other people.
+  const clean = references
+    .filter((r) => typeof r?.url === 'string' && /^https?:\/\//i.test(r.url.trim()))
+    .slice(0, 40)
+    .map((r) => ({ id: String(r.id), url: r.url.trim(), ...(r.note ? { note: String(r.note).slice(0, 200) } : {}) }));
+
+  const { error } = await supabase
+    .from('projects')
+    .update({ reference_media: clean })
+    .eq('id', projectId)
+    .eq('user_id', user.id);
+  if (error) {
+    console.error('[reel-blocks] references failed:', error.message);
+    return { ok: false };
+  }
+  return { ok: true };
+}
+
 /** The reel's own sound — what every block falls back to (migration 043). */
 export async function setReelDefaultAudio(
   projectId: string,

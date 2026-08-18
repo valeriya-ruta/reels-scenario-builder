@@ -17,6 +17,7 @@ import {
   textRuns,
   type AudioSource,
   type ReelBlock,
+  type RefImage,
 } from '@/lib/reels/blocks';
 
 /**
@@ -48,6 +49,7 @@ export default function ReelRecipe({
   onToggleDone,
   reelAudio,
   overview,
+  references,
 }: {
   blocks: ReelBlock[];
   /** Restrict to one section (the builder's tabs); omit to show all three. */
@@ -62,6 +64,8 @@ export default function ReelRecipe({
   reelAudio?: AudioSource | null;
   /** «Про що цей рілс» — the brief, read before the beats. */
   overview?: string | null;
+  /** Reel-wide references, shown with the brief. */
+  references?: RefImage[];
 }) {
   const beats = flowBeats(blocks, reelAudio);
   const groups = shotGroups(blocks);
@@ -72,7 +76,7 @@ export default function ReelRecipe({
 
   return (
     <div className="flex flex-col gap-6">
-      {show('edit') && overview?.trim() ? (
+      {show('edit') && (overview?.trim() || (references?.length ?? 0) > 0) ? (
         /* The idea, in the author's own words, before any of the mechanics. A
            beat-by-beat breakdown is precise and still does not tell you what
            the reel is FOR — which for a purely edited video is everything. */
@@ -81,12 +85,24 @@ export default function ReelRecipe({
             <Lightbulb className="h-3.5 w-3.5" strokeWidth={2.2} />
             Про що цей рілс
           </h2>
-          <p
-            className="whitespace-pre-wrap rounded-[14px] border-l-[3px] bg-[color:var(--background)] px-4 py-3.5 text-[15px] leading-relaxed text-[color:var(--foreground)]"
-            style={{ borderColor: 'var(--accent)', boxShadow: 'var(--elev-1)' }}
-          >
-            {overview.trim()}
-          </p>
+          {overview?.trim() && (
+            <p
+              className="whitespace-pre-wrap rounded-[14px] border-l-[3px] bg-[color:var(--background)] px-4 py-3.5 text-[15px] leading-relaxed text-[color:var(--foreground)]"
+              style={{ borderColor: 'var(--accent)', boxShadow: 'var(--elev-1)' }}
+            >
+              {overview.trim()}
+            </p>
+          )}
+
+          {/* The references belong WITH the brief: «ось на що це схоже» is part
+              of saying what the reel is, and both come before any mechanics. */}
+          {(references?.length ?? 0) > 0 && (
+            <div className="mt-2.5 flex flex-col gap-2" data-testid="recipe-references">
+              {references!.map((r) => (
+                <ReferenceMedia key={r.id} url={r.url} />
+              ))}
+            </div>
+          )}
         </section>
       ) : null}
 

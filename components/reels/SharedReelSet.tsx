@@ -17,6 +17,7 @@ import {
   shotSummary,
   type AudioSource,
   type ReelBlock,
+  type RefImage,
 } from '@/lib/reels/blocks';
 
 /**
@@ -42,6 +43,7 @@ type SharedReel = {
   scheduledDate: string | null;
   defaultAudio: string | null;
   overview: string | null;
+  references: RefImage[];
   blocks: ReelBlock[];
 };
 
@@ -263,6 +265,7 @@ export default function SharedReelSet({
           onToggleDone={toggle}
           reelAudio={reelAudioOf(reel)}
           overview={reel.overview}
+          references={reel.references}
         />
       )}
     </>
