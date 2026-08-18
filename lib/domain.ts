@@ -65,6 +65,8 @@ export interface Project {
   scheduled_date?: string | null;
   /** Content status for the status ring/picker (Status system). */
   status?: ContentStatus;
+  /** The reel's own sound, that every block falls back to (migration 043). */
+  default_audio_source?: string | null;
 }
 
 export interface Location {

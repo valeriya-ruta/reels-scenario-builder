@@ -45,6 +45,28 @@ export type Overlay = {
   url?: string;
 };
 
+/**
+ * One shot inside a cutaway block.
+ *
+ * A fast-cut sequence — video, video, video, each with its own words on screen —
+ * is ONE beat of a reel, not eight. Making it eight blocks buries the script in
+ * boilerplate and makes reordering the sequence a chore, so a `broll` block
+ * holds a list of clips instead: what happens, what is written over it, what is
+ * heard over it.
+ */
+export type Clip = {
+  id: string;
+  /** What is happening in this shot. */
+  what: string;
+  /** Words burnt over this shot, if any. */
+  screenText?: string;
+  /** Sound over this shot, when it is not the block's. */
+  soundNote?: string;
+  /** Film it / find it / … Falls back to the block's when unset. */
+  assetKind?: AssetKind | null;
+  url?: string;
+};
+
 export const OVERLAY_KINDS: readonly OverlayKind[] = ['image', 'video', 'text', 'sound', 'note'];
 
 export const OVERLAY_LABELS: Record<OverlayKind, string> = {
@@ -148,12 +170,17 @@ export const AUDIO_HINTS: Record<AudioSource, string> = {
 };
 
 /**
- * The sound a block has when nothing was chosen: someone on camera is heard,
- * everything else is silent unless said otherwise. Keeps the UI honest without
- * writing a value the user never picked.
+ * The sound a block actually has.
+ *
+ * Three layers, narrowest first: what this block says, then what the whole reel
+ * says, then what the picture implies. The reel level exists because a trend is
+ * usually a property of the REEL — setting it on every block one at a time is
+ * both tedious and how the edit list ends up repeating «трендовий звук» eight
+ * times, which reads as eight separate instructions.
  */
-export function effectiveAudio(b: ReelBlock): AudioSource {
+export function effectiveAudio(b: ReelBlock, reelAudio?: AudioSource | null): AudioSource {
   if (b.audioSource) return b.audioSource;
+  if (reelAudio) return reelAudio;
   return b.kind === 'talk' || b.kind === 'dialogue' ? 'sync' : 'mute';
 }
 
@@ -171,6 +198,8 @@ export type ReelBlock = {
   assetUrl: string | null;
   editNote: string | null;
   overlays: Overlay[];
+  /** Shots inside this block, in order. Cutaway blocks only. */
+  clips: Clip[];
   audioSource: AudioSource | null;
   durationSec: number | null;
 };
@@ -187,10 +216,10 @@ export const BLOCK_LABELS: Record<BlockKind, string> = {
 
 /** One line explaining what the block is FOR, shown when picking one. */
 export const BLOCK_HINTS: Record<BlockKind, string> = {
-  talk: 'Кажу текст у камеру',
+  talk: 'Кажу текст у камеру. Можна весь текст одним блоком',
   dialogue: 'Репліка конкретної людини',
   text: 'Напис на екрані, нічого не кажу',
-  broll: 'Кадр, який треба зняти або знайти',
+  broll: 'Кадри поспіль: відео, відео, відео — кожне зі своїм написом',
   sound: 'Трендовий звук чи референс',
 };
 
@@ -221,8 +250,36 @@ export function isBlockEmpty(b: ReelBlock): boolean {
     EMPTY(b.recordNote) &&
     EMPTY(b.assetNote) &&
     EMPTY(b.editNote) &&
-    b.overlays.length === 0
+    b.overlays.length === 0 &&
+    b.clips.length === 0
   );
+}
+
+/**
+ * The shots inside a cutaway block, in order.
+ *
+ * A block written before clips existed — or one holding a single shot — has its
+ * asset in the block's own columns. It reads as one clip here so every list has
+ * a single shape to walk, and the editor migrates those columns into `clips` the
+ * first time the block is touched.
+ */
+export function blockClips(b: ReelBlock): Clip[] {
+  if (b.clips.length > 0) return b.clips;
+  if (b.kind !== 'broll') return [];
+  if (EMPTY(b.assetNote) && !b.assetKind && EMPTY(b.assetUrl)) return [];
+  return [
+    {
+      id: `${b.id}:0`,
+      what: (b.assetNote ?? '').trim(),
+      assetKind: b.assetKind,
+      ...(EMPTY(b.assetUrl) ? {} : { url: (b.assetUrl ?? '').trim() }),
+    },
+  ];
+}
+
+/** Is this clip worth showing at all? */
+export function isClipEmpty(c: Clip): boolean {
+  return EMPTY(c.what) && EMPTY(c.screenText) && EMPTY(c.soundNote) && EMPTY(c.url);
 }
 
 /**
@@ -285,7 +342,7 @@ export type ShotItem = {
    * index would not be.
    */
   blockId: string;
-  slot: 'take' | 'asset' | `shot:ov:${string}`;
+  slot: 'take' | 'asset' | `shot:ov:${string}` | `shot:clip:${string}`;
   kind: BlockKind;
   /** «Зняти» / «Знайти» / null when it is simply the creator talking. */
   action: AssetKind | null;
@@ -300,6 +357,8 @@ export type ShotItem = {
   speaker: string | null;
   /** For b-roll asked for mid-sentence: the words it lands on. */
   cue: string | null;
+  /** Words burnt over this shot — you frame differently when a line must fit. */
+  screen?: string | null;
 };
 
 /**
@@ -357,7 +416,37 @@ export function shotList(blocks: ReadonlyArray<ReelBlock>): ShotItem[] {
     // A sound block keeps its note in the same field as a cutaway's, but a song
     // is not something anyone points a camera at — finding it and laying it under
     // the picture is editing work, and `editList` already carries it as «Звук: …».
-    if (b.kind !== 'sound' && (!EMPTY(b.assetNote) || b.assetKind)) {
+    // A cutaway is a LIST of shots — one row each, so «відео, відео, відео» is
+    // three things to get rather than one line saying "some videos".
+    //
+    // Only REAL clips take this path. A block written before clips existed keeps
+    // its `asset` slot: switching it would change the key its «знято» tick is
+    // stored under, and silently lose progress somebody had already marked.
+    const clips = b.clips;
+    if (clips.length > 0) {
+      clips.forEach((c, ci) => {
+        if (isClipEmpty(c)) return;
+        const action = c.assetKind ?? b.assetKind ?? null;
+        out.push({
+          at: i + 1,
+          blockId: b.id,
+          // `shot:` prefix so ticking "filmed" stays separate from the editing
+          // instruction for the same clip.
+          slot: `shot:clip:${c.id}`,
+          kind: 'broll',
+          action,
+          what: EMPTY(c.what) ? `Кадр ${ci + 1}` : c.what.trim(),
+          saying: null,
+          url: EMPTY(c.url) ? null : (c.url ?? '').trim(),
+          group: action ?? 'film',
+          speaker: null,
+          cue: null,
+          // The words burnt over it belong with the shot: you frame differently
+          // when you know a line has to fit on screen.
+          screen: EMPTY(c.screenText) ? null : (c.screenText ?? '').trim(),
+        });
+      });
+    } else if (b.kind !== 'sound' && (!EMPTY(b.assetNote) || b.assetKind)) {
       out.push({
         at: i + 1,
         blockId: b.id,
@@ -404,6 +493,8 @@ export type GroupedShot = {
   what: string;
   saying: string | null;
   cue: string | null;
+  /** Words burnt over this shot. */
+  screen?: string | null;
   url: string | null;
   action: AssetKind | null;
   kind: BlockKind;
@@ -451,6 +542,7 @@ function oneRow(s: ShotItem): GroupedShot {
     what: s.what,
     saying: s.saying,
     cue: s.cue,
+    screen: s.screen ?? null,
     url: s.url,
     action: s.action,
     kind: s.kind,
@@ -486,6 +578,7 @@ function mergeTakes(items: ShotItem[]): GroupedShot[] {
       what: who ? `${who} — весь текст` : 'Весь текст підряд',
       saying: text || null,
       cue: null,
+      screen: null,
       url: null,
       action: null,
       kind: list[0].kind,
@@ -518,12 +611,25 @@ export function editKey(item: Pick<EditItem, 'blockId' | 'slot'>): string {
   return `${item.blockId}:${item.slot}`;
 }
 
-/** Everything the editor has to do, in reel order. */
-export function editList(blocks: ReadonlyArray<ReelBlock>): EditItem[] {
+/**
+ * Everything the editor has to do for ONE block.
+ *
+ * Split out from `editList` because the edit view reads down the SCRIPT — each
+ * block's words, then what happens over them — rather than as one flat column
+ * of tasks divorced from what is being said.
+ *
+ * `reelAudio` is the reel's own sound setting: an instruction that merely
+ * repeats it is dropped, since it is stated once at the top. Saying «трендовий
+ * звук» on all eight blocks reads as eight separate cues.
+ */
+export function editItemsForBlock(
+  b: ReelBlock,
+  at: number,
+  reelAudio?: AudioSource | null,
+): EditItem[] {
   const out: EditItem[] = [];
-  blocks.forEach((b, i) => {
-    if (isBlockEmpty(b)) return;
-    const at = i + 1;
+  {
+    if (isBlockEmpty(b)) return out;
 
     if (!EMPTY(b.screenText))
       out.push({
@@ -543,13 +649,17 @@ export function editList(blocks: ReadonlyArray<ReelBlock>): EditItem[] {
     }
 
     // Sound only earns a line when it is NOT what the picture implies — saying
-    // "звук із кадру" under a talking head is noise the editor has to read past.
-    const audio = effectiveAudio(b);
-    if (audio === 'voiceover')
+    // "звук із кадру" under a talking head is noise the editor has to read past
+    // — and never when it is simply the reel's own sound, said once at the top.
+    const audio = effectiveAudio(b, reelAudio);
+    const audioIsTheReels = !b.audioSource && !!reelAudio;
+    if (audioIsTheReels) {
+      // nothing: the reel's sound is stated once, not per block
+    } else if (audio === 'voiceover')
       out.push({ at, blockId: b.id, slot: 'edit:audio', what: 'Голос продовжується поверх цього кадру' });
-    if (audio === 'trend' && b.kind !== 'sound')
+    else if (audio === 'trend' && b.kind !== 'sound')
       out.push({ at, blockId: b.id, slot: 'edit:audio', what: 'Трендовий звук поверх' });
-    if (audio === 'mute' && b.kind !== 'text')
+    else if (audio === 'mute' && b.kind !== 'text')
       out.push({ at, blockId: b.id, slot: 'edit:audio', what: 'Без звуку' });
 
     if (b.kind === 'sound' && !EMPTY(b.assetNote)) {
@@ -573,10 +683,34 @@ export function editList(blocks: ReadonlyArray<ReelBlock>): EditItem[] {
         url: EMPTY(b.assetUrl) ? null : (b.assetUrl ?? '').trim(),
       });
     }
+    // Each clip's own instruction — what is written over it, what is heard.
+    b.clips.forEach((c, ci) => {
+      if (isClipEmpty(c)) return;
+      const parts: string[] = [];
+      if (!EMPTY(c.screenText)) parts.push(`напис «${(c.screenText ?? '').trim()}»`);
+      if (!EMPTY(c.soundNote)) parts.push(`звук: ${(c.soundNote ?? '').trim()}`);
+      if (parts.length === 0) return;
+      out.push({
+        at,
+        blockId: b.id,
+        slot: `edit:clip:${c.id}`,
+        what: `Кадр ${ci + 1}${EMPTY(c.what) ? '' : ` (${c.what.trim()})`} — ${parts.join(', ')}`,
+        url: EMPTY(c.url) ? null : (c.url ?? '').trim(),
+      });
+    });
+
     if (!EMPTY(b.editNote))
       out.push({ at, blockId: b.id, slot: 'edit:note', what: (b.editNote ?? '').trim() });
-  });
+  }
   return out;
+}
+
+/** Everything the editor has to do, in reel order. */
+export function editList(
+  blocks: ReadonlyArray<ReelBlock>,
+  reelAudio?: AudioSource | null,
+): EditItem[] {
+  return blocks.flatMap((b, i) => editItemsForBlock(b, i + 1, reelAudio));
 }
 
 /** The key a tick is stored under: block + which half of it. */
@@ -617,6 +751,7 @@ export function emptyBlock(kind: BlockKind, projectId: string, orderIndex: numbe
     assetUrl: null,
     editNote: null,
     overlays: [],
+    clips: [],
     // A cutaway defaults to the voice carrying over it — that is what a cutaway
     // is FOR. Anything else is a choice the user makes explicitly.
     audioSource: kind === 'broll' ? 'voiceover' : null,
@@ -648,6 +783,9 @@ export function toReelBlock(row: BlockRow): ReelBlock {
     assetUrl: str(row.asset_url),
     editNote: str(row.edit_note),
     overlays: rawOverlays.filter((o): o is Overlay => !!o && typeof o === 'object'),
+    clips: (Array.isArray(row.clips) ? row.clips : []).filter(
+      (c): c is Clip => !!c && typeof c === 'object',
+    ),
     audioSource: AUDIO_SOURCES.includes(row.audio_source as AudioSource)
       ? (row.audio_source as AudioSource)
       : null,

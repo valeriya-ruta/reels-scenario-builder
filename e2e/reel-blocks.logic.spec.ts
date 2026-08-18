@@ -374,3 +374,96 @@ test.describe('a song is editing work, not a shot', () => {
     expect(shots).toHaveLength(1);
   });
 });
+
+/**
+ * «Відео, відео, відео, кожне зі своїм написом» is ONE beat of a reel. It used
+ * to be one block per clip, which buried the script in boilerplate; a cutaway
+ * block now holds a list of shots.
+ */
+test.describe('one cutaway block, many clips', () => {
+  const sequence = block({
+    id: 'b',
+    kind: 'broll',
+    assetKind: 'film',
+    clips: [
+      { id: 'c1', what: 'Руки гортають блокнот', screenText: 'рік тому', assetKind: 'film' },
+      { id: 'c2', what: 'Нарізка з виступу', screenText: 'сьогодні', assetKind: 'find', url: 'https://e.com/x' },
+      { id: 'c3', what: '', screenText: '', soundNote: '' },
+    ],
+  });
+
+  test('every clip is its own shot', () => {
+    const shots = shotList([sequence]);
+    expect(shots.map((s) => s.what)).toEqual(['Руки гортають блокнот', 'Нарізка з виступу']);
+  });
+
+  test('each clip goes to the pile that matches ITS job', () => {
+    const groups = shotGroups([sequence]);
+    expect(groups.find((g) => g.id === 'film')?.items).toHaveLength(1);
+    expect(groups.find((g) => g.id === 'find')?.items).toHaveLength(1);
+  });
+
+  test('the words burnt over a clip travel with the shot', () => {
+    expect(shotList([sequence])[0].screen).toBe('рік тому');
+  });
+
+  test('an empty clip is not a task', () => {
+    expect(shotList([sequence])).toHaveLength(2);
+  });
+
+  test('clips have their own tick keys, so shots are ticked one by one', () => {
+    const keys = shotList([sequence]).map(shotKey);
+    expect(keys).toEqual(['b:shot:clip:c1', 'b:shot:clip:c2']);
+  });
+
+  test('a block written before clips existed still reads as one shot', () => {
+    const legacy = block({ id: 'old', kind: 'broll', assetKind: 'film', assetNote: 'кава', clips: [] });
+    const shots = shotList([legacy]);
+    expect(shots).toHaveLength(1);
+    expect(shots[0].what).toBe('кава');
+  });
+
+  test('the editor is told what is written over each clip', () => {
+    const items = editList([sequence]).filter((e) => e.slot.startsWith('edit:clip:'));
+    expect(items).toHaveLength(2);
+    expect(items[0].what).toContain('напис «рік тому»');
+    expect(items[1].url).toBe('https://e.com/x');
+  });
+});
+
+/**
+ * A trend belongs to the REEL. Setting it per block meant the edit list repeated
+ * «трендовий звук» on every line — eight cues where there is one decision.
+ */
+test.describe("the reel's own sound", () => {
+  const reel = [
+    block({ id: 'a', kind: 'talk', spoken: 'Перше' }),
+    block({ id: 'b', kind: 'talk', spoken: 'Друге' }),
+  ];
+
+  test('a block inherits it', () => {
+    expect(effectiveAudio(reel[0], 'trend')).toBe('trend');
+  });
+
+  test('a block that says otherwise still wins', () => {
+    const own = block({ id: 'c', kind: 'talk', spoken: 'Третє', audioSource: 'mute' });
+    expect(effectiveAudio(own, 'trend')).toBe('mute');
+  });
+
+  test('inherited sound is NOT repeated as an instruction on every block', () => {
+    const audioLines = editList(reel, 'trend').filter((e) => e.slot === 'edit:audio');
+    expect(audioLines).toHaveLength(0);
+  });
+
+  test('a block that overrides the reel DOES get its line', () => {
+    const mixed = [...reel, block({ id: 'c', kind: 'broll', assetNote: 'кадр', audioSource: 'voiceover' })];
+    const audioLines = editList(mixed, 'trend').filter((e) => e.slot === 'edit:audio');
+    expect(audioLines).toHaveLength(1);
+    expect(audioLines[0].blockId).toBe('c');
+  });
+
+  test('with no reel sound, the old per-block behaviour is unchanged', () => {
+    const solo = [block({ id: 'a', kind: 'broll', assetNote: 'кадр', audioSource: 'voiceover' })];
+    expect(editList(solo).filter((e) => e.slot === 'edit:audio')).toHaveLength(1);
+  });
+});

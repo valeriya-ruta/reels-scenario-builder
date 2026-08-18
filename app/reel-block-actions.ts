@@ -22,7 +22,7 @@ import {
  */
 
 const COLS =
-  'id,project_id,order_index,kind,speaker,spoken,screen_text,record_note,asset_kind,asset_note,asset_url,edit_note,overlays,audio_source,duration_sec';
+  'id,project_id,order_index,kind,speaker,spoken,screen_text,record_note,asset_kind,asset_note,asset_url,edit_note,overlays,clips,audio_source,duration_sec';
 
 /** Does this reel belong to the signed-in user? */
 async function ownsReel(
@@ -62,6 +62,7 @@ export type BlockPatch = Partial<{
   asset_url: string | null;
   edit_note: string | null;
   overlays: unknown;
+  clips: unknown;
   audio_source: string | null;
   duration_sec: number | null;
 }>;
@@ -116,6 +117,97 @@ export async function addReelBlock(
     return { ok: false };
   }
   return { ok: true, block: toReelBlock(data as Record<string, unknown>) };
+}
+
+/**
+ * Copy a block, right below the original.
+ *
+ * Reels repeat: three cutaways shot the same way, two takes with the same
+ * framing note. Rebuilding one field by field is the kind of work the app is
+ * supposed to remove. Overlays and clips get fresh ids — sharing them would
+ * make two blocks tick each other's boxes off, since progress is keyed by id.
+ */
+export async function duplicateReelBlock(
+  blockId: string,
+): Promise<{ ok: true; block: ReelBlock } | { ok: false }> {
+  const user = await requireAuth();
+  if (!user) return { ok: false };
+  const supabase = await createServerSupabaseClient();
+
+  const { data: owned } = await supabase.from('projects').select('id').eq('user_id', user.id);
+  const ids = (owned ?? []).map((p: { id: string }) => p.id);
+  if (ids.length === 0) return { ok: false };
+
+  const { data: source } = await supabase
+    .from('reel_blocks')
+    .select(COLS)
+    .eq('id', blockId)
+    .in('project_id', ids)
+    .maybeSingle();
+  if (!source) return { ok: false };
+
+  const row = source as Record<string, unknown>;
+  const freshId = () => `${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
+  const overlays = (Array.isArray(row.overlays) ? row.overlays : []).map((o) => ({
+    ...(o as Record<string, unknown>),
+    id: `ov_${freshId()}`,
+  }));
+  const clips = (Array.isArray(row.clips) ? row.clips : []).map((c) => ({
+    ...(c as Record<string, unknown>),
+    id: `cl_${freshId()}`,
+  }));
+
+  const projectId = String(row.project_id);
+  const at = typeof row.order_index === 'number' ? row.order_index : 0;
+
+  const { data: created, error } = await supabase
+    .from('reel_blocks')
+    .insert({
+      project_id: projectId,
+      order_index: at + 1,
+      kind: row.kind,
+      speaker: row.speaker,
+      spoken: row.spoken,
+      screen_text: row.screen_text,
+      record_note: row.record_note,
+      asset_kind: row.asset_kind,
+      asset_note: row.asset_note,
+      asset_url: row.asset_url,
+      edit_note: row.edit_note,
+      overlays,
+      clips,
+      audio_source: row.audio_source,
+      duration_sec: row.duration_sec,
+    })
+    .select(COLS)
+    .single();
+
+  if (error || !created) {
+    console.error('[reel-blocks] duplicate failed:', error?.message);
+    return { ok: false };
+  }
+
+  // Everything that was below the original moves down one, so the copy has a
+  // place rather than a shared index.
+  const { data: after } = await supabase
+    .from('reel_blocks')
+    .select('id,order_index')
+    .eq('project_id', projectId)
+    .gt('order_index', at)
+    .neq('id', (created as { id: string }).id)
+    .order('order_index', { ascending: true });
+
+  await Promise.all(
+    (after ?? []).map((r: { id: string; order_index: number }, i) =>
+      supabase
+        .from('reel_blocks')
+        .update({ order_index: at + 2 + i })
+        .eq('id', r.id)
+        .eq('project_id', projectId),
+    ),
+  );
+
+  return { ok: true, block: toReelBlock(created as Record<string, unknown>) };
 }
 
 export async function deleteReelBlock(blockId: string): Promise<{ ok: boolean }> {
@@ -186,6 +278,26 @@ export async function applyReelPreset(
     return { ok: false };
   }
   return { ok: true, blocks: data.map((r) => toReelBlock(r as Record<string, unknown>)) };
+}
+
+/** The reel's own sound — what every block falls back to (migration 043). */
+export async function setReelDefaultAudio(
+  projectId: string,
+  audio: string | null,
+): Promise<{ ok: boolean }> {
+  const user = await requireAuth();
+  if (!user) return { ok: false };
+  const supabase = await createServerSupabaseClient();
+  const { error } = await supabase
+    .from('projects')
+    .update({ default_audio_source: audio })
+    .eq('id', projectId)
+    .eq('user_id', user.id);
+  if (error) {
+    console.error('[reel-blocks] reel audio failed:', error.message);
+    return { ok: false };
+  }
+  return { ok: true };
 }
 
 // ── Sharing one reel ────────────────────────────────────────────────────────

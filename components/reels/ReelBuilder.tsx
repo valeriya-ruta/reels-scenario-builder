@@ -13,6 +13,8 @@ import {
   BLOCK_KINDS,
   BLOCK_LABELS,
   BLOCK_COLORS,
+  AUDIO_LABELS,
+  AUDIO_SOURCES,
   editKey,
   editList,
   estimateSeconds,
@@ -20,6 +22,7 @@ import {
   shotKey,
   shotList,
   shotSummary,
+  type AudioSource,
   type BlockKind,
   type ReelBlock,
 } from '@/lib/reels/blocks';
@@ -29,7 +32,9 @@ import {
   addReelBlock,
   applyReelPreset,
   deleteReelBlock,
+  duplicateReelBlock,
   reorderReelBlocks,
+  setReelDefaultAudio,
   updateReelBlock,
   type BlockPatch,
 } from '@/app/reel-block-actions';
@@ -73,6 +78,7 @@ function toPatch(patch: Partial<ReelBlock>): BlockPatch {
   if ('assetUrl' in patch) out.asset_url = patch.assetUrl ?? null;
   if ('editNote' in patch) out.edit_note = patch.editNote ?? null;
   if ('overlays' in patch) out.overlays = patch.overlays;
+  if ('clips' in patch) out.clips = patch.clips;
   if ('audioSource' in patch) out.audio_source = patch.audioSource ?? null;
   return out;
 }
@@ -122,6 +128,44 @@ export default function ReelBuilder({
     [name, project.id],
   );
 
+  // The reel's own sound. A trend belongs to the whole reel far more often than
+  // to one block, and setting it eight times is both tedious and why the edit
+  // list used to repeat it on every line.
+  const [reelAudio, setReelAudio] = useState<AudioSource | null>(
+    (project.default_audio_source as AudioSource | null) ?? null,
+  );
+  const changeReelAudio = useCallback(
+    (next: AudioSource | null) => {
+      const previous = reelAudio;
+      setReelAudio(next);
+      void setReelDefaultAudio(project.id, next).then((res) => {
+        if (!res.ok) {
+          setReelAudio(previous);
+          setError('Не вдалося зберегти звук рілса.');
+        }
+      });
+    },
+    [project.id, reelAudio],
+  );
+
+  const duplicate = useCallback(
+    (id: string) => {
+      void duplicateReelBlock(id).then((res) => {
+        if (!res.ok) {
+          setError('Не вдалося дублювати блок. Онови сторінку.');
+          return;
+        }
+        setBlocks((prev) => {
+          const at = prev.findIndex((b) => b.id === id);
+          const next = [...prev];
+          next.splice(at < 0 ? prev.length : at + 1, 0, res.block);
+          return next;
+        });
+      });
+    },
+    [],
+  );
+
   const done = useMemo(() => new Set(ownerProgress ?? []), [ownerProgress]);
   // How far along the other side is, counted against THIS tab's list — a shot
   // count that included edits would read as progress she hasn't got.
@@ -131,11 +175,11 @@ export default function ReelBuilder({
       tab === 'shoot'
         ? shotList(blocks).map(shotKey)
         : tab === 'edit'
-          ? editList(blocks).map(editKey)
+          ? editList(blocks, reelAudio).map(editKey)
           : [];
     if (keys.length === 0) return null;
     return { finished: keys.filter((k) => done.has(k)).length, total: keys.length };
-  }, [blocks, done, tab]);
+  }, [blocks, done, tab, reelAudio]);
   const seconds = useMemo(() => estimateSeconds(blocks), [blocks]);
   const shots = useMemo(() => shotSummary(blocks), [blocks]);
 
@@ -250,6 +294,26 @@ export default function ReelBuilder({
             <div className="flex flex-wrap items-center gap-2">
               <StatusPill refTable="projects" id={project.id} type="reel" initialStatus={project.status ?? 'idea'} />
               <ScheduleChip refTable="projects" id={project.id} initialDate={project.scheduled_date ?? null} />
+
+              {/* Set once for the reel; a block can still say otherwise. */}
+              <label className="flex items-center gap-1.5 rounded-[12px] border border-[color:var(--border)] px-2.5 py-1.5 text-[12.5px] text-[color:var(--text-muted)]">
+                Звук рілса
+                <select
+                  value={reelAudio ?? ''}
+                  onChange={(e) =>
+                    changeReelAudio((e.target.value || null) as AudioSource | null)
+                  }
+                  data-testid="reel-audio"
+                  className="cursor-pointer bg-transparent font-semibold text-[color:var(--foreground)] outline-none"
+                >
+                  <option value="">за блоками</option>
+                  {AUDIO_SOURCES.map((a) => (
+                    <option key={a} value={a}>
+                      {AUDIO_LABELS[a]}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
           }
         />
@@ -297,7 +361,9 @@ export default function ReelBuilder({
                   index={i}
                   total={blocks.length}
                   hint={hints[b.id]}
+                  reelAudio={reelAudio}
                   onPatch={(patch) => patchBlock(b.id, patch)}
+                  onDuplicate={() => duplicate(b.id)}
                   onDelete={() => remove(b.id)}
                   onMove={(dir) => move(b.id, dir)}
                 />
@@ -408,7 +474,12 @@ export default function ReelBuilder({
                 {tabProgress.total}
               </p>
             )}
-            <ReelRecipe blocks={blocks} only={tab === 'shoot' ? 'shoot' : 'edit'} done={done} />
+            <ReelRecipe
+              blocks={blocks}
+              only={tab === 'shoot' ? 'shoot' : 'edit'}
+              done={done}
+              reelAudio={reelAudio}
+            />
           </>
         )}
       </div>
