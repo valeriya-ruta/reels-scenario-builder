@@ -65,6 +65,21 @@ export type Clip = {
   /** Film it / find it / … Falls back to the block's when unset. */
   assetKind?: AssetKind | null;
   url?: string;
+  /** A pasted picture of what this shot should look like. */
+  image?: string;
+};
+
+/**
+ * A picture pasted onto a block — «отак має виглядати кадр».
+ *
+ * Pasted, never uploaded through a picker: the useful gesture is Ctrl+V from
+ * wherever the reference was found, and anything more is enough friction that
+ * the picture simply never gets attached.
+ */
+export type RefImage = {
+  id: string;
+  url: string;
+  note?: string;
 };
 
 export const OVERLAY_KINDS: readonly OverlayKind[] = ['image', 'video', 'text', 'sound', 'note'];
@@ -200,6 +215,8 @@ export type ReelBlock = {
   overlays: Overlay[];
   /** Shots inside this block, in order. Cutaway blocks only. */
   clips: Clip[];
+  /** Reference pictures pasted onto this block. */
+  images: RefImage[];
   audioSource: AudioSource | null;
   durationSec: number | null;
 };
@@ -251,7 +268,8 @@ export function isBlockEmpty(b: ReelBlock): boolean {
     EMPTY(b.assetNote) &&
     EMPTY(b.editNote) &&
     b.overlays.length === 0 &&
-    b.clips.length === 0
+    b.clips.length === 0 &&
+    b.images.length === 0
   );
 }
 
@@ -279,7 +297,9 @@ export function blockClips(b: ReelBlock): Clip[] {
 
 /** Is this clip worth showing at all? */
 export function isClipEmpty(c: Clip): boolean {
-  return EMPTY(c.what) && EMPTY(c.screenText) && EMPTY(c.soundNote) && EMPTY(c.url);
+  return (
+    EMPTY(c.what) && EMPTY(c.screenText) && EMPTY(c.soundNote) && EMPTY(c.url) && EMPTY(c.image)
+  );
 }
 
 /**
@@ -359,6 +379,8 @@ export type ShotItem = {
   cue: string | null;
   /** Words burnt over this shot — you frame differently when a line must fit. */
   screen?: string | null;
+  /** A pasted picture of what this should look like. */
+  image?: string | null;
 };
 
 /**
@@ -444,6 +466,7 @@ export function shotList(blocks: ReadonlyArray<ReelBlock>): ShotItem[] {
           // The words burnt over it belong with the shot: you frame differently
           // when you know a line has to fit on screen.
           screen: EMPTY(c.screenText) ? null : (c.screenText ?? '').trim(),
+          image: EMPTY(c.image) ? null : (c.image ?? '').trim(),
         });
       });
     } else if (b.kind !== 'sound' && (!EMPTY(b.assetNote) || b.assetKind)) {
@@ -493,6 +516,8 @@ export type GroupedShot = {
   what: string;
   saying: string | null;
   cue: string | null;
+  /** A pasted picture of what this should look like. */
+  image?: string | null;
   /** Words burnt over this shot. */
   screen?: string | null;
   url: string | null;
@@ -543,6 +568,7 @@ function oneRow(s: ShotItem): GroupedShot {
     saying: s.saying,
     cue: s.cue,
     screen: s.screen ?? null,
+    image: s.image ?? null,
     url: s.url,
     action: s.action,
     kind: s.kind,
@@ -579,6 +605,7 @@ function mergeTakes(items: ShotItem[]): GroupedShot[] {
       saying: text || null,
       cue: null,
       screen: null,
+      image: null,
       url: null,
       action: null,
       kind: list[0].kind,
@@ -609,6 +636,10 @@ export type FlowBeat = {
   saying: string | null;
   /** Words burnt onto the picture. */
   screenText: string[];
+  /** Reference pictures — the block's, plus each clip's. */
+  images: string[];
+  /** Reference links worth watching next to the plan. */
+  links: string[];
   /** What is heard, and whether that differs from the rest of the reel. */
   audio: AudioSource;
   audioDiffers: boolean;
@@ -629,6 +660,9 @@ export function flowBeats(
     const clips = blockClips(b);
     const onScreen: string[] = [];
     const screenText: string[] = [];
+    const images: string[] = b.images.map((i) => i.url).filter(Boolean);
+    const links: string[] = [];
+    if (!EMPTY(b.assetUrl)) links.push((b.assetUrl ?? '').trim());
 
     if (b.kind === 'talk' || b.kind === 'dialogue') {
       onScreen.push(
@@ -644,6 +678,8 @@ export function flowBeats(
       if (isClipEmpty(c)) continue;
       onScreen.push(EMPTY(c.what) ? 'Кадр' : c.what.trim());
       if (!EMPTY(c.screenText)) screenText.push((c.screenText ?? '').trim());
+      if (!EMPTY(c.image)) images.push((c.image ?? '').trim());
+      if (!EMPTY(c.url)) links.push((c.url ?? '').trim());
     }
 
     if (b.kind === 'sound' && !EMPTY(b.assetNote)) {
@@ -661,6 +697,8 @@ export function flowBeats(
       onScreen,
       saying,
       screenText,
+      images,
+      links,
       audio: effectiveAudio(b, reelAudio),
       audioDiffers: !!b.audioSource && b.audioSource !== (reelAudio ?? null),
       seconds: words > 0 ? Math.max(1, Math.round(words / 2.6)) : 2,
@@ -832,6 +870,7 @@ export function emptyBlock(kind: BlockKind, projectId: string, orderIndex: numbe
     editNote: null,
     overlays: [],
     clips: [],
+    images: [],
     // A cutaway defaults to the voice carrying over it — that is what a cutaway
     // is FOR. Anything else is a choice the user makes explicitly.
     audioSource: kind === 'broll' ? 'voiceover' : null,
@@ -865,6 +904,9 @@ export function toReelBlock(row: BlockRow): ReelBlock {
     overlays: rawOverlays.filter((o): o is Overlay => !!o && typeof o === 'object'),
     clips: (Array.isArray(row.clips) ? row.clips : []).filter(
       (c): c is Clip => !!c && typeof c === 'object',
+    ),
+    images: (Array.isArray(row.images) ? row.images : []).filter(
+      (i): i is RefImage => !!i && typeof i === 'object' && typeof (i as RefImage).url === 'string',
     ),
     audioSource: AUDIO_SOURCES.includes(row.audio_source as AudioSource)
       ? (row.audio_source as AudioSource)

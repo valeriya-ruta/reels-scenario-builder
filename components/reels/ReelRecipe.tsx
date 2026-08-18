@@ -1,7 +1,8 @@
 'use client';
 
-import { Camera, Check, Clapperboard, Lightbulb, Link2, Search } from 'lucide-react';
+import { Camera, Check, Clapperboard, Lightbulb, Search } from 'lucide-react';
 import CopyTextButton from '@/components/reels/CopyTextButton';
+import ReferenceMedia from '@/components/reels/ReferenceMedia';
 import {
   ASSET_LABELS,
   AUDIO_LABELS,
@@ -219,6 +220,19 @@ export default function ReelRecipe({
                               звук: {AUDIO_LABELS[beat.audio].toLowerCase()}
                             </p>
                           )}
+
+                          {/* Pasted references: showing the frame beats
+                              describing it. */}
+                          {beat.images.length > 0 && (
+                            <div className="mt-1.5 flex flex-wrap gap-1.5">
+                              {beat.images.map((src) => (
+                                <ReferenceMedia key={src} url={src} compact />
+                              ))}
+                            </div>
+                          )}
+                          {beat.links.map((href) => (
+                            <ReferenceMedia key={href} url={href} compact />
+                          ))}
                         </div>
 
                         {/* ── what the editor does ── */}
@@ -273,17 +287,7 @@ export default function ReelRecipe({
                                       >
                                         {e.what}
                                       </span>
-                                      {e.url && (
-                                        <a
-                                          href={e.url}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="ml-1.5 inline-flex items-center gap-1 align-middle text-[12px] font-medium text-[color:var(--accent)] hover:underline"
-                                        >
-                                          <Link2 className="h-3.5 w-3.5" />
-                                          Референс
-                                        </a>
-                                      )}
+                                      {e.url && <ReferenceMedia url={e.url} compact />}
                                     </span>
                                   </li>
                                 );
@@ -418,17 +422,10 @@ export default function ReelRecipe({
                               </>
                             )}
 
-                            {s.url && (
-                              <a
-                                href={s.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="mt-1.5 inline-flex items-center gap-1.5 text-[12.5px] font-medium text-[color:var(--accent)] hover:underline"
-                              >
-                                <Link2 className="h-3.5 w-3.5" />
-                                Референс
-                              </a>
-                            )}
+                            {/* A reference is watched next to the shot list, not
+                                in a tab you have to come back from. */}
+                            <ReferenceMedia url={s.url} compact />
+                            {s.image && <ReferenceMedia url={s.image} compact />}
                           </div>
                         </li>
                       );

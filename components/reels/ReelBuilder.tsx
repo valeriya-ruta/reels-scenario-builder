@@ -80,6 +80,7 @@ function toPatch(patch: Partial<ReelBlock>): BlockPatch {
   if ('editNote' in patch) out.edit_note = patch.editNote ?? null;
   if ('overlays' in patch) out.overlays = patch.overlays;
   if ('clips' in patch) out.clips = patch.clips;
+  if ('images' in patch) out.images = patch.images;
   if ('audioSource' in patch) out.audio_source = patch.audioSource ?? null;
   return out;
 }

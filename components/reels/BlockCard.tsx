@@ -1,7 +1,9 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, Copy, Link2, Plus, Trash2, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Copy, ImagePlus, Link2, Plus, Trash2, X } from 'lucide-react';
+import ReferenceMedia from '@/components/reels/ReferenceMedia';
+import { imagesFromClipboard, uploadPastedImage } from '@/lib/reels/pasteImage';
 import {
   ASSET_KINDS,
   ASSET_LABELS,
@@ -22,6 +24,7 @@ import {
   type BlockKind,
   type Clip,
   type Overlay,
+  type RefImage,
   type OverlayKind,
   type ReelBlock,
 } from '@/lib/reels/blocks';
@@ -106,6 +109,8 @@ export default function BlockCard({
   onDuplicate: () => void;
   onMove: (dir: -1 | 1) => void;
 }) {
+  const [pasting, setPasting] = useState(false);
+  const [pasteError, setPasteError] = useState<string | null>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const mirrorRef = useRef<HTMLDivElement>(null);
   const [selection, setSelection] = useState<{ start: number; end: number } | null>(null);
@@ -163,6 +168,44 @@ export default function BlockCard({
     writeClips(next);
   };
 
+  /**
+   * Ctrl+V anywhere in the block. If the paste happened inside a clip row the
+   * picture belongs to THAT shot; otherwise it is a reference for the whole
+   * block. Text pastes fall through untouched.
+   */
+  const onPaste = async (e: React.ClipboardEvent<HTMLDivElement>) => {
+    const files = imagesFromClipboard(e.clipboardData);
+    if (files.length === 0) return;
+    e.preventDefault();
+
+    const clipRow = (e.target as HTMLElement | null)?.closest?.('[data-clip-id]');
+    const clipId = clipRow?.getAttribute('data-clip-id') ?? null;
+
+    setPasting(true);
+    setPasteError(null);
+    try {
+      for (const file of files) {
+        const res = await uploadPastedImage(file, block.projectId);
+        if (!res.ok) {
+          setPasteError(res.error);
+          break;
+        }
+        if (clipId) {
+          onPatch({
+            clips: blockClips(block).map((c) => (c.id === clipId ? { ...c, image: res.url } : c)),
+          });
+        } else {
+          const image: RefImage = { id: newClipId().replace('cl_', 'img_'), url: res.url };
+          onPatch({ images: [...block.images, image] });
+        }
+      }
+    } finally {
+      setPasting(false);
+    }
+  };
+
+  const removeImage = (id: string) => onPatch({ images: block.images.filter((i) => i.id !== id) });
+
   const patchOverlay = (id: string, patch: Partial<Overlay>) =>
     onPatch({ overlays: block.overlays.map((o) => (o.id === id ? { ...o, ...patch } : o)) });
 
@@ -170,7 +213,12 @@ export default function BlockCard({
     onPatch({ overlays: block.overlays.filter((o) => o.id !== id) });
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_260px] gap-4" data-testid="reel-block" data-kind={block.kind}>
+    <div
+      className="grid grid-cols-[minmax(0,1fr)_260px] gap-4"
+      data-testid="reel-block"
+      data-kind={block.kind}
+      onPaste={(e) => void onPaste(e)}
+    >
       {/* ── the block itself ── */}
       <div
         className="rounded-[16px] border bg-[color:var(--background)] p-4"
@@ -335,6 +383,7 @@ export default function BlockCard({
               <div
                 key={c.id}
                 data-testid="clip-row"
+                data-clip-id={c.id}
                 className="rounded-[12px] border border-[color:var(--border)] bg-[color:var(--surface1)]/50 p-2.5"
               >
                 <div className="mb-1.5 flex items-center gap-2">
@@ -409,10 +458,32 @@ export default function BlockCard({
                   <input
                     value={c.url ?? ''}
                     onChange={(e) => patchClip(c.id, { url: e.target.value })}
-                    placeholder="Посилання на референс"
+                    placeholder="Посилання на референс — Reels, TikTok, YouTube"
                     className={`${FIELD} text-[12.5px]`}
                   />
                 </div>
+
+                <ReferenceMedia url={c.url} compact />
+
+                {/* A picture pasted onto this shot: «отак має виглядати». */}
+                {c.image && (
+                  <div className="relative mt-1.5 inline-block">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={c.image}
+                      alt="Референс кадру"
+                      className="max-h-28 w-auto rounded-[8px] border border-[color:var(--border)] object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => patchClip(c.id, { image: undefined })}
+                      aria-label="Прибрати зображення"
+                      className="absolute -right-2 -top-2 cursor-pointer rounded-full bg-white p-1 text-zinc-400 shadow-[var(--elev-1)] hover:text-red-500"
+                    >
+                      <X className="h-3 w-3" strokeWidth={2.4} />
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
 
@@ -466,6 +537,46 @@ export default function BlockCard({
             className={`${FIELD} text-[13px]`}
           />
         </div>
+
+        {block.kind === 'sound' && <ReferenceMedia url={block.assetUrl} compact />}
+
+        {/* Pictures pasted onto the block as a whole. */}
+        {(block.images.length > 0 || pasting || pasteError) && (
+          <div className="mt-2 flex flex-wrap items-start gap-2" data-testid="block-images">
+            {block.images.map((img) => (
+              <div key={img.id} className="relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={img.url}
+                  alt="Референс"
+                  className="max-h-28 w-auto rounded-[8px] border border-[color:var(--border)] object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeImage(img.id)}
+                  aria-label="Прибрати зображення"
+                  className="absolute -right-2 -top-2 cursor-pointer rounded-full bg-white p-1 text-zinc-400 shadow-[var(--elev-1)] hover:text-red-500"
+                >
+                  <X className="h-3 w-3" strokeWidth={2.4} />
+                </button>
+              </div>
+            ))}
+            {pasting && (
+              <span className="flex items-center gap-1.5 rounded-[8px] border border-dashed border-[color:var(--border-strong)] px-3 py-2 text-[12px] text-[color:var(--text-muted)]">
+                <ImagePlus className="h-3.5 w-3.5" />
+                Завантажую…
+              </span>
+            )}
+            {pasteError && <span className="text-[12px] text-red-600">{pasteError}</span>}
+          </div>
+        )}
+
+        {block.images.length === 0 && !pasting && (
+          <p className="mt-2 text-[11.5px] text-[color:var(--text-muted)]">
+            <ImagePlus className="mr-1 inline h-3.5 w-3.5 align-[-2px]" />
+            Встав картинку (Ctrl+V) — стане референсом до цього блоку
+          </p>
+        )}
       </div>
 
       {/* ── the margin: add-ons hanging off the words ── */}

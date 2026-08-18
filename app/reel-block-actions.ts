@@ -22,7 +22,7 @@ import {
  */
 
 const COLS =
-  'id,project_id,order_index,kind,speaker,spoken,screen_text,record_note,asset_kind,asset_note,asset_url,edit_note,overlays,clips,audio_source,duration_sec';
+  'id,project_id,order_index,kind,speaker,spoken,screen_text,record_note,asset_kind,asset_note,asset_url,edit_note,overlays,clips,images,audio_source,duration_sec';
 
 /** Does this reel belong to the signed-in user? */
 async function ownsReel(
@@ -63,6 +63,7 @@ export type BlockPatch = Partial<{
   edit_note: string | null;
   overlays: unknown;
   clips: unknown;
+  images: unknown;
   audio_source: string | null;
   duration_sec: number | null;
 }>;
@@ -176,6 +177,7 @@ export async function duplicateReelBlock(
       edit_note: row.edit_note,
       overlays,
       clips,
+      images: row.images ?? [],
       audio_source: row.audio_source,
       duration_sec: row.duration_sec,
     })
