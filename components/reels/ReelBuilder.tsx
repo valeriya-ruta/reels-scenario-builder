@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState } from 'react';
-import { Camera, Clapperboard, FileText, Plus, Sparkles } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Camera, Check, Clapperboard, FileText, Loader2, Plus, Sparkles, TriangleAlert } from 'lucide-react';
 import EditorTopBar from '@/components/ui/EditorTopBar';
 import ScheduleChip from '@/components/content/ScheduleChip';
 import StatusPill from '@/components/content/StatusPill';
@@ -30,6 +30,7 @@ import {
   type RefImage,
 } from '@/lib/reels/blocks';
 import { REEL_PRESETS } from '@/lib/reels/presets';
+import { SaveQueue, saveLabel, type SaveQueueState } from '@/lib/reels/saveQueue';
 import { updateProjectName } from '@/app/actions';
 import {
   addReelBlock,
@@ -60,15 +61,11 @@ import type { Project } from '@/lib/domain';
 
 type Tab = 'write' | 'shoot' | 'edit';
 
-/** Debounced field writes: typing must not fire a request per keystroke. */
-function useDebouncedPersist() {
-  const timers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-  return useCallback((key: string, run: () => void) => {
-    const existing = timers.current.get(key);
-    if (existing) clearTimeout(existing);
-    timers.current.set(key, setTimeout(run, 600));
-  }, []);
-}
+const SAVE_CHIP: Record<'saving' | 'saved' | 'failed', { text: string; color: string; Icon: typeof Check }> = {
+  saving: { text: 'Зберігаю…', color: '#8A6D0F', Icon: Loader2 },
+  saved: { text: 'Збережено', color: '#0F6B54', Icon: Check },
+  failed: { text: 'НЕ збережено', color: '#B4231C', Icon: TriangleAlert },
+};
 
 /** Block → the column names the database knows. */
 function toPatch(patch: Partial<ReelBlock>): BlockPatch {
@@ -114,7 +111,64 @@ export default function ReelBuilder({
   // so when RLS silently refused the insert the button simply did nothing and
   // there was no way to tell a broken save from a slow one.
   const [error, setError] = useState<string | null>(null);
-  const persist = useDebouncedPersist();
+
+  // Every write on this screen goes through one queue, so the header can say
+  // whether the reel is saved and `beforeunload` can refuse to lose an edit
+  // that is still sitting in the debounce.
+  const [saveState, setSaveState] = useState<SaveQueueState>({
+    pending: 0,
+    inFlight: 0,
+    failed: false,
+  });
+  const [everSaved, setEverSaved] = useState(false);
+  const [queue] = useState(() => new SaveQueue(600, setSaveState));
+  const persist = useCallback(
+    (key: string, run: () => Promise<boolean>) => {
+      setEverSaved(true);
+      queue.schedule(key, run);
+    },
+    [queue],
+  );
+  const track = useCallback(
+    (run: () => Promise<boolean>) => {
+      setEverSaved(true);
+      queue.now(run);
+    },
+    [queue],
+  );
+
+  // Leaving the page is where the work used to go. `pagehide` and a hidden tab
+  // send whatever is waiting; `beforeunload` then asks before closing if a
+  // write is still in the air, because a server action cancelled mid-flight
+  // never reaches the database.
+  useEffect(() => {
+    const flush = () => queue.flush();
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') flush();
+    };
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      flush();
+      if (queue.busy) e.preventDefault();
+    };
+    window.addEventListener('pagehide', flush);
+    window.addEventListener('beforeunload', onBeforeUnload);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      document.removeEventListener('visibilitychange', onVisibility);
+      // Whatever is still waiting belongs to a screen that is going away —
+      // send it rather than drop it.
+      queue.flush();
+    };
+  }, [queue]);
+
+  // Moving out of a field is a decision, not a pause: send it now instead of
+  // waiting out a debounce she might cut short by reloading. `onBlur` in React
+  // is focusout, so one handler on the wrapper covers every input below it.
+  const flushOnBlur = useCallback(() => queue.flush(), [queue]);
+
+  const label = saveLabel(saveState, everSaved);
 
   // The name lives here so the header shows the new one immediately; the write
   // follows and rolls back if it fails, the same as every other edit on this
@@ -124,14 +178,17 @@ export default function ReelBuilder({
     (next: string) => {
       const previous = name;
       setName(next);
-      void updateProjectName(project.id, next).then((res) => {
-        if (!res.ok) {
-          setName(previous);
-          setError('Не вдалося змінити назву.');
-        }
-      });
+      track(() =>
+        updateProjectName(project.id, next).then((res) => {
+          if (!res.ok) {
+            setName(previous);
+            setError('Не вдалося змінити назву.');
+          }
+          return res.ok;
+        }),
+      );
     },
-    [name, project.id],
+    [name, project.id, track],
   );
 
   // The reel's own sound. A trend belongs to the whole reel far more often than
@@ -144,14 +201,17 @@ export default function ReelBuilder({
     (next: AudioSource | null) => {
       const previous = reelAudio;
       setReelAudio(next);
-      void setReelDefaultAudio(project.id, next).then((res) => {
-        if (!res.ok) {
-          setReelAudio(previous);
-          setError('Не вдалося зберегти звук рілса.');
-        }
-      });
+      track(() =>
+        setReelDefaultAudio(project.id, next).then((res) => {
+          if (!res.ok) {
+            setReelAudio(previous);
+            setError('Не вдалося зберегти звук рілса.');
+          }
+          return res.ok;
+        }),
+      );
     },
-    [project.id, reelAudio],
+    [project.id, reelAudio, track],
   );
 
   // «Про що цей рілс» — the brief. The storyboard says what happens beat by
@@ -161,11 +221,12 @@ export default function ReelBuilder({
   const saveOverview = useCallback(
     (next: string) => {
       setOverview(next);
-      persist('overview', () => {
-        void setReelOverview(project.id, next).then((res) => {
+      persist('overview', () =>
+        setReelOverview(project.id, next).then((res) => {
           if (!res.ok) setError('Не вдалося зберегти опис.');
-        });
-      });
+          return res.ok;
+        }),
+      );
     },
     [persist, project.id],
   );
@@ -179,32 +240,38 @@ export default function ReelBuilder({
     (next: RefImage[]) => {
       const previous = references;
       setReferences(next);
-      void setReelReferences(project.id, next).then((res) => {
-        if (!res.ok) {
-          setReferences(previous);
-          setError('Не вдалося зберегти референси.');
-        }
-      });
+      track(() =>
+        setReelReferences(project.id, next).then((res) => {
+          if (!res.ok) {
+            setReferences(previous);
+            setError('Не вдалося зберегти референси.');
+          }
+          return res.ok;
+        }),
+      );
     },
-    [project.id, references],
+    [project.id, references, track],
   );
 
   const duplicate = useCallback(
     (id: string) => {
-      void duplicateReelBlock(id).then((res) => {
-        if (!res.ok) {
-          setError('Не вдалося дублювати блок. Онови сторінку.');
-          return;
-        }
-        setBlocks((prev) => {
-          const at = prev.findIndex((b) => b.id === id);
-          const next = [...prev];
-          next.splice(at < 0 ? prev.length : at + 1, 0, res.block);
-          return next;
-        });
-      });
+      track(() =>
+        duplicateReelBlock(id).then((res) => {
+          if (!res.ok) {
+            setError('Не вдалося дублювати блок. Онови сторінку.');
+            return false;
+          }
+          setBlocks((prev) => {
+            const at = prev.findIndex((b) => b.id === id);
+            const next = [...prev];
+            next.splice(at < 0 ? prev.length : at + 1, 0, res.block);
+            return next;
+          });
+          return true;
+        }),
+      );
     },
-    [],
+    [track],
   );
 
   const done = useMemo(() => new Set(ownerProgress ?? []), [ownerProgress]);
@@ -229,11 +296,12 @@ export default function ReelBuilder({
       setBlocks((prev) => prev.map((b) => (b.id === id ? { ...b, ...patch } : b)));
       // Keyed by block AND field, so editing the text does not cancel the write
       // of an overlay attached a moment earlier.
-      persist(`${id}:${Object.keys(patch).join(',')}`, () => {
-        void updateReelBlock(id, toPatch(patch)).then((res) => {
+      persist(`${id}:${Object.keys(patch).join(',')}`, () =>
+        updateReelBlock(id, toPatch(patch)).then((res) => {
           if (!res.ok) setError('Не вдалося зберегти. Онови сторінку.');
-        });
-      });
+          return res.ok;
+        }),
+      );
     },
     [persist],
   );
@@ -242,18 +310,24 @@ export default function ReelBuilder({
     (kind: BlockKind) => {
       setAddOpen(false);
       const orderIndex = blocks.length;
-      void addReelBlock(project.id, kind, orderIndex).then((res) => {
-        if (res.ok) setBlocks((prev) => [...prev, res.block]);
-        else setError('Не вдалося додати блок. Онови сторінку.');
-      });
+      track(() =>
+        addReelBlock(project.id, kind, orderIndex).then((res) => {
+          if (res.ok) setBlocks((prev) => [...prev, res.block]);
+          else setError('Не вдалося додати блок. Онови сторінку.');
+          return res.ok;
+        }),
+      );
     },
-    [blocks.length, project.id],
+    [blocks.length, project.id, track],
   );
 
-  const remove = useCallback((id: string) => {
-    setBlocks((prev) => prev.filter((b) => b.id !== id));
-    void deleteReelBlock(id);
-  }, []);
+  const remove = useCallback(
+    (id: string) => {
+      setBlocks((prev) => prev.filter((b) => b.id !== id));
+      track(() => deleteReelBlock(id).then((res) => res.ok));
+    },
+    [track],
+  );
 
   const move = useCallback(
     (id: string, dir: -1 | 1) => {
@@ -263,39 +337,44 @@ export default function ReelBuilder({
       const next = [...blocks];
       [next[from], next[to]] = [next[to], next[from]];
       setBlocks(next);
-      void reorderReelBlocks(
-        project.id,
-        next.map((b) => b.id),
+      track(() =>
+        reorderReelBlocks(
+          project.id,
+          next.map((b) => b.id),
+        ).then((res) => res.ok),
       );
     },
-    [blocks, project.id],
+    [blocks, project.id, track],
   );
 
   const applyPreset = useCallback(
     (presetId: string) => {
       setPresetOpen(false);
       const preset = REEL_PRESETS.find((p) => p.id === presetId);
-      void applyReelPreset(project.id, presetId).then((res) => {
-        if (!res.ok) {
-          setError('Не вдалося додати форму. Онови сторінку.');
-          return;
-        }
-        setBlocks((prev) => [...prev, ...res.blocks]);
-        // The preset's per-block prompts become placeholders — an empty preset
-        // should read as instructions, not as a column of blank boxes.
-        if (preset) {
-          setHints((prev) => {
-            const next = { ...prev };
-            res.blocks.forEach((b, i) => {
-              const h = preset.blocks[i]?.hint;
-              if (h) next[b.id] = h;
+      track(() =>
+        applyReelPreset(project.id, presetId).then((res) => {
+          if (!res.ok) {
+            setError('Не вдалося додати форму. Онови сторінку.');
+            return false;
+          }
+          setBlocks((prev) => [...prev, ...res.blocks]);
+          // The preset's per-block prompts become placeholders — an empty
+          // preset should read as instructions, not a column of blank boxes.
+          if (preset) {
+            setHints((prev) => {
+              const next = { ...prev };
+              res.blocks.forEach((b, i) => {
+                const h = preset.blocks[i]?.hint;
+                if (h) next[b.id] = h;
+              });
+              return next;
             });
-            return next;
-          });
-        }
-      });
+          }
+          return true;
+        }),
+      );
     },
-    [project.id],
+    [project.id, track],
   );
 
   const tabs: { id: Tab; label: string; Icon: typeof FileText }[] = [
@@ -315,7 +394,10 @@ export default function ReelBuilder({
           {error}
           <button
             type="button"
-            onClick={() => setError(null)}
+            onClick={() => {
+              setError(null);
+              queue.clearFailed();
+            }}
             aria-label="Закрити"
             className="cursor-pointer opacity-70 hover:opacity-100"
           >
@@ -324,7 +406,7 @@ export default function ReelBuilder({
         </div>
       )}
 
-      <div className="mx-auto w-full max-w-[1180px] px-6 pb-24 pt-5">
+      <div className="mx-auto w-full max-w-[1180px] px-6 pb-24 pt-5" onBlur={flushOnBlur}>
         <EditorTopBar
           backHref="/projects"
           title={name}
@@ -337,6 +419,32 @@ export default function ReelBuilder({
               <ScheduleChip refTable="projects" id={project.id} initialDate={project.scheduled_date ?? null} />
 
               {/* Set once for the reel; a block can still say otherwise. */}
+              {/* Whether it is safe to close the tab. The reel used to give no
+                  answer at all, so a reload a second after the last keystroke
+                  threw that keystroke away with nothing to see. */}
+              {label !== 'idle' && (
+                <span
+                  data-testid="save-state"
+                  data-state={label}
+                  className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold"
+                  style={{
+                    color: SAVE_CHIP[label].color,
+                    backgroundColor: `${SAVE_CHIP[label].color}14`,
+                  }}
+                >
+                  {(() => {
+                    const { Icon } = SAVE_CHIP[label];
+                    return (
+                      <Icon
+                        className={`h-3.5 w-3.5 ${label === 'saving' ? 'animate-spin' : ''}`}
+                        strokeWidth={2.4}
+                      />
+                    );
+                  })()}
+                  {SAVE_CHIP[label].text}
+                </span>
+              )}
+
               <label className="flex items-center gap-1.5 rounded-[12px] border border-[color:var(--border)] px-2.5 py-1.5 text-[12.5px] text-[color:var(--text-muted)]">
                 Звук рілса
                 <select
