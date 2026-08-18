@@ -231,6 +231,18 @@ export type ReelBlock = {
   durationSec: number | null;
 };
 
+/**
+ * Every column `toReelBlock` reads, as one string.
+ *
+ * It was hand-copied into three files, and adding `clips` to two of them left
+ * the third silently returning blocks with no shots: everything typed into a
+ * cutaway was stored correctly and then vanished on reload, because the read
+ * never asked for the column. One constant, so a new field cannot be added to
+ * the model and forgotten by a reader.
+ */
+export const REEL_BLOCK_COLUMNS =
+  'id,project_id,order_index,kind,speaker,spoken,screen_text,record_note,asset_kind,asset_note,asset_url,edit_note,overlays,clips,images,audio_source,duration_sec';
+
 export const BLOCK_KINDS: readonly BlockKind[] = ['talk', 'dialogue', 'text', 'broll', 'sound'];
 
 export const BLOCK_LABELS: Record<BlockKind, string> = {

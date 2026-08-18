@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { requireAuth } from '@/lib/auth';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import { Project } from '@/lib/domain';
-import { toReelBlock } from '@/lib/reels/blocks';
+import { REEL_BLOCK_COLUMNS, toReelBlock } from '@/lib/reels/blocks';
 import { getOwnerProgress, getReelShareLink } from '@/lib/reels/share';
 import ReelBuilder from '@/components/reels/ReelBuilder';
 
@@ -29,9 +29,7 @@ export default async function ProjectPage({ params }: PageProps) {
     supabase.from('projects').select('*').eq('id', id).eq('user_id', user.id).single(),
     supabase
       .from('reel_blocks')
-      .select(
-        'id,project_id,order_index,kind,speaker,spoken,screen_text,record_note,asset_kind,asset_note,asset_url,edit_note,overlays,audio_source,duration_sec',
-      )
+      .select(REEL_BLOCK_COLUMNS)
       .eq('project_id', id)
       .order('order_index', { ascending: true }),
     getReelShareLink(id),
