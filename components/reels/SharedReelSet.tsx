@@ -193,16 +193,20 @@ export default function SharedReelSet({
         </div>
 
         {/* Progress is the point of the list: at a glance, what is left to do
-            rather than what exists. */}
+            rather than what exists. A bare «0/13» reads as a mystery number,
+            so it says what it counts — every shot to get and every editing
+            instruction for this reel, together. */}
         {total > 0 && (
           <span
+            data-testid="reel-progress"
+            title="Скільки пунктів уже відмічено — те, що треба зняти чи знайти, плюс те, що робить монтаж"
             className="shrink-0 rounded-full px-2.5 py-1 text-[12px] font-bold tabular-nums"
             style={{
               backgroundColor: complete ? '#0F8A6A' : 'var(--surface1)',
               color: complete ? '#fff' : 'var(--text-muted)',
             }}
           >
-            {finished}/{total}
+            {finished}/{total} <span className="font-semibold">готово</span>
           </span>
         )}
       </button>
