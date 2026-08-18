@@ -102,43 +102,74 @@ test.describe('shared calendar — piece → detail blocks', () => {
     expect(detail?.blocks[1].meta).toEqual([]);
   });
 
-  test('a reel tells the client what to DO, block by block', () => {
+  test('a reel arrives whole, in the shape the builder uses', () => {
     const detail = toSharedDetail({
       kind: 'reel',
       id: 'r1',
       title: 'Рілс про ціни',
       scheduledDate: '2026-08-19',
+      overview: 'Про те, як ми рахуємо ціну',
+      reelAudio: 'trend',
+      references: [{ id: 'ref_1', url: 'https://www.instagram.com/p/ABC/' }],
       blocks: [
         {
-          blockKind: 'talk',
+          id: 'b1',
+          project_id: 'r1',
+          order_index: 0,
+          kind: 'talk',
           spoken: 'Скільки це коштує?',
-          recordNote: 'крупний план',
-          overlays: [{ anchorText: 'коштує', kind: 'image', note: 'скріншот цін' }],
+          record_note: 'крупний план',
+          overlays: [{ id: 'o1', anchorText: 'коштує', kind: 'image', note: 'скріншот цін' }],
         },
-        { blockKind: 'dialogue', speaker: 'Вона', spoken: 'Дорого.' },
         {
-          blockKind: 'broll',
-          assetKind: 'find',
-          assetNote: 'архівне відео',
-          audioSource: 'voiceover',
+          id: 'b2',
+          project_id: 'r1',
+          order_index: 1,
+          kind: 'broll',
+          clips: [{ id: 'c1', what: 'архівне відео', assetKind: 'find', screenText: 'дорого' }],
         },
       ],
     });
 
-    // A talking block: the words are the body, the doing is the meta.
-    expect(detail?.blocks[0].heading).toBe('Говорю в камеру');
-    expect(detail?.blocks[0].body).toBe('Скільки це коштує?');
-    expect(detail?.blocks[0].meta).toContain('Знімаємо: крупний план');
-    expect(detail?.blocks[0].meta).toContain('На «коштує» — Фото: скріншот цін');
+    // Not paraphrased into headings: the real blocks, parsed by the one parser.
+    expect(detail?.blocks).toEqual([]);
+    expect(detail?.reel?.blocks).toHaveLength(2);
+    expect(detail?.reel?.blocks[0].spoken).toBe('Скільки це коштує?');
+    expect(detail?.reel?.blocks[0].recordNote).toBe('крупний план');
+    expect(detail?.reel?.blocks[0].overlays[0]).toMatchObject({ note: 'скріншот цін' });
 
-    // Dialogue is headed by whoever says it.
-    expect(detail?.blocks[1].heading).toBe('Вона');
+    // The clips are the whole point: a video-only reel used to arrive blank.
+    expect(detail?.reel?.blocks[1].clips[0].what).toBe('архівне відео');
+    expect(detail?.reel?.blocks[1].clips[0].screenText).toBe('дорого');
 
-    // An asset states the ACTION first — the client's first question.
-    expect(detail?.blocks[2].heading).toBe('Знайти: архівне відео');
-    expect(detail?.blocks[2].meta).toContain('Голос поверх');
+    // And the reel-level context, which the calendar never carried at all.
+    expect(detail?.reel?.overview).toBe('Про те, як ми рахуємо ціну');
+    expect(detail?.reel?.audio).toBe('trend');
+    expect(detail?.reel?.references).toHaveLength(1);
 
-    expect(detail?.countLabel).toBe('3 сцени');
+    expect(detail?.countLabel).toBe('2 сцени');
+  });
+
+  test('a reel with nothing set keeps its shape rather than failing', () => {
+    const detail = toSharedDetail({ kind: 'reel', id: 'r2', title: 'Порожній', blocks: [] });
+    expect(detail?.reel).toEqual({ blocks: [], overview: null, audio: null, references: [] });
+    expect(detail?.countLabel).toBe('0 сцен');
+  });
+
+  test('an unknown reel sound is dropped rather than rendered as a label', () => {
+    const detail = toSharedDetail({
+      kind: 'reel',
+      id: 'r3',
+      title: 'Рілс',
+      reelAudio: 'not-a-source',
+      blocks: [],
+    });
+    expect(detail?.reel?.audio).toBeNull();
+  });
+
+  test('only a reel carries the reel payload', () => {
+    const story = toSharedDetail({ kind: 'story', id: 's1', title: 'С', blocks: [] });
+    expect(story?.reel).toBeUndefined();
   });
 
   test('a carousel becomes its slides, titled or numbered', () => {
