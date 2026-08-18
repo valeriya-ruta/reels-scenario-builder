@@ -33,7 +33,13 @@ const BASE_URL: Record<AiVendor, string> = {
 /** Same weights either way, so prompts tuned on Groq behave the same. */
 const TEXT_MODEL: Record<AiVendor, () => string> = {
   groq: () => GROQ_TEXT_MODEL,
-  openrouter: () => optionalServerEnv('OPENROUTER_MODEL') ?? 'meta-llama/llama-3.3-70b-instruct',
+  // Gemini, by her preference — it holds her tone of voice best of the ones
+  // she has compared. She named 2.5; that generation is retired, so this is the
+  // current Flash. llama-3.3-70b, the previous default, turned a specific
+  // spoken argument into generic Ukrainian filler («створити щось корисне і
+  // потрібне людям, що буде мати успіх на ринку»), which is worse than useless
+  // in text that gets read aloud. Overridable without a redeploy.
+  openrouter: () => optionalServerEnv('OPENROUTER_MODEL') ?? 'google/gemini-3.7-flash',
 };
 
 /** Whisper large v3 turbo on both — the model the transcripts were tuned on. */

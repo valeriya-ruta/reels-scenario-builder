@@ -32,6 +32,7 @@ const LANGUAGE_RULE: Record<'uk' | 'en', string> = {
 const VOICE_RULES = [
   'You are editing a script the author will say OUT LOUD to a phone camera.',
   'Keep HER voice, her words and her rhythm. Do not make it more formal.',
+  'Prefer her actual phrasing over a better one you could write.',
   'No emoji, no hashtags, no markdown, no stage directions, no labels.',
   'Never address the author. Never explain what you did.',
   'Plain spoken sentences only — this text is read aloud verbatim.',
@@ -39,22 +40,45 @@ const VOICE_RULES = [
 
 const INSTRUCTION: Record<RewriteMode, string> = {
   reel: [
-    'Turn this raw dump into a reel script.',
-    'The FIRST paragraph must be a hook: one short line that makes someone stop scrolling. Build it from what she actually said, never from an invented claim.',
-    'Then the body, in her order, tightened — cut repetition, filler and false starts.',
-    'End with one closing line. No call to action unless she asked for one herself.',
-    'One thought per paragraph. Separate paragraphs with a blank line.',
-    'Keep it under about 45 seconds spoken (roughly 120 words).',
+    'Turn this spoken dump into a script she can read to camera.',
+    '',
+    'DO NOT SUMMARISE. This is the failure that matters: a several-minute dump',
+    'came back as three generic lines and everything she actually argued was',
+    'gone. Every point, every example, every aside, every number and every name',
+    'she mentioned must survive into the script. If she made six points, the',
+    'script makes six points. The output should be close to the same LENGTH as',
+    'the input — never a fraction of it.',
+    '',
+    'What you may change:',
+    '- Add ONE opening line that makes someone stop scrolling, built only from',
+    '  what she actually said. If her own first sentence already does that, keep it.',
+    '- Remove false starts, «ееее», «ну», restarted sentences and words repeated',
+    '  by accident. Nothing else.',
+    '- Fix word order where speech made it tangled, and split run-on sentences.',
+    '- Break it into paragraphs, one thought each, separated by a blank line.',
+    '',
+    'You are tidying a transcript, not writing a new post about the same topic.',
   ].join('\n'),
   shorter: [
-    'Make this shorter and tighter without losing any idea in it.',
-    'Cut filler, repetition and hedging. Keep every distinct point.',
-    'Keep the same paragraph breaks where the ideas still divide that way.',
+    'Make this tighter WITHOUT losing an idea.',
+    'Cut filler, hedging and repeated words — never a point, an example or a name.',
+    'If a point can only go by being deleted, keep it and cut elsewhere.',
+    'Keep the paragraph breaks where the ideas still divide that way.',
   ].join('\n'),
   longer: [
-    'Expand this a little: add the concrete detail and the example that are implied but missing.',
-    'Do NOT add new claims, new facts or new opinions she did not make.',
-    'Keep it spoken and plain. At most half again as long.',
+    'Open this out using ONLY what is already in it.',
+    '',
+    'You may not add a fact, an example, a claim, a statistic, a place or an',
+    'opinion that is not already in her text. This is the failure that matters:',
+    'asked to expand three lines about building apps from problems she knows,',
+    'a model produced advice about spotting a problem in your city and building',
+    'something the market wants — none of which she said. That is not expansion,',
+    'it is a different person talking.',
+    '',
+    'What expanding actually means here: finish thoughts she left half-said,',
+    'spell out a step she compressed, and give a point that got one clause a',
+    'sentence of its own. If there is nothing left to unpack, return the text',
+    'almost unchanged. Too short is fine; invented is not.',
   ].join('\n'),
 };
 
@@ -64,15 +88,14 @@ const INSTRUCTION: Record<RewriteMode, string> = {
  * `chatEndpoint` prefers OpenRouter when its key is present and falls back to
  * Groq — both speak the OpenAI shape, so this call is identical either way.
  */
-async function complete(system: string, user: string): Promise<Record<string, unknown>> {
+async function complete(system: string, user: string): Promise<string> {
   const endpoint = chatEndpoint();
   const res = await fetch(endpoint.url, {
     method: 'POST',
     headers: endpoint.headers,
     body: JSON.stringify({
       model: endpoint.model,
-      temperature: 0.6,
-      response_format: { type: 'json_object' },
+      temperature: 0.4,
       messages: [
         { role: 'system', content: system },
         { role: 'user', content: user },
@@ -88,7 +111,9 @@ async function complete(system: string, user: string): Promise<Record<string, un
   const payload = (await res.json()) as {
     choices?: Array<{ message?: { content?: string } }>;
   };
-  return parseJsonObject(payload.choices?.[0]?.message?.content ?? '');
+  const content = (payload.choices?.[0]?.message?.content ?? '').trim();
+  if (!content) throw new Error('Модель нічого не повернула. Спробуй ще раз.');
+  return content;
 }
 
 /** Rewrite the whole note, or just the phrase she selected. */
@@ -100,23 +125,30 @@ export async function rewriteReelText(
   const system = [VOICE_RULES, LANGUAGE_RULE[lang], INSTRUCTION[mode]].join('\n\n');
   const wantsTitle = mode === 'reel';
 
-  const user = [
-    wantsTitle
-      ? 'Return JSON: {"script":"<the script, paragraphs separated by \\n\\n>","title":"<3-5 word name for this reel>"}'
-      : 'Return JSON: {"script":"<the rewritten text, paragraphs separated by \\n\\n>"}',
-    '',
-    'TEXT:',
-    text,
-  ].join('\n');
+  // Plain text, not JSON. Wrapping a script in a JSON field bought nothing and
+  // added a failure mode of its own: one reply the model did not quote properly
+  // and the whole button answered «повернула щось незрозуміле» over text that
+  // was actually fine. The reply IS the script now.
+  const user = ['Return ONLY the text. No preamble, no quotes, no JSON.', '', 'TEXT:', text].join('\n');
 
-  const reply = await complete(system, user);
-  const script = stringField(reply, 'script');
-  if (!script) throw new Error('Модель повернула щось незрозуміле. Спробуй ще раз.');
+  const script = normalizeScript(await complete(system, user));
+  if (!script) throw new Error('Модель повернула порожній текст. Спробуй ще раз.');
 
-  // The title is a nice-to-have: a good script with no name is fine, a failure
-  // because the model skipped one field is not.
-  const title = wantsTitle ? (stringField(reply, 'title')?.slice(0, 80) ?? null) : null;
-  return { text: normalizeScript(script), title };
+  return { text: script, title: wantsTitle ? titleFrom(script) : null };
+}
+
+/**
+ * A name for the reel, taken from its own opening line.
+ *
+ * Asked for as a second field it was one more thing a reply could get wrong,
+ * and a reel whose rewrite failed because the NAME was malformed is an absurd
+ * way to lose work. The hook already says what the reel is about.
+ */
+export function titleFrom(script: string): string | null {
+  const first = script.split('\n').map((l) => l.trim()).find(Boolean);
+  if (!first) return null;
+  const words = first.replace(/[«»"'.,!?—–-]+$/g, '').split(/\s+/).slice(0, 5).join(' ');
+  return words.slice(0, 80) || null;
 }
 
 /**
@@ -138,10 +170,11 @@ export async function generateCaption(script: string): Promise<string> {
     LANGUAGE_RULE[lang],
   ].join('\n');
 
-  const reply = await complete(system, `Return JSON: {"caption":"<the caption>"}\n\nSCRIPT:\n${script}`);
-  const caption = stringField(reply, 'caption');
+  const caption = (
+    await complete(system, `Return ONLY the caption text.\n\nSCRIPT:\n${script}`)
+  ).trim();
   if (!caption) throw new Error('Не вдалося написати підпис. Спробуй ще раз.');
-  return caption.trim();
+  return caption;
 }
 
 // ── pure ──────────────────────────────────────────────────────────────────

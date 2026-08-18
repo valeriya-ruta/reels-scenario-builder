@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { nanoid } from 'nanoid';
-import { Keyboard, Link2, Loader2, Mic, MoreHorizontal, Sparkles } from 'lucide-react';
+import { Keyboard, Link2, Loader2, Mic, MoreHorizontal, Sparkles, Undo2 } from 'lucide-react';
 import EditorTopBar from '@/components/ui/EditorTopBar';
 import StatusPill from '@/components/content/StatusPill';
 import ScheduleChip from '@/components/content/ScheduleChip';
-import ParagraphRow from '@/components/reels/ParagraphRow';
+import NoteEditor from '@/components/reels/NoteEditor';
 import ClipCard from '@/components/reels/ClipCard';
 import AttachSheet from '@/components/reels/AttachSheet';
 import CleanScriptSheet from '@/components/reels/CleanScriptSheet';
@@ -17,7 +17,9 @@ import { updateProjectName } from '@/app/actions';
 import {
   createReelBlock,
   deleteReelBlock,
+  keepTranscript,
   rewriteReel,
+  saveReelMeta,
   updateReelBlock,
 } from '@/app/reel-actions';
 import { SaveQueue, saveLabel, type SaveQueueState } from '@/lib/reels/saveQueue';
@@ -30,14 +32,7 @@ import {
   type OverlayKind,
   type ReelBlock,
 } from '@/lib/reels/blocks';
-import { cleanScript } from '@/lib/reels/script';
-import {
-  insertAt,
-  mergeBlockText,
-  overlayForSelection,
-  redistributeOverlays,
-  splitBlockText,
-} from '@/lib/reels/edit';
+import { insertAt, mergeBlockText, overlayForSelection } from '@/lib/reels/edit';
 import { OFFERED_OVERLAY_KINDS, overlayStyle } from '@/lib/reels/overlayStyle';
 import { useKeyboardInset } from '@/lib/ui/keyboardInset';
 import type { Project } from '@/lib/domain';
@@ -45,23 +40,22 @@ import type { Project } from '@/lib/domain';
 /**
  * A reel is a note.
  *
- * Not a scene list, not a form, not a builder — a white page you type on, with
- * a mic, the way the idea actually gets captured today in Apple Notes or a
- * message to yourself. The difference is that this note writes its own lists.
+ * One page of text with a mic — the way the idea actually gets captured today,
+ * in Apple Notes or a message to yourself. The difference is that this note
+ * writes its own lists.
  *
- * Everything that made it read as a tool is gone: the numbered cards, the
- * per-row reorder controls, the dashed «add» box in the middle of the writing,
- * the scenes/text switch. Blocks are still the model underneath — the shot list
- * and the editing list are derived from them — but she never sees the word.
+ * THE TEXT IS ONE FIELD. Blocks are still the model (the shot list, the edit
+ * list and the timecodes are derived from them) but the whole spoken script
+ * lives in a single block, and paragraphs are blank lines inside it. One field
+ * per paragraph was tried and was wrong in the way that matters: a selection
+ * could not cross a blank line, so «shorten this bit» stopped at the paragraph
+ * break. Clip cards — the wordless shots of a trend reel — are separate blocks
+ * after it.
  *
- * ONE toolbar, and it changes rather than multiplying. Nothing selected: the
- * mic, «Зробити рілс», and everything rarer behind ⋯. A phrase selected: what
- * can go on top of it, and the two length buttons.
- *
- * The toolbar is offset by the keyboard's height rather than pinned to the
- * bottom of the page — see useKeyboardInset. Pinned, it sat UNDERNEATH the
- * keys, so selecting a phrase appeared to do nothing unless she dismissed the
- * keyboard first, which on Android also cleared the selection she had just made.
+ * ONE toolbar that changes rather than multiplying, offset by the keyboard's
+ * height so it rides on top of the keys (useKeyboardInset). Pinned to the page
+ * bottom it sat UNDERNEATH them, which made selecting a phrase look like it did
+ * nothing.
  */
 
 const SAVE_DELAY_MS = 600;
@@ -72,6 +66,34 @@ const draftId = () => `${DRAFT}${nanoid(8)}`;
 
 type Busy = null | 'reel' | 'shorter' | 'longer';
 
+/**
+ * Fold every spoken block into one.
+ *
+ * Reels written before the note was a single field arrive as several blocks,
+ * and so does anything the AI import paths still create. Joining is lossless —
+ * `mergeBlockText` re-bases each attachment's anchor as the text moves — and it
+ * happens on open so there is never a note whose halves cannot be selected
+ * across.
+ */
+function foldToNote(blocks: ReelBlock[], projectId: string): { note: ReelBlock; clips: ReelBlock[]; merged: ReelBlock[] } {
+  const spoken = blocks.filter((b) => b.kind !== 'broll');
+  const clips = blocks.filter((b) => b.kind === 'broll');
+
+  if (spoken.length === 0) {
+    return { note: emptyBlock('talk', projectId, 0, draftId()), clips, merged: [] };
+  }
+
+  let note = { ...spoken[0], orderIndex: 0 };
+  for (const next of spoken.slice(1)) {
+    // A blank line between blocks: they were separate paragraphs.
+    const withGap = { spoken: `${(note.spoken ?? '').trim()}\n\n`, overlays: note.overlays };
+    const joined = mergeBlockText(withGap, next);
+    note = { ...note, spoken: joined.spoken, overlays: joined.overlays };
+  }
+
+  return { note, clips, merged: spoken.slice(1) };
+}
+
 export default function ReelTextScreen({
   project: initialProject,
   initialBlocks,
@@ -81,27 +103,30 @@ export default function ReelTextScreen({
   initialBlocks: ReelBlock[];
   backHref?: string;
 }) {
-  const [project, setProject] = useState(initialProject);
-  const [blocks, setBlocks] = useState<ReelBlock[]>(() =>
-    initialBlocks.length > 0 ? initialBlocks : [emptyBlock('talk', initialProject.id, 0, draftId())],
+  const folded = useMemo(
+    () => foldToNote(initialBlocks, initialProject.id),
+    [initialBlocks, initialProject.id],
   );
-  const [focusId, setFocusId] = useState<string | null>(null);
+
+  const [project, setProject] = useState(initialProject);
+  const [note, setNote] = useState<ReelBlock>(folded.note);
+  const [clips, setClips] = useState<ReelBlock[]>(folded.clips);
   const [caretAt, setCaretAt] = useState<number | null>(null);
-  const [activeId, setActiveId] = useState<string | null>(blocks[0]?.id ?? null);
+  const [caret, setCaret] = useState(0);
   const [selection, setSelection] = useState<{ start: number; end: number } | null>(null);
-  const [openOverlay, setOpenOverlay] = useState<{ blockId: string; overlayId: string } | null>(null);
+  const [openOverlayId, setOpenOverlayId] = useState<string | null>(null);
   const [sheet, setSheet] = useState<null | 'more' | 'script' | 'overlays'>(null);
   const [busy, setBusy] = useState<Busy>(null);
   const [error, setError] = useState<string | null>(null);
-  const [saveState, setSaveState] = useState<SaveQueueState>({
-    pending: 0,
-    inFlight: 0,
-    failed: false,
-  });
+  const [preview, setPreview] = useState<string | null>(null);
+  const [rawDump, setRawDump] = useState<string | null>(initialProject.raw_dump ?? null);
+  const [saveState, setSaveState] = useState<SaveQueueState>({ pending: 0, inFlight: 0, failed: false });
   const [everSaved, setEverSaved] = useState(false);
 
   const keyboard = useKeyboardInset();
   const micRef = useRef<MicHandle>(null);
+  /** Where dictation started, so the preview grows from there. */
+  const dictationBase = useRef<{ text: string; at: number } | null>(null);
 
   const [queue] = useState(
     () =>
@@ -128,213 +153,150 @@ export default function ReelTextScreen({
     };
   }, [queue]);
 
-  const pendingCreates = useRef(new Map<string, Promise<string | null>>());
+  // Blocks folded away on open are removed once, so the next open does not have
+  // to fold again — and their text is already inside the note by then.
+  const foldedAway = useRef(folded.merged);
+  useEffect(() => {
+    const extra = foldedAway.current.filter((b) => !isDraft(b.id));
+    if (extra.length === 0) return;
+    foldedAway.current = [];
+    queue.now(async () => {
+      for (const b of extra) await deleteReelBlock(b.id);
+      return true;
+    });
+  }, [queue]);
 
-  const realIdFor = useCallback(
-    async (block: ReelBlock): Promise<string | null> => {
-      if (!isDraft(block.id)) return block.id;
-      const started = pendingCreates.current.get(block.id);
-      if (started) return started;
-
-      const create = createReelBlock(project.id, block.orderIndex, block.kind, {
-        spoken: block.spoken,
-        overlays: block.overlays,
-        clips: block.clips,
-        audioSource: block.audioSource,
+  const noteIdRef = useRef<Promise<string | null> | null>(null);
+  const realNoteId = useCallback(
+    async (current: ReelBlock): Promise<string | null> => {
+      if (!isDraft(current.id)) return current.id;
+      if (noteIdRef.current) return noteIdRef.current;
+      const create = createReelBlock(project.id, 0, 'talk', {
+        spoken: current.spoken,
+        overlays: current.overlays,
       }).then((res) => {
         if (!res.ok) return null;
-        const realId = res.data.id;
-        setBlocks((prev) => prev.map((b) => (b.id === block.id ? { ...b, id: realId } : b)));
-        return realId;
+        setNote((n) => (isDraft(n.id) ? { ...n, id: res.data.id } : n));
+        return res.data.id;
       });
-
-      pendingCreates.current.set(block.id, create);
+      noteIdRef.current = create;
       return create;
     },
     [project.id],
   );
 
-  const save = useCallback(
-    (block: ReelBlock, field: string) => {
-      queue.schedule(`${block.id}:${field}`, async () => {
-        const id = await realIdFor(block);
+  const saveNote = useCallback(
+    (next: ReelBlock) => {
+      queue.schedule(`note:${next.id}`, async () => {
+        const id = await realNoteId(next);
         if (!id) return false;
-        if (isDraft(block.id)) return true; // the create carried this content
         const res = await updateReelBlock(id, {
-          spoken: block.spoken,
-          overlays: block.overlays,
-          clips: block.clips,
-          orderIndex: block.orderIndex,
-          kind: block.kind,
+          spoken: next.spoken,
+          overlays: next.overlays,
         });
         return res.ok;
       });
     },
-    [queue, realIdFor],
+    [queue, realNoteId],
   );
 
-  /** Apply a whole new list and persist every row that changed. */
-  const commit = useCallback(
-    (next: ReelBlock[], field: string, changed?: ReelBlock[]) => {
-      setBlocks(next);
-      (changed ?? next).forEach((b) => save(b, field));
+  const applyNote = useCallback(
+    (patch: Partial<ReelBlock>) => {
+      setNote((prev) => {
+        const next = { ...prev, ...patch };
+        saveNote(next);
+        return next;
+      });
     },
-    [save],
+    [saveNote],
   );
 
-  const patchBlock = useCallback(
-    (blockId: string, patch: Partial<ReelBlock>, field: string) => {
-      const next = blocks.map((b) => (b.id === blockId ? { ...b, ...patch } : b));
-      const changed = next.find((b) => b.id === blockId);
-      setBlocks(next);
-      if (changed) save(changed, field);
+  const text = note.spoken ?? '';
+
+  // ── dictation ─────────────────────────────────────────────────────────────
+
+  const onRecordingChange = useCallback(
+    (recording: boolean) => {
+      if (recording) {
+        dictationBase.current = { text: note.spoken ?? '', at: selection?.start ?? caret };
+        setPreview(note.spoken ?? '');
+      } else {
+        // Keep the preview until the real transcript lands — clearing it here
+        // would blank the words she just watched appear.
+      }
     },
-    [blocks, save],
+    [note.spoken, selection, caret],
   );
 
-  const patchClip = useCallback(
-    (blockId: string, patch: Partial<Clip>) => {
-      const block = blocks.find((b) => b.id === blockId);
-      if (!block) return;
-      const current = block.clips[0] ?? { id: nanoid(8), what: '' };
-      patchBlock(blockId, { clips: [{ ...current, ...patch }] }, 'clips');
+  /** Provisional words, from the browser recogniser, while she is still talking. */
+  const onInterim = useCallback((heard: string) => {
+    const base = dictationBase.current;
+    if (!base) return;
+    setPreview(insertAt(base.text, base.at, heard).text);
+  }, []);
+
+  /** The real transcript. Replaces the preview and is what gets saved. */
+  const onFinal = useCallback(
+    (piece: string) => {
+      const base = dictationBase.current;
+      dictationBase.current = null;
+      setPreview(null);
+      if (!base || !piece.trim()) return;
+
+      // The transcript is filed and linked to this reel before it is edited at
+      // all — it is the source every other format should be derived from, and
+      // the copy no button on this screen can overwrite.
+      void keepTranscript(project.id, piece.trim());
+
+      const result = insertAt(base.text, base.at, piece.trim(), note.overlays);
+      setCaretAt(result.caret);
+      applyNote({ spoken: result.text, overlays: result.overlays });
     },
-    [blocks, patchBlock],
+    [applyNote, note.overlays, project.id],
   );
-
-  // ── typing ────────────────────────────────────────────────────────────────
-
-  const handleSplit = (blockId: string, at: number) => {
-    const index = blocks.findIndex((b) => b.id === blockId);
-    if (index === -1) return;
-
-    const { head, tail } = splitBlockText(blocks[index], at);
-    const tailBlock: ReelBlock = { ...emptyBlock('talk', project.id, index + 1, draftId()), ...tail };
-
-    const next = [...blocks];
-    next.splice(index, 1, { ...blocks[index], ...head }, tailBlock);
-    const renumbered = next.map((b, i) => ({ ...b, orderIndex: i }));
-
-    setFocusId(tailBlock.id);
-    setCaretAt(0);
-    commit(renumbered, 'split');
-  };
-
-  const handleJoinUp = (blockId: string) => {
-    const index = blocks.findIndex((b) => b.id === blockId);
-    if (index <= 0) return;
-
-    const above = blocks[index - 1];
-    const gone = blocks[index];
-    const merged = mergeBlockText(above, gone);
-
-    const next = blocks
-      .filter((b) => b.id !== gone.id)
-      .map((b, i) =>
-        b.id === above.id
-          ? { ...b, spoken: merged.spoken, overlays: merged.overlays, orderIndex: i }
-          : { ...b, orderIndex: i },
-      );
-
-    setFocusId(above.id);
-    setCaretAt(merged.joinAt);
-    commit(next, 'join');
-    if (!isDraft(gone.id)) queue.now(async () => (await deleteReelBlock(gone.id)).ok);
-  };
-
-  const handleDelete = (blockId: string) => {
-    if (blocks.length === 1) return;
-    const gone = blocks.find((b) => b.id === blockId);
-    commit(
-      blocks.filter((b) => b.id !== blockId).map((b, i) => ({ ...b, orderIndex: i })),
-      'delete',
-    );
-    if (gone && !isDraft(gone.id)) queue.now(async () => (await deleteReelBlock(gone.id)).ok);
-  };
-
-  /** Dictation lands where the caret is, the way a notes app does it. */
-  const insertDictation = (piece: string) => {
-    const targetId = activeId ?? blocks[blocks.length - 1]?.id;
-    const block = blocks.find((b) => b.id === targetId);
-    if (!block) return;
-
-    const at = selection?.start ?? (block.spoken ?? '').length;
-    const result = insertAt(block.spoken ?? '', at, piece, block.overlays);
-
-    setFocusId(block.id);
-    setCaretAt(result.caret);
-    setSelection(null);
-    patchBlock(block.id, { spoken: result.text, overlays: result.overlays }, 'spoken');
-  };
 
   // ── the AI buttons ────────────────────────────────────────────────────────
 
   /**
-   * «Зробити рілс» — the whole note becomes a script with a hook on the front.
+   * Every rewrite keeps what it replaced.
    *
-   * Her attachments are re-homed onto the rewritten paragraphs rather than
-   * dropped: the words can be regenerated, the marks she made cannot.
+   * The first version of this overwrote the note in place with nothing kept
+   * anywhere, and turned several minutes of spoken argument into three generic
+   * lines that could not be undone. The dump is written to the reel BEFORE a
+   * single word on screen changes, so «Повернути» is always available and
+   * survives a reload.
    */
+  const keepDump = (before: string) => {
+    setRawDump(before);
+    queue.now(async () => (await saveReelMeta(project.id, { rawDump: before })).ok);
+  };
+
   const makeReel = async () => {
-    if (busy) return;
-    const source = cleanScript(blocks);
-    if (!source.trim()) {
-      setError('Спочатку напиши або наговори щось.');
+    if (busy || !text.trim()) {
+      if (!text.trim()) setError('Спочатку напиши або наговори щось.');
       return;
     }
-
     setBusy('reel');
     setError(null);
-    const res = await rewriteReel(source, 'reel');
+    const before = text;
+    const res = await rewriteReel(before, 'reel');
     setBusy(null);
     if (!res.ok) {
       setError(res.error);
       return;
     }
-
-    const paragraphs = res.data.text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
-    if (paragraphs.length === 0) {
-      setError('Модель повернула порожній текст. Спробуй ще раз.');
-      return;
-    }
-
-    const allOverlays = blocks.flatMap((b) => b.overlays);
-    const homes = redistributeOverlays(paragraphs, allOverlays);
-    // Clip cards are not speech and are not part of the rewrite — they keep
-    // their place at the end rather than being regenerated away.
-    const clipBlocks = blocks.filter((b) => b.kind === 'broll');
-
-    const rewritten: ReelBlock[] = paragraphs.map((text, i) => {
-      const reuse = blocks[i] && blocks[i].kind !== 'broll' ? blocks[i] : null;
-      return reuse
-        ? { ...reuse, spoken: text, overlays: homes[i], orderIndex: i }
-        : { ...emptyBlock('talk', project.id, i, draftId()), spoken: text, overlays: homes[i] };
-    });
-
-    const dropped = blocks.filter(
-      (b) => b.kind !== 'broll' && !rewritten.some((r) => r.id === b.id) && !isDraft(b.id),
-    );
-
-    const next = [...rewritten, ...clipBlocks].map((b, i) => ({ ...b, orderIndex: i }));
-    commit(next, 'rewrite');
-    for (const gone of dropped) queue.now(async () => (await deleteReelBlock(gone.id)).ok);
-
+    keepDump(before);
+    applyNote({ spoken: res.data.text });
     if (res.data.title) {
       setProject((p) => ({ ...p, name: res.data.title! }));
       queue.now(async () => (await updateProjectName(project.id, res.data.title!)).ok);
     }
   };
 
-  /**
-   * Коротше / Довше — on the selected phrase when there is one, otherwise on
-   * the whole note. Selecting first is how you say «this bit», and having to
-   * explain that in a menu would be a worse app.
-   */
   const resize = async (mode: 'shorter' | 'longer') => {
     if (busy) return;
-    const block = activeId ? blocks.find((b) => b.id === activeId) : null;
-    const scoped = selection && block ? (block.spoken ?? '').slice(selection.start, selection.end) : '';
-    const source = scoped.trim() || cleanScript(blocks);
+    const scoped = selection ? text.slice(selection.start, selection.end) : '';
+    const source = scoped.trim() || text;
     if (!source.trim()) {
       setError('Спочатку напиши або наговори щось.');
       return;
@@ -349,129 +311,104 @@ export default function ReelTextScreen({
       return;
     }
 
-    if (scoped.trim() && block && selection) {
-      // Splice back into the phrase's own place, so the paragraph around it and
-      // every anchor after it stay where they were.
-      const text = block.spoken ?? '';
+    keepDump(text);
+
+    if (scoped.trim() && selection) {
       const replaced = text.slice(0, selection.start) + res.data.text + text.slice(selection.end);
       const shift = res.data.text.length - (selection.end - selection.start);
-      patchBlock(
-        block.id,
-        {
-          spoken: replaced,
-          overlays: block.overlays.map((o) =>
-            o.anchorStart >= selection.end ? { ...o, anchorStart: o.anchorStart + shift } : o,
-          ),
-        },
-        'spoken',
-      );
+      applyNote({
+        spoken: replaced,
+        overlays: note.overlays.map((o) =>
+          o.anchorStart >= selection.end ? { ...o, anchorStart: o.anchorStart + shift } : o,
+        ),
+      });
       setSelection(null);
       return;
     }
-
-    const paragraphs = res.data.text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
-    if (paragraphs.length === 0) return;
-    const homes = redistributeOverlays(paragraphs, blocks.flatMap((b) => b.overlays));
-    const clipBlocks = blocks.filter((b) => b.kind === 'broll');
-    const rewritten: ReelBlock[] = paragraphs.map((text, i) => {
-      const reuse = blocks[i] && blocks[i].kind !== 'broll' ? blocks[i] : null;
-      return reuse
-        ? { ...reuse, spoken: text, overlays: homes[i], orderIndex: i }
-        : { ...emptyBlock('talk', project.id, i, draftId()), spoken: text, overlays: homes[i] };
-    });
-    const dropped = blocks.filter(
-      (b) => b.kind !== 'broll' && !rewritten.some((r) => r.id === b.id) && !isDraft(b.id),
-    );
-    commit([...rewritten, ...clipBlocks].map((b, i) => ({ ...b, orderIndex: i })), 'rewrite');
-    for (const gone of dropped) queue.now(async () => (await deleteReelBlock(gone.id)).ok);
+    applyNote({ spoken: res.data.text });
   };
 
-  /** A reference's words, dropped in as the note's text. */
-  const applyReferenceText = (text: string) => {
-    const paragraphs = text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
-    const list = paragraphs.length > 0 ? paragraphs : [text.trim()];
-    const rewritten: ReelBlock[] = list.map((spoken, i) => {
-      const reuse = blocks[i] && blocks[i].kind !== 'broll' ? blocks[i] : null;
-      return reuse
-        ? { ...reuse, spoken, overlays: [], orderIndex: i }
-        : { ...emptyBlock('talk', project.id, i, draftId()), spoken };
+  const undo = () => {
+    if (!rawDump) return;
+    applyNote({ spoken: rawDump });
+    setRawDump(null);
+    queue.now(async () => (await saveReelMeta(project.id, { rawDump: null })).ok);
+  };
+
+  const applyReferenceText = (incoming: string) => {
+    keepDump(text);
+    applyNote({ spoken: incoming.trim() });
+  };
+
+  // ── attachments and clips ─────────────────────────────────────────────────
+
+  const attach = (kind: OverlayKind) => {
+    if (!selection) return;
+    const overlay = overlayForSelection(nanoid(10), kind, text, selection.start, selection.end);
+    applyNote({ overlays: [...note.overlays, overlay] });
+    setSelection(null);
+    setOpenOverlayId(overlay.id);
+  };
+
+  const changeOverlay = (patch: Partial<Overlay>) => {
+    if (!openOverlayId) return;
+    applyNote({
+      overlays: note.overlays.map((o) => (o.id === openOverlayId ? { ...o, ...patch } : o)),
     });
-    const dropped = blocks.filter(
-      (b) => b.kind !== 'broll' && !rewritten.some((r) => r.id === b.id) && !isDraft(b.id),
-    );
-    commit(rewritten.map((b, i) => ({ ...b, orderIndex: i })), 'reference');
-    for (const gone of dropped) queue.now(async () => (await deleteReelBlock(gone.id)).ok);
+  };
+
+  const removeOverlay = () => {
+    if (!openOverlayId) return;
+    applyNote({ overlays: note.overlays.filter((o) => o.id !== openOverlayId) });
+    setOpenOverlayId(null);
   };
 
   const addClipCard = () => {
     const card: ReelBlock = {
-      ...emptyBlock('broll', project.id, blocks.length, draftId()),
+      ...emptyBlock('broll', project.id, clips.length + 1, draftId()),
       audioSource: null,
       clips: [{ id: nanoid(8), what: '' }],
     };
-    setBlocks([...blocks, card]);
-    save(card, 'create');
+    setClips((prev) => [...prev, card]);
+    queue.now(async () => {
+      const res = await createReelBlock(project.id, card.orderIndex, 'broll', {
+        clips: card.clips,
+        audioSource: null,
+      });
+      if (res.ok) setClips((prev) => prev.map((c) => (c.id === card.id ? { ...c, id: res.data.id } : c)));
+      return res.ok;
+    });
   };
 
-  // ── attachments ───────────────────────────────────────────────────────────
-
-  const attach = (kind: OverlayKind) => {
-    if (!activeId || !selection) return;
-    const block = blocks.find((b) => b.id === activeId);
-    if (!block) return;
-
-    const overlay = overlayForSelection(
-      nanoid(10),
-      kind,
-      block.spoken ?? '',
-      selection.start,
-      selection.end,
-    );
-    patchBlock(block.id, { overlays: [...block.overlays, overlay] }, 'overlays');
-    setSelection(null);
-    setOpenOverlay({ blockId: block.id, overlayId: overlay.id });
-  };
-
-  const changeOverlay = (patch: Partial<Overlay>) => {
-    if (!openOverlay) return;
-    const block = blocks.find((b) => b.id === openOverlay.blockId);
-    if (!block) return;
-    patchBlock(
-      block.id,
-      { overlays: block.overlays.map((o) => (o.id === openOverlay.overlayId ? { ...o, ...patch } : o)) },
-      'overlays',
-    );
-  };
-
-  const removeOverlay = () => {
-    if (!openOverlay) return;
-    const block = blocks.find((b) => b.id === openOverlay.blockId);
-    if (block) {
-      patchBlock(
-        block.id,
-        { overlays: block.overlays.filter((o) => o.id !== openOverlay.overlayId) },
-        'overlays',
+  const patchClip = (blockId: string, patch: Partial<Clip>) => {
+    setClips((prev) => {
+      const next = prev.map((c) =>
+        c.id === blockId
+          ? { ...c, clips: [{ ...(c.clips[0] ?? { id: nanoid(8), what: '' }), ...patch }] }
+          : c,
       );
-    }
-    setOpenOverlay(null);
+      const changed = next.find((c) => c.id === blockId);
+      if (changed && !isDraft(changed.id)) {
+        queue.schedule(`clip:${changed.id}`, async () =>
+          (await updateReelBlock(changed.id, { clips: changed.clips })).ok,
+        );
+      }
+      return next;
+    });
   };
 
-  const activeOverlay = openOverlay
-    ? (blocks
-        .find((b) => b.id === openOverlay.blockId)
-        ?.overlays.find((o) => o.id === openOverlay.overlayId) ?? null)
-    : null;
+  const removeClip = (blockId: string) => {
+    setClips((prev) => prev.filter((c) => c.id !== blockId));
+    if (!isDraft(blockId)) queue.now(async () => (await deleteReelBlock(blockId)).ok);
+  };
 
   // ── header ────────────────────────────────────────────────────────────────
 
-  const seconds = useMemo(() => estimateSeconds(blocks), [blocks]);
-  const overlayCount = useMemo(() => blocks.reduce((n, b) => n + b.overlays.length, 0), [blocks]);
+  const allBlocks = useMemo(() => [note, ...clips], [note, clips]);
+  const seconds = useMemo(() => estimateSeconds(allBlocks), [allBlocks]);
   const label = saveLabel(saveState, everSaved);
-  const hasWriting = useMemo(() => cleanScript(blocks).trim().length > 0, [blocks]);
-  const hasContent = useMemo(
-    () => hasWriting || blocks.some((b) => b.clips.length > 0 || b.overlays.length > 0),
-    [blocks, hasWriting],
-  );
+  const hasContent = text.trim().length > 0 || clips.length > 0;
+  const activeOverlay = note.overlays.find((o) => o.id === openOverlayId) ?? null;
 
   const rename = async (next: string) => {
     const previous = project.name;
@@ -508,56 +445,59 @@ export default function ReelTextScreen({
               />
               <span className="text-[12px] tabular-nums text-[color:var(--text-muted)]">
                 ~{formatDuration(seconds)}
-                {overlayCount > 0 ? ` · ${overlayCount} поверх` : ''}
+                {note.overlays.length > 0 ? ` · ${note.overlays.length} поверх` : ''}
               </span>
               <SaveChip label={label} />
             </>
           }
         />
 
-        {/* The note. No numbers, no cards, no chrome — paragraphs on a page. */}
-        <div className="flex flex-col">
-          {blocks.map((block, i) =>
-            block.kind === 'broll' ? (
-              <div key={block.id} className="my-2">
-                <ClipCard
-                  block={block}
-                  index={i + 1}
-                  reelId={project.id}
-                  canMoveUp={false}
-                  canMoveDown={false}
-                  onChangeClip={(patch) => patchClip(block.id, patch)}
-                  onMove={() => {}}
-                  onDelete={() => handleDelete(block.id)}
-                />
-              </div>
-            ) : (
-              <ParagraphRow
-                key={block.id}
-                block={block}
-                index={i + 1}
-                numbered={false}
-                active={activeId === block.id}
-                autoFocus={focusId === block.id}
-                caretAt={focusId === block.id ? caretAt : null}
-                placeholder={i === 0 ? 'Пиши або тисни мікрофон…' : undefined}
-                canMoveUp={i > 0}
-                canMoveDown={i < blocks.length - 1}
-                onChange={(spoken) => patchBlock(block.id, { spoken }, 'spoken')}
-                onSelectionChange={(sel) => {
-                  setActiveId(block.id);
-                  setSelection(sel);
-                }}
-                onSplit={(at) => handleSplit(block.id, at)}
-                onJoinUp={() => handleJoinUp(block.id)}
-                onMove={() => {}}
-                onDelete={() => handleDelete(block.id)}
-                onOpenOverlay={(overlayId) => setOpenOverlay({ blockId: block.id, overlayId })}
-                onFocus={() => setActiveId(block.id)}
-              />
-            ),
-          )}
+        {/* «Повернути» stays until she dismisses it by using it. A rewrite she
+            did not want is only a mistake if it cannot be taken back. */}
+        {rawDump ? (
+          <button
+            type="button"
+            data-testid="undo-rewrite"
+            onClick={undo}
+            className="mb-3 inline-flex min-h-9 items-center gap-1.5 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-3 text-[12.5px] font-semibold text-[color:var(--foreground)]"
+          >
+            <Undo2 className="h-3.5 w-3.5" />
+            Повернути те, що я наговорила
+          </button>
+        ) : null}
+
+        <div className={busy === 'reel' ? 'reel-rewriting' : undefined}>
+          <NoteEditor
+            text={text}
+            overlays={note.overlays}
+            previewText={preview}
+            readOnly={busy !== null}
+            caretAt={caretAt}
+            placeholder="Пиши або тисни мікрофон…"
+            onChange={(next) => applyNote({ spoken: next })}
+            onSelectionChange={setSelection}
+            onCaretChange={setCaret}
+            onOpenOverlay={setOpenOverlayId}
+          />
         </div>
+
+        {clips.length > 0 ? (
+          <div className="mt-4 flex flex-col gap-3">
+            {clips.map((clip, i) => (
+              <ClipCard
+                key={clip.id}
+                block={clip}
+                index={i + 1}
+                reelId={project.id}
+                canMoveUp={false}
+                canMoveDown={false}
+                onChangeClip={(patch) => patchClip(clip.id, patch)}
+                onMove={() => {}}
+                onDelete={() => removeClip(clip.id)}
+              />
+            ))}
+          </div>
+        ) : null}
 
         {error ? (
           <p role="alert" className="mt-3 text-[13px] text-red-600">
@@ -566,14 +506,8 @@ export default function ReelTextScreen({
         ) : null}
       </div>
 
-      {/*
-        An empty note is a blank box, and a blank box is the hardest thing to
-        start from. So the three ways in are shown IN the note until there is
-        something in it — not as a screen before it, which would tax the case
-        where she already knows what she is writing. They vanish for good on the
-        first word.
-      */}
-      {!hasContent ? (
+      {/* The three ways in, shown only while the note is empty. */}
+      {!hasContent && preview === null ? (
         <div
           data-testid="reel-doors"
           className="pointer-events-none fixed inset-x-0 z-40 px-4"
@@ -584,21 +518,14 @@ export default function ReelTextScreen({
               primary
               icon={<Mic className="h-5 w-5" />}
               title="Наговорити"
-              hint="Розкажи, як другові. Далі одна кнопка зробить із цього рілс."
+              hint="Розкажи, як другові. Слова зʼявлятимуться тут одразу."
               onClick={() => micRef.current?.start()}
             />
             <Door
               icon={<Keyboard className="h-5 w-5" />}
               title="Написати"
               hint="Просто почни друкувати."
-              onClick={() => {
-                const first = blocks[0];
-                if (first) {
-                  setActiveId(first.id);
-                  setFocusId(first.id);
-                  setCaretAt(0);
-                }
-              }}
+              onClick={() => setCaretAt(0)}
             />
             <Door
               icon={<Link2 className="h-5 w-5" />}
@@ -610,14 +537,13 @@ export default function ReelTextScreen({
         </div>
       ) : null}
 
-      {/* One toolbar, lifted clear of the keyboard. */}
       <div
         data-testid="reel-toolbar"
         className="fixed inset-x-0 z-50 border-t border-[color:var(--border)] bg-[color:var(--surface1)] px-2 py-2"
-        style={{ bottom: keyboard, paddingBottom: keyboard > 0 ? 8 : undefined }}
+        style={{ bottom: keyboard }}
       >
         <div className="mx-auto flex max-w-[680px] items-center gap-1.5">
-          {selection ? (
+          {selection && busy === null ? (
             <>
               {OFFERED_OVERLAY_KINDS.map((kind) => (
                 <button
@@ -634,40 +560,38 @@ export default function ReelTextScreen({
                   <span aria-hidden>{overlayStyle(kind).glyph}</span>
                 </button>
               ))}
-              <ToolButton
-                label="Коротше"
-                busy={busy === 'shorter'}
-                onClick={() => void resize('shorter')}
-              />
-              <ToolButton
-                label="Довше"
-                busy={busy === 'longer'}
-                onClick={() => void resize('longer')}
-              />
+              <ToolButton label="Коротше" busy={busy === 'shorter'} onClick={() => void resize('shorter')} />
+              <ToolButton label="Довше" busy={busy === 'longer'} onClick={() => void resize('longer')} />
             </>
           ) : (
             <>
-              <MicButton ref={micRef} onText={insertDictation} onError={setError} />
+              <MicButton
+                ref={micRef}
+                onText={onFinal}
+                onInterim={onInterim}
+                onRecordingChange={onRecordingChange}
+                onError={setError}
+              />
               <button
                 type="button"
                 data-testid="make-reel"
-                disabled={busy !== null || !hasWriting}
+                disabled={busy !== null || !text.trim()}
                 onClick={() => void makeReel()}
-                className="flex h-11 flex-1 items-center justify-center gap-2 rounded-[12px] bg-[color:var(--accent)] text-[14px] font-semibold text-white disabled:opacity-40"
+                className="flex h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-[12px] bg-[color:var(--accent)] text-[14px] font-semibold text-white disabled:opacity-40"
               >
                 {busy === 'reel' ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <Sparkles className="h-4 w-4" />
                 )}
-                {busy === 'reel' ? 'Роблю…' : 'Зробити рілс'}
+                <span className="truncate">{busy === 'reel' ? 'Переписую…' : 'Зробити рілс'}</span>
               </button>
               <button
                 type="button"
                 data-testid="more"
                 aria-label="Ще"
                 onClick={() => setSheet('more')}
-                className="flex h-11 w-11 items-center justify-center rounded-[12px] text-[color:var(--text-secondary)]"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] text-[color:var(--text-secondary)]"
               >
                 <MoreHorizontal className="h-5 w-5" />
               </button>
@@ -680,15 +604,15 @@ export default function ReelTextScreen({
         open={activeOverlay !== null}
         overlay={activeOverlay}
         reelId={project.id}
-        onClose={() => setOpenOverlay(null)}
+        onClose={() => setOpenOverlayId(null)}
         onChange={changeOverlay}
         onDelete={removeOverlay}
       />
       <ReelMoreSheet
         open={sheet === 'more'}
         project={project}
-        script={cleanScript(blocks)}
-        hasWriting={hasWriting}
+        script={text}
+        hasWriting={text.trim().length > 0}
         onClose={() => setSheet(null)}
         onOpenScript={() => setSheet('script')}
         onOpenOverlays={() => setSheet('overlays')}
@@ -699,8 +623,8 @@ export default function ReelTextScreen({
         onProjectUpdate={setProject}
         onReferenceText={applyReferenceText}
       />
-      <CleanScriptSheet open={sheet === 'script'} blocks={blocks} onClose={() => setSheet(null)} />
-      <OverlayListSheet open={sheet === 'overlays'} blocks={blocks} onClose={() => setSheet(null)} />
+      <CleanScriptSheet open={sheet === 'script'} blocks={allBlocks} onClose={() => setSheet(null)} />
+      <OverlayListSheet open={sheet === 'overlays'} blocks={allBlocks} onClose={() => setSheet(null)} />
     </div>
   );
 }
@@ -749,20 +673,12 @@ function Door({
   );
 }
 
-function ToolButton({
-  label,
-  busy,
-  onClick,
-}: {
-  label: string;
-  busy: boolean;
-  onClick: () => void;
-}) {
+function ToolButton({ label, busy, onClick }: { label: string; busy: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
       data-testid={`tool-${label}`}
-      // Tapping must not take the selection away — that is what the button acts on.
+      // Tapping must not take the selection away — it is what the button acts on.
       onMouseDown={(e) => e.preventDefault()}
       onTouchStart={(e) => e.preventDefault()}
       onClick={onClick}

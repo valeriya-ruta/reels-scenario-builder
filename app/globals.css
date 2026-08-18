@@ -535,3 +535,59 @@ button:disabled,
   0%, 100% { transform: translateY(0) rotate(-0.6deg); }
   50% { transform: translateY(-3px) rotate(0.6deg); }
 }
+
+/* ── The rewrite animation ────────────────────────────────────────────────
+   «Зробити рілс» takes a few seconds and rewrites everything on the page. A
+   spinner on the button says the app is busy; it does not say that THIS TEXT
+   is what is being worked on. So a gradient passes over the words themselves,
+   left to right, while they dim — the page reads as "being rewritten" rather
+   than as frozen, which is what a stalled app looks like. */
+@keyframes reel-rewrite-sweep {
+  from { transform: translateX(-120%); }
+  to   { transform: translateX(120%); }
+}
+
+@keyframes reel-rewrite-breathe {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 0.82; }
+}
+
+.reel-rewriting {
+  position: relative;
+  animation: reel-rewrite-breathe 1.6s ease-in-out infinite;
+}
+
+.reel-rewriting::after {
+  content: '';
+  position: absolute;
+  inset: -6px -40% -6px -40%;
+  pointer-events: none;
+  border-radius: 12px;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    rgba(0, 75, 168, 0.16) 32%,
+    rgba(122, 60, 224, 0.22) 50%,
+    rgba(224, 100, 74, 0.16) 68%,
+    transparent 100%
+  );
+  animation: reel-rewrite-sweep 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reel-rewriting,
+  .reel-rewriting::after {
+    animation: none;
+  }
+  .reel-rewriting { opacity: 0.6; }
+}
+
+/* The live level meter while dictating. Height is set inline per bar. */
+@keyframes reel-mic-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+
+.reel-mic-live {
+  animation: reel-mic-pulse 1.2s ease-in-out infinite;
+}

@@ -67,6 +67,8 @@ export interface Project {
   status?: ContentStatus;
   /** The text under the post — read silently, and NOT the spoken script. */
   caption?: string | null;
+  /** What she said before a rewrite replaced it, so «Зробити рілс» is undoable. */
+  raw_dump?: string | null;
 }
 
 export interface Location {

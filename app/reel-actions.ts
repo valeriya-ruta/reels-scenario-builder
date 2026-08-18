@@ -200,7 +200,7 @@ export async function writeCaption(script: string): Promise<Result<{ caption: st
 /** Caption and reference live on the reel itself, not on any one block. */
 export async function saveReelMeta(
   projectId: string,
-  patch: { caption?: string | null; referenceUrl?: string | null },
+  patch: { caption?: string | null; referenceUrl?: string | null; rawDump?: string | null },
 ): Promise<Result> {
   const user = await requireAuth();
   if (!user) return { ok: false, error: NO_AUTH };
@@ -208,6 +208,8 @@ export async function saveReelMeta(
   const row: Record<string, unknown> = {};
   if ('caption' in patch) row.caption = patch.caption;
   if ('referenceUrl' in patch) row.reference_url = patch.referenceUrl;
+  // Written BEFORE any rewrite touches the note — see migration 052.
+  if ('rawDump' in patch) row.raw_dump = patch.rawDump;
   if (Object.keys(row).length === 0) return { ok: true };
 
   const supabase = await createServerSupabaseClient();
@@ -253,4 +255,59 @@ export async function readReference(url: string): Promise<Result<{ text: string 
       ),
     };
   }
+}
+
+/**
+ * File a raw transcript as an idea, tied to the reel it was spoken into.
+ *
+ * The transcript is the SOURCE, and it is kept so that it stays the source.
+ * Two reasons, both of which need it stored rather than merely shown:
+ *
+ *   1. A rewrite replaced several minutes of spoken argument once, and the
+ *      original lived in exactly one place — the place that had just been
+ *      overwritten. It now lives somewhere no button on the note can reach.
+ *   2. When a posted reel turns out to have done well, the thing worth reusing
+ *      is what she actually SAID, not the script that came out of it. Deriving
+ *      a carousel from the reel's script, then stories from the carousel, is a
+ *      game of telephone: every step drifts. Every format should come off the
+ *      same original, and the link is what makes it findable from the reel's
+ *      analytics.
+ *
+ * Best effort by design — the words are already on screen and already saving,
+ * so a failure here must never surface as an error over her writing.
+ */
+export async function keepTranscript(projectId: string, content: string): Promise<Result> {
+  const user = await requireAuth();
+  if (!user) return { ok: false, error: NO_AUTH };
+
+  const text = content.trim();
+  if (!text) return { ok: true };
+
+  const supabase = await createServerSupabaseClient();
+  const { data, error } = await supabase
+    .from('ideas')
+    // `source` is free text and records WHERE the words came from; `content_type`
+    // is constrained and stays 'idea' — this is a raw dump, not the reel itself.
+    .insert({ user_id: user.id, content: text, source: 'reel-note', content_type: 'idea' })
+    .select('id')
+    .single();
+
+  if (error || !data) {
+    console.error('Error keeping transcript:', error);
+    return { ok: false, error: error?.message ?? 'Не вдалося зберегти транскрипт.' };
+  }
+
+  const { error: linkError } = await supabase
+    .from('idea_content_links')
+    .insert({
+      user_id: user.id,
+      idea_id: (data as { id: string }).id,
+      content_type: 'reels',
+      content_id: projectId,
+    });
+
+  // An unlinked idea is still the transcript; only the trail back from the reel
+  // is lost, so this is logged rather than surfaced.
+  if (linkError) console.error('Error linking transcript to reel:', linkError);
+  return { ok: true };
 }

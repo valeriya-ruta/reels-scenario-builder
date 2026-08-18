@@ -17,13 +17,11 @@ test.beforeEach(async ({ page }) => {
   // The dev overlay portal sits over the bottom-left corner and swallows taps
   // meant for the toolbar. It does not exist in a production build.
   await page.addStyleTag({ content: 'nextjs-portal { display: none !important; }' });
-  await expect(page.getByTestId('paragraph-row').first()).toBeVisible();
+  await expect(page.getByTestId('note-editor')).toBeVisible();
 });
 
 test('the reel opens as its text, with the attachment shown under its line', async ({ page }) => {
-  const rows = page.getByTestId('paragraph-row');
-  await expect(rows).toHaveCount(2);
-
+  
   // The chip carries the instruction, on the line below the phrase it hangs off.
   await expect(page.getByTestId('overlay-chip')).toHaveText(/12 тижнів = 1 рік/);
 });
@@ -36,7 +34,6 @@ test('nothing on screen asks for framing, pose or camera motion', async ({ page 
 });
 
 test('it reads as a note: no scene numbers, no per-row controls, one toolbar', async ({ page }) => {
-  // The paragraphs carry no numbered badge and no up/down/delete row.
   await expect(page.getByLabel('Вище')).toHaveCount(0);
   await expect(page.getByLabel('Нижче')).toHaveCount(0);
 
@@ -47,57 +44,33 @@ test('it reads as a note: no scene numbers, no per-row controls, one toolbar', a
   await expect(page.getByTestId('mic')).toBeVisible();
 });
 
-test('typing lands in the text and the duration follows it', async ({ page }) => {
-  const first = page.getByTestId('paragraph-row').first().locator('textarea');
-  await first.click();
-  // `End` goes to the end of the WRAPPED line, not the end of the value.
-  await first.evaluate((el: HTMLTextAreaElement) =>
+test('typing lands in the text', async ({ page }) => {
+  const area = page.locator('[data-testid="note-editor"] textarea');
+  await area.click();
+  await area.evaluate((el: HTMLTextAreaElement) =>
     el.setSelectionRange(el.value.length, el.value.length),
   );
-  await first.pressSequentially(' Ще одне речення тут.');
-  await expect(first).toHaveValue(/Ще одне речення тут\.$/);
+  await area.pressSequentially(' Ще одне речення тут.');
+  await expect(area).toHaveValue(/Ще одне речення тут\.$/);
 });
 
-test('Enter cuts the paragraph in two, right where the caret was', async ({ page }) => {
-  const rows = page.getByTestId('paragraph-row');
-  const first = rows.first().locator('textarea');
-
-  await first.click();
-  // Put the caret directly before «і не працюю».
-  const value = (await first.inputValue()) ?? '';
-  const at = value.indexOf('і не працюю');
-  await first.evaluate((el: HTMLTextAreaElement, pos) => el.setSelectionRange(pos, pos), at);
-  await first.press('Enter');
-
-  await expect(rows).toHaveCount(3);
-  await expect(rows.nth(0).locator('textarea')).toHaveValue('Я мріяла про життя, де встигаю все — ');
-  await expect(rows.nth(1).locator('textarea')).toHaveValue('і не працюю до смерті.');
-});
-
-test('Backspace at the start joins the paragraph back, losing nothing', async ({ page }) => {
-  const rows = page.getByTestId('paragraph-row');
-  const second = rows.nth(1).locator('textarea');
-
-  await second.click();
-  await second.evaluate((el: HTMLTextAreaElement) => el.setSelectionRange(0, 0));
-  await second.press('Backspace');
-
-  await expect(rows).toHaveCount(1);
-  await expect(rows.first().locator('textarea')).toHaveValue(
-    /Я мріяла[\s\S]*Виявилось, річ не в дисципліні/,
-  );
-  // The attachment came across with the text it belongs to.
-  await expect(page.getByTestId('overlay-chip')).toHaveText(/12 тижнів = 1 рік/);
+test('Enter is just a newline — no clever paragraph machinery', async ({ page }) => {
+  const area = page.locator('[data-testid="note-editor"] textarea');
+  await area.click();
+  await area.evaluate((el: HTMLTextAreaElement) => el.setSelectionRange(0, 0));
+  await area.press('Enter');
+  await expect(area).toHaveValue(/^\n/);
+  await expect(page.locator('[data-testid="note-editor"] textarea')).toHaveCount(1);
 });
 
 test('selecting a phrase raises the attach bar, and picking a type attaches it', async ({ page }) => {
-  const first = page.getByTestId('paragraph-row').first().locator('textarea');
+  const area = page.locator('[data-testid="note-editor"] textarea');
   // Selected the way a thumb selects: put the caret down, then extend. This
   // goes through `selectionchange`, which is the only signal a long-press and
   // drag on a phone produces.
-  await first.click();
-  await first.evaluate((el: HTMLTextAreaElement) => el.setSelectionRange(0, 0));
-  for (let i = 0; i < 8; i++) await first.press('Shift+ArrowRight');
+  await area.click();
+  await area.evaluate((el: HTMLTextAreaElement) => el.setSelectionRange(0, 0));
+  for (let i = 0; i < 8; i++) await area.press('Shift+ArrowRight');
 
   // The one toolbar changes rather than a second bar appearing.
   const bar = page.getByTestId('reel-toolbar');
