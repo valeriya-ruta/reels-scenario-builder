@@ -1,6 +1,6 @@
 'use client';
 
-import { Camera, Check, Clapperboard, Link2, Search } from 'lucide-react';
+import { Camera, Check, Clapperboard, Lightbulb, Link2, Search } from 'lucide-react';
 import CopyTextButton from '@/components/reels/CopyTextButton';
 import {
   ASSET_LABELS,
@@ -46,6 +46,7 @@ export default function ReelRecipe({
   done,
   onToggleDone,
   reelAudio,
+  overview,
 }: {
   blocks: ReelBlock[];
   /** Restrict to one section (the builder's tabs); omit to show all three. */
@@ -58,6 +59,8 @@ export default function ReelRecipe({
   onToggleDone?: (key: string, next: boolean) => void;
   /** The reel's own sound — stated once instead of on every block. */
   reelAudio?: AudioSource | null;
+  /** «Про що цей рілс» — the brief, read before the beats. */
+  overview?: string | null;
 }) {
   const beats = flowBeats(blocks, reelAudio);
   const groups = shotGroups(blocks);
@@ -68,6 +71,24 @@ export default function ReelRecipe({
 
   return (
     <div className="flex flex-col gap-6">
+      {show('edit') && overview?.trim() ? (
+        /* The idea, in the author's own words, before any of the mechanics. A
+           beat-by-beat breakdown is precise and still does not tell you what
+           the reel is FOR — which for a purely edited video is everything. */
+        <section data-testid="recipe-overview">
+          <h2 className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--text-muted)]">
+            <Lightbulb className="h-3.5 w-3.5" strokeWidth={2.2} />
+            Про що цей рілс
+          </h2>
+          <p
+            className="whitespace-pre-wrap rounded-[14px] border-l-[3px] bg-[color:var(--background)] px-4 py-3.5 text-[15px] leading-relaxed text-[color:var(--foreground)]"
+            style={{ borderColor: 'var(--accent)', boxShadow: 'var(--elev-1)' }}
+          >
+            {overview.trim()}
+          </p>
+        </section>
+      ) : null}
+
       {show('edit') && (
         <section data-testid="recipe-flow">
           <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
