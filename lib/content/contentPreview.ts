@@ -4,6 +4,7 @@ import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import type { ContentPiece, ContentPreview } from '@/lib/content/contentPiece';
 import { estimateDialogueSeconds } from '@/lib/dialogueDuration';
 import {
+  REEL_BLOCK_COLUMNS,
   estimateSeconds,
   isBlockEmpty,
   spokenScript,
@@ -97,9 +98,7 @@ export async function attachPreviews(pieces: ContentPiece[]): Promise<ContentPie
       // author had already rewritten, in a language she had already changed.
       const { data: blockRows } = await supabase
         .from('reel_blocks')
-        .select(
-          'id,project_id,order_index,kind,speaker,spoken,screen_text,record_note,asset_kind,asset_note,asset_url,edit_note,overlays,audio_source,duration_sec',
-        )
+        .select(REEL_BLOCK_COLUMNS)
         .in('project_id', reelIds)
         .order('order_index', { ascending: true });
 

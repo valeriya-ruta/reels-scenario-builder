@@ -1,5 +1,8 @@
 import { test, expect } from '@playwright/test';
 import {
+  REEL_BLOCK_COLUMNS,
+  isBlockEmpty,
+  toReelBlock,
   editKey,
   editList,
   effectiveAudio,
@@ -568,5 +571,59 @@ test.describe('what an add-on points at reaches the edit', () => {
       }),
     ]);
     expect(items.find((e) => e.slot === 'edit:ov:o1')?.url).toBeNull();
+  });
+});
+
+/**
+ * Everything typed into a cutaway was stored correctly and then vanished on
+ * reload: the column list was hand-copied into three files and only two of them
+ * learned about `clips`, so the page's read never asked for the column.
+ */
+test.describe('the read asks for every column the model has', () => {
+  test('REEL_BLOCK_COLUMNS covers every field toReelBlock reads', () => {
+    const columns = REEL_BLOCK_COLUMNS.split(',');
+    for (const needed of [
+      'id',
+      'project_id',
+      'order_index',
+      'kind',
+      'speaker',
+      'spoken',
+      'screen_text',
+      'record_note',
+      'asset_kind',
+      'asset_note',
+      'asset_url',
+      'edit_note',
+      'overlays',
+      'clips',
+      'images',
+      'audio_source',
+      'duration_sec',
+    ]) {
+      expect(columns).toContain(needed);
+    }
+  });
+
+  test('a row selected with those columns round-trips a clip', () => {
+    // The exact shape PostgREST returns for the columns above.
+    const row: Record<string, unknown> = {
+      id: 'b1',
+      project_id: 'p1',
+      order_index: 0,
+      kind: 'broll',
+      clips: [{ id: 'c1', what: 'Зйомка зверху', screenText: '1 рік' }],
+      images: [{ id: 'i1', url: 'https://example.com/a.png' }],
+    };
+    const block = toReelBlock(row);
+    expect(block.clips).toHaveLength(1);
+    expect(block.images).toHaveLength(1);
+    expect(isBlockEmpty(block)).toBe(false);
+  });
+
+  test('a block whose ONLY content is clips is not treated as empty', () => {
+    const only = block({ id: 'b', kind: 'broll', clips: [{ id: 'c', what: 'Кадр' }] });
+    expect(isBlockEmpty(only)).toBe(false);
+    expect(shotList([only])).toHaveLength(1);
   });
 });

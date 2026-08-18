@@ -2,7 +2,7 @@
 
 import { requireAuth } from '@/lib/auth';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
-import { toReelBlock, type ReelBlock } from '@/lib/reels/blocks';
+import { REEL_BLOCK_COLUMNS, toReelBlock, type ReelBlock } from '@/lib/reels/blocks';
 import { findPreset } from '@/lib/reels/presets';
 import {
   createReelShareSet,
@@ -21,8 +21,7 @@ import {
  * wants anyway.
  */
 
-const COLS =
-  'id,project_id,order_index,kind,speaker,spoken,screen_text,record_note,asset_kind,asset_note,asset_url,edit_note,overlays,clips,images,audio_source,duration_sec';
+const COLS = REEL_BLOCK_COLUMNS;
 
 /** Does this reel belong to the signed-in user? */
 async function ownsReel(
