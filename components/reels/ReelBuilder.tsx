@@ -35,6 +35,7 @@ import {
   duplicateReelBlock,
   reorderReelBlocks,
   setReelDefaultAudio,
+  setReelOverview,
   updateReelBlock,
   type BlockPatch,
 } from '@/app/reel-block-actions';
@@ -146,6 +147,22 @@ export default function ReelBuilder({
       });
     },
     [project.id, reelAudio],
+  );
+
+  // «Про що цей рілс» — the brief. The storyboard says what happens beat by
+  // beat, which is not the same as knowing what the reel IS; for a purely
+  // edited video nothing carried the idea at all.
+  const [overview, setOverview] = useState(project.overview ?? '');
+  const saveOverview = useCallback(
+    (next: string) => {
+      setOverview(next);
+      persist('overview', () => {
+        void setReelOverview(project.id, next).then((res) => {
+          if (!res.ok) setError('Не вдалося зберегти опис.');
+        });
+      });
+    },
+    [persist, project.id],
   );
 
   const duplicate = useCallback(
@@ -260,7 +277,7 @@ export default function ReelBuilder({
   const tabs: { id: Tab; label: string; Icon: typeof FileText }[] = [
     { id: 'write', label: 'Сценарій', Icon: FileText },
     { id: 'shoot', label: 'Що знімаємо', Icon: Camera },
-    { id: 'edit', label: 'Монтаж', Icon: Clapperboard },
+    { id: 'edit', label: 'Як іде рілс', Icon: Clapperboard },
   ];
 
   return (
@@ -322,6 +339,25 @@ export default function ReelBuilder({
           {blocks.length} {blocks.length === 1 ? 'блок' : 'блоків'} · ~{formatDuration(seconds)}
           {shots ? ` · ${shots}` : ''}
         </p>
+
+        <div className="mb-4">
+          <label
+            htmlFor="reel-overview"
+            className="mb-1 block text-[10.5px] font-bold uppercase tracking-wide text-[color:var(--text-muted)]"
+          >
+            Про що цей рілс
+          </label>
+          <textarea
+            id="reel-overview"
+            value={overview}
+            onChange={(e) => saveOverview(e.target.value)}
+            rows={2}
+            maxLength={2000}
+            data-testid="reel-overview"
+            placeholder="Загальна ідея — що це за рілс, який настрій, що людина має відчути. Це перше, що прочитає той, хто монтує."
+            className="w-full resize-y rounded-[12px] border border-[color:var(--border)] bg-[color:var(--background)] px-3.5 py-2.5 text-[14px] leading-relaxed text-[color:var(--foreground)] outline-none transition-colors placeholder:text-[color:var(--text-muted)] focus:border-[color:var(--border-strong)]"
+          />
+        </div>
 
         <div
           role="tablist"
@@ -479,6 +515,7 @@ export default function ReelBuilder({
               only={tab === 'shoot' ? 'shoot' : 'edit'}
               done={done}
               reelAudio={reelAudio}
+              overview={tab === 'edit' ? overview : null}
             />
           </>
         )}

@@ -145,6 +145,8 @@ export type SharedReel = {
   scheduledDate: string | null;
   /** The reel's own sound — the editor is told it once, not per block. */
   defaultAudio: string | null;
+  /** «Про що цей рілс» — the brief, read before anything else. */
+  overview: string | null;
   blocks: ReelBlock[];
 };
 
@@ -189,6 +191,7 @@ export async function getSharedReelSet(token: string): Promise<SharedReelSet | n
         scheduledDate:
           typeof reel.scheduledDate === 'string' ? reel.scheduledDate.slice(0, 10) : null,
         defaultAudio: typeof reel.defaultAudio === 'string' ? reel.defaultAudio : null,
+        overview: typeof reel.overview === 'string' ? reel.overview : null,
         // The same parser the builder uses, so the shared page cannot read a
         // block differently from the screen it was written on.
         blocks: blocks.map((b) => toReelBlock(b as Record<string, unknown>)),

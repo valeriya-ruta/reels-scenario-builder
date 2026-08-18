@@ -67,6 +67,8 @@ export interface Project {
   status?: ContentStatus;
   /** The reel's own sound, that every block falls back to (migration 043). */
   default_audio_source?: string | null;
+  /** «Про що цей рілс» — the brief, shown first on the share (migration 044). */
+  overview?: string | null;
 }
 
 export interface Location {

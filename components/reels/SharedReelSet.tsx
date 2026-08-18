@@ -41,6 +41,7 @@ type SharedReel = {
   title: string;
   scheduledDate: string | null;
   defaultAudio: string | null;
+  overview: string | null;
   blocks: ReelBlock[];
 };
 
@@ -261,6 +262,7 @@ export default function SharedReelSet({
           done={done}
           onToggleDone={toggle}
           reelAudio={reelAudioOf(reel)}
+          overview={reel.overview}
         />
       )}
     </>

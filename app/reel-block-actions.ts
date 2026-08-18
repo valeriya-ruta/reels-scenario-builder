@@ -280,6 +280,27 @@ export async function applyReelPreset(
   return { ok: true, blocks: data.map((r) => toReelBlock(r as Record<string, unknown>)) };
 }
 
+/** «Про що цей рілс» — the brief the client reads first (migration 044). */
+export async function setReelOverview(
+  projectId: string,
+  overview: string,
+): Promise<{ ok: boolean }> {
+  const user = await requireAuth();
+  if (!user) return { ok: false };
+  const supabase = await createServerSupabaseClient();
+  const trimmed = overview.trim();
+  const { error } = await supabase
+    .from('projects')
+    .update({ overview: trimmed ? trimmed.slice(0, 2000) : null })
+    .eq('id', projectId)
+    .eq('user_id', user.id);
+  if (error) {
+    console.error('[reel-blocks] overview failed:', error.message);
+    return { ok: false };
+  }
+  return { ok: true };
+}
+
 /** The reel's own sound — what every block falls back to (migration 043). */
 export async function setReelDefaultAudio(
   projectId: string,
