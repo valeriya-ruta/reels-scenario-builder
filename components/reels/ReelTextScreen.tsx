@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { nanoid } from 'nanoid';
-import { Captions, Layers, ListChecks, Plus } from 'lucide-react';
+import { Keyboard, Link2, Loader2, Mic, MoreHorizontal, Sparkles } from 'lucide-react';
 import EditorTopBar from '@/components/ui/EditorTopBar';
 import StatusPill from '@/components/content/StatusPill';
 import ScheduleChip from '@/components/content/ScheduleChip';
@@ -11,11 +11,13 @@ import ClipCard from '@/components/reels/ClipCard';
 import AttachSheet from '@/components/reels/AttachSheet';
 import CleanScriptSheet from '@/components/reels/CleanScriptSheet';
 import OverlayListSheet from '@/components/reels/OverlayListSheet';
+import ReelMoreSheet from '@/components/reels/ReelMoreSheet';
+import MicButton, { type MicHandle } from '@/components/reels/MicButton';
 import { updateProjectName } from '@/app/actions';
 import {
   createReelBlock,
   deleteReelBlock,
-  reorderReelBlocks,
+  rewriteReel,
   updateReelBlock,
 } from '@/app/reel-actions';
 import { SaveQueue, saveLabel, type SaveQueueState } from '@/lib/reels/saveQueue';
@@ -28,40 +30,47 @@ import {
   type OverlayKind,
   type ReelBlock,
 } from '@/lib/reels/blocks';
-import { mergeBlockText, moveBlock, overlayForSelection, splitBlockText } from '@/lib/reels/edit';
+import { cleanScript } from '@/lib/reels/script';
+import {
+  insertAt,
+  mergeBlockText,
+  overlayForSelection,
+  redistributeOverlays,
+  splitBlockText,
+} from '@/lib/reels/edit';
 import { OFFERED_OVERLAY_KINDS, overlayStyle } from '@/lib/reels/overlayStyle';
+import { useKeyboardInset } from '@/lib/ui/keyboardInset';
 import type { Project } from '@/lib/domain';
 
 /**
- * The reel, as the text she is going to say.
+ * A reel is a note.
  *
- * One input. She writes, and marks a phrase to say what appears there; the shot
- * list, the editing list and the clean script are all derived and none of them
- * asks her for anything. The ten fields the old scene card wanted — framing,
- * pose, arm state, facing, camera motion, shot size, location, transition —
- * are gone from the screen entirely. They are the vocabulary of a shoot with a
- * crew, and she is one person holding a tripod.
+ * Not a scene list, not a form, not a builder — a white page you type on, with
+ * a mic, the way the idea actually gets captured today in Apple Notes or a
+ * message to yourself. The difference is that this note writes its own lists.
  *
- * Designed for the keyboard OPEN: that is this screen's normal state, not an
- * edge case. Everything repeated lives in the bottom third, because a thumb
- * does not reach the top of a 6" phone.
+ * Everything that made it read as a tool is gone: the numbered cards, the
+ * per-row reorder controls, the dashed «add» box in the middle of the writing,
+ * the scenes/text switch. Blocks are still the model underneath — the shot list
+ * and the editing list are derived from them — but she never sees the word.
  *
- * A paragraph is a block, so «По сценах» is a change of drawing rather than a
- * conversion — see lib/reels/edit.ts.
+ * ONE toolbar, and it changes rather than multiplying. Nothing selected: the
+ * mic, «Зробити рілс», and everything rarer behind ⋯. A phrase selected: what
+ * can go on top of it, and the two length buttons.
+ *
+ * The toolbar is offset by the keyboard's height rather than pinned to the
+ * bottom of the page — see useKeyboardInset. Pinned, it sat UNDERNEATH the
+ * keys, so selecting a phrase appeared to do nothing unless she dismissed the
+ * keyboard first, which on Android also cleared the selection she had just made.
  */
 
-/** Long enough to coalesce a burst of typing, short enough to not lose a thought. */
 const SAVE_DELAY_MS = 600;
 
-type View = 'yap' | 'scenes';
-
-/** Blocks not yet acknowledged by the server carry this prefix. */
 const DRAFT = 'draft:';
 const isDraft = (id: string) => id.startsWith(DRAFT);
+const draftId = () => `${DRAFT}${nanoid(8)}`;
 
-function draftId(): string {
-  return `${DRAFT}${nanoid(8)}`;
-}
+type Busy = null | 'reel' | 'shorter' | 'longer';
 
 export default function ReelTextScreen({
   project: initialProject,
@@ -76,17 +85,14 @@ export default function ReelTextScreen({
   const [blocks, setBlocks] = useState<ReelBlock[]>(() =>
     initialBlocks.length > 0 ? initialBlocks : [emptyBlock('talk', initialProject.id, 0, draftId())],
   );
-  // A reel that arrives as ONE block was dictated, not cut, so it opens as
-  // flowing text; one that arrives already in pieces was cut on purpose and
-  // opens as scenes. Decided once, at mount — after that it is her choice.
-  const [view, setView] = useState<View>(() => (initialBlocks.length > 1 ? 'scenes' : 'yap'));
   const [focusId, setFocusId] = useState<string | null>(null);
   const [caretAt, setCaretAt] = useState<number | null>(null);
   const [activeId, setActiveId] = useState<string | null>(blocks[0]?.id ?? null);
   const [selection, setSelection] = useState<{ start: number; end: number } | null>(null);
   const [openOverlay, setOpenOverlay] = useState<{ blockId: string; overlayId: string } | null>(null);
-  const [showScript, setShowScript] = useState(false);
-  const [showOverlays, setShowOverlays] = useState(false);
+  const [sheet, setSheet] = useState<null | 'more' | 'script' | 'overlays'>(null);
+  const [busy, setBusy] = useState<Busy>(null);
+  const [error, setError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveQueueState>({
     pending: 0,
     inFlight: 0,
@@ -94,10 +100,9 @@ export default function ReelTextScreen({
   });
   const [everSaved, setEverSaved] = useState(false);
 
-  // One queue for the lifetime of the screen, built lazily. Held in state
-  // rather than a ref because a ref read during render is exactly the pattern
-  // that silently stops updating; the value never changes, so nothing re-renders
-  // because of it.
+  const keyboard = useKeyboardInset();
+  const micRef = useRef<MicHandle>(null);
+
   const [queue] = useState(
     () =>
       new SaveQueue(SAVE_DELAY_MS, (s) => {
@@ -106,9 +111,6 @@ export default function ReelTextScreen({
       }),
   );
 
-  // Leaving is guarded and unsaved work is flushed. A 600ms debounce plus a
-  // reload is how writing was lost before; the queue makes that state knowable,
-  // and these two listeners are what act on it.
   useEffect(() => {
     const flush = () => queue.flush();
     const guard = (e: BeforeUnloadEvent) => {
@@ -126,18 +128,11 @@ export default function ReelTextScreen({
     };
   }, [queue]);
 
-  /**
-   * Persist one block. A draft has no row yet, so its first write CREATES it
-   * and every later write patches it — the id swap happens here rather than at
-   * each call site, which is what keeps a fast typist from creating two rows
-   * for one paragraph.
-   */
   const pendingCreates = useRef(new Map<string, Promise<string | null>>());
 
   const realIdFor = useCallback(
     async (block: ReelBlock): Promise<string | null> => {
       if (!isDraft(block.id)) return block.id;
-
       const started = pendingCreates.current.get(block.id);
       if (started) return started;
 
@@ -164,9 +159,7 @@ export default function ReelTextScreen({
       queue.schedule(`${block.id}:${field}`, async () => {
         const id = await realIdFor(block);
         if (!id) return false;
-        // The row was created with this content already; patching it again
-        // would be a second write saying the same thing.
-        if (isDraft(block.id)) return true;
+        if (isDraft(block.id)) return true; // the create carried this content
         const res = await updateReelBlock(id, {
           spoken: block.spoken,
           overlays: block.overlays,
@@ -180,17 +173,25 @@ export default function ReelTextScreen({
     [queue, realIdFor],
   );
 
+  /** Apply a whole new list and persist every row that changed. */
+  const commit = useCallback(
+    (next: ReelBlock[], field: string, changed?: ReelBlock[]) => {
+      setBlocks(next);
+      (changed ?? next).forEach((b) => save(b, field));
+    },
+    [save],
+  );
+
   const patchBlock = useCallback(
     (blockId: string, patch: Partial<ReelBlock>, field: string) => {
       const next = blocks.map((b) => (b.id === blockId ? { ...b, ...patch } : b));
-      setBlocks(next);
       const changed = next.find((b) => b.id === blockId);
+      setBlocks(next);
       if (changed) save(changed, field);
     },
     [blocks, save],
   );
 
-  /** A clip block holds ONE shot here; the operator edition allows a list. */
   const patchClip = useCallback(
     (blockId: string, patch: Partial<Clip>) => {
       const block = blocks.find((b) => b.id === blockId);
@@ -201,45 +202,24 @@ export default function ReelTextScreen({
     [blocks, patchBlock],
   );
 
-  // ── text ──────────────────────────────────────────────────────────────────
+  // ── typing ────────────────────────────────────────────────────────────────
 
-  const handleChange = (blockId: string, spoken: string) => {
-    patchBlock(blockId, { spoken }, 'spoken');
-  };
-
-  /**
-   * These handlers read `blocks` and compute the next list OUTSIDE the state
-   * updater, then set it.
-   *
-   * Deliberate: minting an id or scheduling a write inside `setBlocks(prev =>
-   * …)` is a side effect in what React treats as a pure reducer, and it runs
-   * twice in development — two ids for one paragraph, of which the screen keeps
-   * one and the database the other. They are event handlers, so `blocks` is
-   * already the current list and there is nothing to gain from the updater form.
-   */
-
-  /** Enter — this paragraph ends here and a new one starts. */
   const handleSplit = (blockId: string, at: number) => {
     const index = blocks.findIndex((b) => b.id === blockId);
     if (index === -1) return;
 
     const { head, tail } = splitBlockText(blocks[index], at);
-    const tailBlock: ReelBlock = {
-      ...emptyBlock('talk', project.id, index + 1, draftId()),
-      ...tail,
-    };
+    const tailBlock: ReelBlock = { ...emptyBlock('talk', project.id, index + 1, draftId()), ...tail };
 
     const next = [...blocks];
     next.splice(index, 1, { ...blocks[index], ...head }, tailBlock);
     const renumbered = next.map((b, i) => ({ ...b, orderIndex: i }));
 
-    setBlocks(renumbered);
     setFocusId(tailBlock.id);
     setCaretAt(0);
-    renumbered.forEach((b) => save(b, 'split'));
+    commit(renumbered, 'split');
   };
 
-  /** Backspace at the start — undo the paragraph, keeping both halves' marks. */
   const handleJoinUp = (blockId: string) => {
     const index = blocks.findIndex((b) => b.id === blockId);
     if (index <= 0) return;
@@ -256,49 +236,174 @@ export default function ReelTextScreen({
           : { ...b, orderIndex: i },
       );
 
-    setBlocks(next);
     setFocusId(above.id);
     setCaretAt(merged.joinAt);
-    next.forEach((b) => save(b, 'join'));
-    if (!isDraft(gone.id)) {
-      queue.now(async () => (await deleteReelBlock(gone.id)).ok);
-    }
-  };
-
-  const handleMove = (blockId: string, direction: -1 | 1) => {
-    const order = moveBlock(
-      blocks.map((b) => b.id),
-      blockId,
-      direction,
-    );
-    const byId = new Map(blocks.map((b) => [b.id, b]));
-    setBlocks(order.map((id, i) => ({ ...byId.get(id)!, orderIndex: i })));
-    // A draft has no row to reorder yet; its position is carried by the create.
-    if (order.every((id) => !isDraft(id))) {
-      queue.now(async () => (await reorderReelBlocks(project.id, order)).ok);
-    }
+    commit(next, 'join');
+    if (!isDraft(gone.id)) queue.now(async () => (await deleteReelBlock(gone.id)).ok);
   };
 
   const handleDelete = (blockId: string) => {
-    // Never leave the screen with nothing to type into.
     if (blocks.length === 1) return;
     const gone = blocks.find((b) => b.id === blockId);
-    setBlocks(blocks.filter((b) => b.id !== blockId).map((b, i) => ({ ...b, orderIndex: i })));
-    if (gone && !isDraft(gone.id)) {
-      queue.now(async () => (await deleteReelBlock(gone.id)).ok);
+    commit(
+      blocks.filter((b) => b.id !== blockId).map((b, i) => ({ ...b, orderIndex: i })),
+      'delete',
+    );
+    if (gone && !isDraft(gone.id)) queue.now(async () => (await deleteReelBlock(gone.id)).ok);
+  };
+
+  /** Dictation lands where the caret is, the way a notes app does it. */
+  const insertDictation = (piece: string) => {
+    const targetId = activeId ?? blocks[blocks.length - 1]?.id;
+    const block = blocks.find((b) => b.id === targetId);
+    if (!block) return;
+
+    const at = selection?.start ?? (block.spoken ?? '').length;
+    const result = insertAt(block.spoken ?? '', at, piece, block.overlays);
+
+    setFocusId(block.id);
+    setCaretAt(result.caret);
+    setSelection(null);
+    patchBlock(block.id, { spoken: result.text, overlays: result.overlays }, 'spoken');
+  };
+
+  // ── the AI buttons ────────────────────────────────────────────────────────
+
+  /**
+   * «Зробити рілс» — the whole note becomes a script with a hook on the front.
+   *
+   * Her attachments are re-homed onto the rewritten paragraphs rather than
+   * dropped: the words can be regenerated, the marks she made cannot.
+   */
+  const makeReel = async () => {
+    if (busy) return;
+    const source = cleanScript(blocks);
+    if (!source.trim()) {
+      setError('Спочатку напиши або наговори щось.');
+      return;
+    }
+
+    setBusy('reel');
+    setError(null);
+    const res = await rewriteReel(source, 'reel');
+    setBusy(null);
+    if (!res.ok) {
+      setError(res.error);
+      return;
+    }
+
+    const paragraphs = res.data.text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+    if (paragraphs.length === 0) {
+      setError('Модель повернула порожній текст. Спробуй ще раз.');
+      return;
+    }
+
+    const allOverlays = blocks.flatMap((b) => b.overlays);
+    const homes = redistributeOverlays(paragraphs, allOverlays);
+    // Clip cards are not speech and are not part of the rewrite — they keep
+    // their place at the end rather than being regenerated away.
+    const clipBlocks = blocks.filter((b) => b.kind === 'broll');
+
+    const rewritten: ReelBlock[] = paragraphs.map((text, i) => {
+      const reuse = blocks[i] && blocks[i].kind !== 'broll' ? blocks[i] : null;
+      return reuse
+        ? { ...reuse, spoken: text, overlays: homes[i], orderIndex: i }
+        : { ...emptyBlock('talk', project.id, i, draftId()), spoken: text, overlays: homes[i] };
+    });
+
+    const dropped = blocks.filter(
+      (b) => b.kind !== 'broll' && !rewritten.some((r) => r.id === b.id) && !isDraft(b.id),
+    );
+
+    const next = [...rewritten, ...clipBlocks].map((b, i) => ({ ...b, orderIndex: i }));
+    commit(next, 'rewrite');
+    for (const gone of dropped) queue.now(async () => (await deleteReelBlock(gone.id)).ok);
+
+    if (res.data.title) {
+      setProject((p) => ({ ...p, name: res.data.title! }));
+      queue.now(async () => (await updateProjectName(project.id, res.data.title!)).ok);
     }
   };
 
   /**
-   * A shot with no words — one video, one caption. A whole reel of these is a
-   * trend reel, which is a first-class thing here and not an edge case.
-   *
-   * It carries no sound of its OWN: `emptyBlock` starts a cutaway at «голос
-   * продовжується поверх», which is right when a cutaway interrupts talking and
-   * wrong here, where there is no voice to continue. Leaving it null lets the
-   * reel's own sound cover it, stated once instead of on all ten clips.
+   * Коротше / Довше — on the selected phrase when there is one, otherwise on
+   * the whole note. Selecting first is how you say «this bit», and having to
+   * explain that in a menu would be a worse app.
    */
-  const addSilentCard = () => {
+  const resize = async (mode: 'shorter' | 'longer') => {
+    if (busy) return;
+    const block = activeId ? blocks.find((b) => b.id === activeId) : null;
+    const scoped = selection && block ? (block.spoken ?? '').slice(selection.start, selection.end) : '';
+    const source = scoped.trim() || cleanScript(blocks);
+    if (!source.trim()) {
+      setError('Спочатку напиши або наговори щось.');
+      return;
+    }
+
+    setBusy(mode);
+    setError(null);
+    const res = await rewriteReel(source, mode);
+    setBusy(null);
+    if (!res.ok) {
+      setError(res.error);
+      return;
+    }
+
+    if (scoped.trim() && block && selection) {
+      // Splice back into the phrase's own place, so the paragraph around it and
+      // every anchor after it stay where they were.
+      const text = block.spoken ?? '';
+      const replaced = text.slice(0, selection.start) + res.data.text + text.slice(selection.end);
+      const shift = res.data.text.length - (selection.end - selection.start);
+      patchBlock(
+        block.id,
+        {
+          spoken: replaced,
+          overlays: block.overlays.map((o) =>
+            o.anchorStart >= selection.end ? { ...o, anchorStart: o.anchorStart + shift } : o,
+          ),
+        },
+        'spoken',
+      );
+      setSelection(null);
+      return;
+    }
+
+    const paragraphs = res.data.text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+    if (paragraphs.length === 0) return;
+    const homes = redistributeOverlays(paragraphs, blocks.flatMap((b) => b.overlays));
+    const clipBlocks = blocks.filter((b) => b.kind === 'broll');
+    const rewritten: ReelBlock[] = paragraphs.map((text, i) => {
+      const reuse = blocks[i] && blocks[i].kind !== 'broll' ? blocks[i] : null;
+      return reuse
+        ? { ...reuse, spoken: text, overlays: homes[i], orderIndex: i }
+        : { ...emptyBlock('talk', project.id, i, draftId()), spoken: text, overlays: homes[i] };
+    });
+    const dropped = blocks.filter(
+      (b) => b.kind !== 'broll' && !rewritten.some((r) => r.id === b.id) && !isDraft(b.id),
+    );
+    commit([...rewritten, ...clipBlocks].map((b, i) => ({ ...b, orderIndex: i })), 'rewrite');
+    for (const gone of dropped) queue.now(async () => (await deleteReelBlock(gone.id)).ok);
+  };
+
+  /** A reference's words, dropped in as the note's text. */
+  const applyReferenceText = (text: string) => {
+    const paragraphs = text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+    const list = paragraphs.length > 0 ? paragraphs : [text.trim()];
+    const rewritten: ReelBlock[] = list.map((spoken, i) => {
+      const reuse = blocks[i] && blocks[i].kind !== 'broll' ? blocks[i] : null;
+      return reuse
+        ? { ...reuse, spoken, overlays: [], orderIndex: i }
+        : { ...emptyBlock('talk', project.id, i, draftId()), spoken };
+    });
+    const dropped = blocks.filter(
+      (b) => b.kind !== 'broll' && !rewritten.some((r) => r.id === b.id) && !isDraft(b.id),
+    );
+    commit(rewritten.map((b, i) => ({ ...b, orderIndex: i })), 'reference');
+    for (const gone of dropped) queue.now(async () => (await deleteReelBlock(gone.id)).ok);
+  };
+
+  const addClipCard = () => {
     const card: ReelBlock = {
       ...emptyBlock('broll', project.id, blocks.length, draftId()),
       audioSource: null,
@@ -311,9 +416,8 @@ export default function ReelTextScreen({
   // ── attachments ───────────────────────────────────────────────────────────
 
   const attach = (kind: OverlayKind) => {
-    const blockId = activeId;
-    if (!blockId || !selection) return;
-    const block = blocks.find((b) => b.id === blockId);
+    if (!activeId || !selection) return;
+    const block = blocks.find((b) => b.id === activeId);
     if (!block) return;
 
     const overlay = overlayForSelection(
@@ -323,9 +427,9 @@ export default function ReelTextScreen({
       selection.start,
       selection.end,
     );
-    patchBlock(blockId, { overlays: [...block.overlays, overlay] }, 'overlays');
+    patchBlock(block.id, { overlays: [...block.overlays, overlay] }, 'overlays');
     setSelection(null);
-    setOpenOverlay({ blockId, overlayId: overlay.id });
+    setOpenOverlay({ blockId: block.id, overlayId: overlay.id });
   };
 
   const changeOverlay = (patch: Partial<Overlay>) => {
@@ -334,11 +438,7 @@ export default function ReelTextScreen({
     if (!block) return;
     patchBlock(
       block.id,
-      {
-        overlays: block.overlays.map((o) =>
-          o.id === openOverlay.overlayId ? { ...o, ...patch } : o,
-        ),
-      },
+      { overlays: block.overlays.map((o) => (o.id === openOverlay.overlayId ? { ...o, ...patch } : o)) },
       'overlays',
     );
   };
@@ -356,25 +456,22 @@ export default function ReelTextScreen({
     setOpenOverlay(null);
   };
 
-  const activeOverlay =
-    openOverlay
-      ? (blocks
-          .find((b) => b.id === openOverlay.blockId)
-          ?.overlays.find((o) => o.id === openOverlay.overlayId) ?? null)
-      : null;
+  const activeOverlay = openOverlay
+    ? (blocks
+        .find((b) => b.id === openOverlay.blockId)
+        ?.overlays.find((o) => o.id === openOverlay.overlayId) ?? null)
+    : null;
 
   // ── header ────────────────────────────────────────────────────────────────
 
   const seconds = useMemo(() => estimateSeconds(blocks), [blocks]);
-  const hasContent = useMemo(
-    () => blocks.some((b) => (b.spoken ?? '').trim() || b.clips.length > 0 || b.overlays.length > 0),
-    [blocks],
-  );
-  const overlayCount = useMemo(
-    () => blocks.reduce((n, b) => n + b.overlays.length, 0),
-    [blocks],
-  );
+  const overlayCount = useMemo(() => blocks.reduce((n, b) => n + b.overlays.length, 0), [blocks]);
   const label = saveLabel(saveState, everSaved);
+  const hasWriting = useMemo(() => cleanScript(blocks).trim().length > 0, [blocks]);
+  const hasContent = useMemo(
+    () => hasWriting || blocks.some((b) => b.clips.length > 0 || b.overlays.length > 0),
+    [blocks, hasWriting],
+  );
 
   const rename = async (next: string) => {
     const previous = project.name;
@@ -383,11 +480,14 @@ export default function ReelTextScreen({
     if (!res.ok) setProject((p) => ({ ...p, name: previous }));
   };
 
+  const BAR_HEIGHT = 68;
+
   return (
-    <div className="app-canvas">
-      {/* Bottom padding clears the fixed action bar — the script's last line
-          must never sit under it. */}
-      <div className="mx-auto max-w-[680px] px-4 pb-44 pt-4">
+    <div className="app-canvas min-h-dvh">
+      <div
+        className="mx-auto max-w-[680px] px-4 pt-4"
+        style={{ paddingBottom: BAR_HEIGHT + keyboard + 40 }}
+      >
         <EditorTopBar
           backHref={backHref}
           title={project.name}
@@ -415,109 +515,164 @@ export default function ReelTextScreen({
           }
         />
 
-        <div className={view === 'scenes' ? 'flex flex-col gap-3' : 'flex flex-col gap-1'}>
+        {/* The note. No numbers, no cards, no chrome — paragraphs on a page. */}
+        <div className="flex flex-col">
           {blocks.map((block, i) =>
-            // A clip block is a shot, not a sentence — it gets the card, which
-            // asks what is on screen instead of what is said.
             block.kind === 'broll' ? (
-              <ClipCard
+              <div key={block.id} className="my-2">
+                <ClipCard
+                  block={block}
+                  index={i + 1}
+                  reelId={project.id}
+                  canMoveUp={false}
+                  canMoveDown={false}
+                  onChangeClip={(patch) => patchClip(block.id, patch)}
+                  onMove={() => {}}
+                  onDelete={() => handleDelete(block.id)}
+                />
+              </div>
+            ) : (
+              <ParagraphRow
                 key={block.id}
                 block={block}
                 index={i + 1}
-                reelId={project.id}
+                numbered={false}
+                active={activeId === block.id}
+                autoFocus={focusId === block.id}
+                caretAt={focusId === block.id ? caretAt : null}
+                placeholder={i === 0 ? 'Пиши або тисни мікрофон…' : undefined}
                 canMoveUp={i > 0}
                 canMoveDown={i < blocks.length - 1}
-                onChangeClip={(patch) => patchClip(block.id, patch)}
-                onMove={(d) => handleMove(block.id, d)}
+                onChange={(spoken) => patchBlock(block.id, { spoken }, 'spoken')}
+                onSelectionChange={(sel) => {
+                  setActiveId(block.id);
+                  setSelection(sel);
+                }}
+                onSplit={(at) => handleSplit(block.id, at)}
+                onJoinUp={() => handleJoinUp(block.id)}
+                onMove={() => {}}
                 onDelete={() => handleDelete(block.id)}
+                onOpenOverlay={(overlayId) => setOpenOverlay({ blockId: block.id, overlayId })}
+                onFocus={() => setActiveId(block.id)}
               />
-            ) : (
-            <ParagraphRow
-              key={block.id}
-              block={block}
-              index={i + 1}
-              numbered={view === 'scenes'}
-              autoFocus={focusId === block.id}
-              caretAt={focusId === block.id ? caretAt : null}
-              placeholder={i === 0 ? 'Що ти скажеш…' : undefined}
-              canMoveUp={i > 0}
-              canMoveDown={i < blocks.length - 1}
-              active={activeId === block.id}
-              onChange={(spoken) => handleChange(block.id, spoken)}
-              onSelectionChange={(sel) => {
-                setActiveId(block.id);
-                setSelection(sel);
-              }}
-              onSplit={(at) => handleSplit(block.id, at)}
-              onJoinUp={() => handleJoinUp(block.id)}
-              onMove={(d) => handleMove(block.id, d)}
-              onDelete={() => handleDelete(block.id)}
-              onOpenOverlay={(overlayId) => setOpenOverlay({ blockId: block.id, overlayId })}
-              onFocus={() => setActiveId(block.id)}
-            />
             ),
           )}
         </div>
 
-        {/* An empty reel is a blank note, not a form. The dashed box is an
-            instruction to do something before there is anything to do it to,
-            so it appears only once the reel has content. */}
-        {hasContent ? (
-          <button
-            type="button"
-            onClick={addSilentCard}
-            className="mt-4 w-full rounded-[14px] border-2 border-dashed border-[color:var(--border)] px-4 py-4 text-[14px] font-medium text-[color:var(--text-muted)]"
-          >
-            + Кадр без слів
-          </button>
+        {error ? (
+          <p role="alert" className="mt-3 text-[13px] text-red-600">
+            {error}
+          </p>
         ) : null}
       </div>
 
-      {/* Selection bar — rises above the action bar, on the keyboard, because
-          that is where her thumb already is when a phrase is selected. */}
-      {selection ? (
+      {/*
+        An empty note is a blank box, and a blank box is the hardest thing to
+        start from. So the three ways in are shown IN the note until there is
+        something in it — not as a screen before it, which would tax the case
+        where she already knows what she is writing. They vanish for good on the
+        first word.
+      */}
+      {!hasContent ? (
         <div
-          data-testid="attach-bar"
-          className="fixed inset-x-3 bottom-[86px] z-[60] flex gap-1 rounded-[16px] bg-[#14151F] p-1.5 shadow-[0_18px_50px_rgba(20,21,31,0.32)]"
+          data-testid="reel-doors"
+          className="pointer-events-none fixed inset-x-0 z-40 px-4"
+          style={{ bottom: keyboard + BAR_HEIGHT + 12 }}
         >
-          {OFFERED_OVERLAY_KINDS.map((kind) => (
-            <button
-              key={kind}
-              type="button"
-              data-kind={kind}
-              // The textarea must keep its selection while this is tapped.
-              onMouseDown={(e) => e.preventDefault()}
-              onTouchStart={(e) => e.preventDefault()}
-              onClick={() => attach(kind)}
-              className="flex min-h-11 flex-1 flex-col items-center justify-center gap-0.5 rounded-[12px] py-1.5 text-[11px] font-semibold text-white/90 active:bg-white/15"
-            >
-              <span aria-hidden className="text-[15px] leading-none">
-                {overlayStyle(kind).glyph}
-              </span>
-              {overlayStyle(kind).label}
-            </button>
-          ))}
+          <div className="pointer-events-auto mx-auto flex max-w-[680px] flex-col gap-2">
+            <Door
+              primary
+              icon={<Mic className="h-5 w-5" />}
+              title="Наговорити"
+              hint="Розкажи, як другові. Далі одна кнопка зробить із цього рілс."
+              onClick={() => micRef.current?.start()}
+            />
+            <Door
+              icon={<Keyboard className="h-5 w-5" />}
+              title="Написати"
+              hint="Просто почни друкувати."
+              onClick={() => {
+                const first = blocks[0];
+                if (first) {
+                  setActiveId(first.id);
+                  setFocusId(first.id);
+                  setCaretAt(0);
+                }
+              }}
+            />
+            <Door
+              icon={<Link2 className="h-5 w-5" />}
+              title="З референсу"
+              hint="Встав посилання на Reels — витягну з нього текст."
+              onClick={() => setSheet('more')}
+            />
+          </div>
         </div>
       ) : null}
 
-      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-[color:var(--border)] bg-[color:var(--surface1)] px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-2">
-        <div className="mx-auto flex max-w-[680px] gap-1.5">
-          <BarButton
-            active={view === 'scenes'}
-            label={view === 'scenes' ? 'Суцільно' : 'По сценах'}
-            onClick={() => setView((v) => (v === 'scenes' ? 'yap' : 'scenes'))}
-          >
-            <Layers className="h-4 w-4" />
-          </BarButton>
-          <BarButton label="Чистий текст" onClick={() => setShowScript(true)}>
-            <Captions className="h-4 w-4" />
-          </BarButton>
-          <BarButton label="Що поверх" onClick={() => setShowOverlays(true)}>
-            <ListChecks className="h-4 w-4" />
-          </BarButton>
-          <BarButton label="Кадр" onClick={addSilentCard}>
-            <Plus className="h-4 w-4" />
-          </BarButton>
+      {/* One toolbar, lifted clear of the keyboard. */}
+      <div
+        data-testid="reel-toolbar"
+        className="fixed inset-x-0 z-50 border-t border-[color:var(--border)] bg-[color:var(--surface1)] px-2 py-2"
+        style={{ bottom: keyboard, paddingBottom: keyboard > 0 ? 8 : undefined }}
+      >
+        <div className="mx-auto flex max-w-[680px] items-center gap-1.5">
+          {selection ? (
+            <>
+              {OFFERED_OVERLAY_KINDS.map((kind) => (
+                <button
+                  key={kind}
+                  type="button"
+                  data-kind={kind}
+                  aria-label={overlayStyle(kind).label}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onTouchStart={(e) => e.preventDefault()}
+                  onClick={() => attach(kind)}
+                  className="flex h-11 flex-1 items-center justify-center rounded-[12px] text-[17px]"
+                  style={{ backgroundColor: overlayStyle(kind).wash }}
+                >
+                  <span aria-hidden>{overlayStyle(kind).glyph}</span>
+                </button>
+              ))}
+              <ToolButton
+                label="Коротше"
+                busy={busy === 'shorter'}
+                onClick={() => void resize('shorter')}
+              />
+              <ToolButton
+                label="Довше"
+                busy={busy === 'longer'}
+                onClick={() => void resize('longer')}
+              />
+            </>
+          ) : (
+            <>
+              <MicButton ref={micRef} onText={insertDictation} onError={setError} />
+              <button
+                type="button"
+                data-testid="make-reel"
+                disabled={busy !== null || !hasWriting}
+                onClick={() => void makeReel()}
+                className="flex h-11 flex-1 items-center justify-center gap-2 rounded-[12px] bg-[color:var(--accent)] text-[14px] font-semibold text-white disabled:opacity-40"
+              >
+                {busy === 'reel' ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4" />
+                )}
+                {busy === 'reel' ? 'Роблю…' : 'Зробити рілс'}
+              </button>
+              <button
+                type="button"
+                data-testid="more"
+                aria-label="Ще"
+                onClick={() => setSheet('more')}
+                className="flex h-11 w-11 items-center justify-center rounded-[12px] text-[color:var(--text-secondary)]"
+              >
+                <MoreHorizontal className="h-5 w-5" />
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -529,13 +684,93 @@ export default function ReelTextScreen({
         onChange={changeOverlay}
         onDelete={removeOverlay}
       />
-      <CleanScriptSheet open={showScript} blocks={blocks} onClose={() => setShowScript(false)} />
-      <OverlayListSheet
-        open={showOverlays}
-        blocks={blocks}
-        onClose={() => setShowOverlays(false)}
+      <ReelMoreSheet
+        open={sheet === 'more'}
+        project={project}
+        script={cleanScript(blocks)}
+        hasWriting={hasWriting}
+        onClose={() => setSheet(null)}
+        onOpenScript={() => setSheet('script')}
+        onOpenOverlays={() => setSheet('overlays')}
+        onAddClip={() => {
+          setSheet(null);
+          addClipCard();
+        }}
+        onProjectUpdate={setProject}
+        onReferenceText={applyReferenceText}
       />
+      <CleanScriptSheet open={sheet === 'script'} blocks={blocks} onClose={() => setSheet(null)} />
+      <OverlayListSheet open={sheet === 'overlays'} blocks={blocks} onClose={() => setSheet(null)} />
     </div>
+  );
+}
+
+function Door({
+  icon,
+  title,
+  hint,
+  primary = false,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  hint: string;
+  primary?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      data-testid="door"
+      data-door={title}
+      onClick={onClick}
+      className="flex w-full items-start gap-3 rounded-[16px] border p-3.5 text-left"
+      style={{
+        borderColor: primary ? 'var(--accent)' : 'var(--border)',
+        backgroundColor: primary ? 'var(--accent-soft)' : 'var(--surface)',
+      }}
+    >
+      <span
+        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px]"
+        style={{
+          backgroundColor: primary ? 'var(--accent)' : 'var(--surface1)',
+          color: primary ? '#fff' : 'var(--text-secondary)',
+        }}
+      >
+        {icon}
+      </span>
+      <span className="min-w-0">
+        <span className="block text-[15px] font-semibold text-[color:var(--foreground)]">{title}</span>
+        <span className="mt-0.5 block text-[12.5px] leading-snug text-[color:var(--text-muted)]">
+          {hint}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+function ToolButton({
+  label,
+  busy,
+  onClick,
+}: {
+  label: string;
+  busy: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      data-testid={`tool-${label}`}
+      // Tapping must not take the selection away — that is what the button acts on.
+      onMouseDown={(e) => e.preventDefault()}
+      onTouchStart={(e) => e.preventDefault()}
+      onClick={onClick}
+      className="flex h-11 flex-1 items-center justify-center gap-1 rounded-[12px] border border-[color:var(--border)] bg-[color:var(--background)] px-2 text-[13px] font-semibold text-[color:var(--foreground)]"
+    >
+      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+      {label}
+    </button>
   );
 }
 
@@ -559,33 +794,5 @@ function SaveChip({ label }: { label: ReturnType<typeof saveLabel> }) {
     >
       {text}
     </span>
-  );
-}
-
-function BarButton({
-  label,
-  active = false,
-  onClick,
-  children,
-}: {
-  label: string;
-  active?: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex min-h-11 flex-1 flex-col items-center justify-center gap-0.5 rounded-[12px] px-1 py-1.5 text-[11px] font-semibold"
-      style={{
-        backgroundColor: active ? 'var(--background)' : 'transparent',
-        color: active ? 'var(--foreground)' : 'var(--text-muted)',
-        boxShadow: active ? 'var(--elev-1)' : undefined,
-      }}
-    >
-      {children}
-      {label}
-    </button>
   );
 }

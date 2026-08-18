@@ -17,9 +17,6 @@ export function isImmersiveEditorRoute(pathname: string): boolean {
     // /project/<id> — the reels list lives at /projects (no slash collision).
     pathname.startsWith('/project/') ||
     // /storytelling/<id> — the list lives at /storytellings (no slash collision).
-    pathname.startsWith('/storytelling/') ||
-    // /reel/new — Створення is one decision wide; the global nav on it is an
-    // invitation to leave before making it.
-    pathname.startsWith('/reel/')
+    pathname.startsWith('/storytelling/')
   );
 }

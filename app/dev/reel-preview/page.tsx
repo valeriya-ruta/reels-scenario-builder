@@ -27,6 +27,7 @@ export default function ReelPreviewPage() {
     updated_at: new Date(0).toISOString(),
     user_id: '00000000-0000-4000-8000-000000000001',
     status: 'idea',
+    caption: null,
     scheduled_date: null,
   };
 

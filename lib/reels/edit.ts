@@ -134,3 +134,85 @@ export function overlayForSelection(
     note: '',
   };
 }
+
+/**
+ * Re-home attachments after the text has been rewritten.
+ *
+ * «Зробити рілс» hands back a different script: shorter, reordered, with a hook
+ * in front. The old anchors point into text that no longer exists, so without
+ * this every attachment she made would come back detached — the app would have
+ * quietly thrown away the only part of the reel it cannot regenerate.
+ *
+ * Each one goes to the paragraph that still contains its phrase. One whose
+ * words the rewrite removed lands on the nearest paragraph by position and is
+ * left detached: shown, flagged, and hers to fix. Silently dropping an editing
+ * instruction is the one outcome that is never acceptable.
+ */
+export function redistributeOverlays(
+  paragraphs: readonly string[],
+  overlays: readonly Overlay[],
+): Overlay[][] {
+  const out: Overlay[][] = paragraphs.map(() => []);
+  if (paragraphs.length === 0) return out;
+
+  for (const o of overlays) {
+    const phrase = (o.anchorText ?? '').trim();
+    let target = -1;
+    let at = -1;
+
+    if (phrase) {
+      for (let i = 0; i < paragraphs.length; i++) {
+        const found = paragraphs[i].indexOf(phrase);
+        if (found !== -1) {
+          target = i;
+          at = found;
+          break;
+        }
+      }
+    }
+
+    if (target === -1) {
+      // Nowhere to anchor: keep it near where it used to be so it is at least
+      // in the right half of the reel when she goes looking for it.
+      target = Math.min(paragraphs.length - 1, Math.max(0, out.findIndex((l) => l.length === 0)));
+      if (target < 0) target = paragraphs.length - 1;
+      at = 0;
+    }
+
+    out[target].push({ ...o, anchorStart: at });
+  }
+
+  return out;
+}
+
+/**
+ * Put `insert` into `text` at `at`, and say where the caret ends up.
+ *
+ * This is what dictation does: she taps the mic mid-sentence and the words land
+ * where she was, not at the end. Anchors after the insertion point shift by its
+ * length, or they would slide onto the wrong words.
+ */
+export function insertAt(
+  text: string,
+  at: number,
+  insert: string,
+  overlays: readonly Overlay[] = [],
+): { text: string; caret: number; overlays: Overlay[] } {
+  const cut = Math.max(0, Math.min(at, text.length));
+  const before = text.slice(0, cut);
+  const after = text.slice(cut);
+
+  // A dictated sentence needs a space against what it lands on, but not a
+  // doubled one, and not one at the very start of an empty note.
+  const lead = before && !/\s$/.test(before) ? ' ' : '';
+  const tail = after && !/^\s/.test(after) ? ' ' : '';
+  const piece = `${lead}${insert}${tail}`;
+
+  return {
+    text: `${before}${piece}${after}`,
+    caret: cut + lead.length + insert.length,
+    overlays: overlays.map((o) =>
+      o.anchorStart >= cut ? { ...o, anchorStart: o.anchorStart + piece.length } : o,
+    ),
+  };
+}

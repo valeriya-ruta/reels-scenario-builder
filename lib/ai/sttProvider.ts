@@ -1,12 +1,15 @@
 import 'server-only';
 
-import { requireServerEnv } from '@/lib/env';
+import { transcribeFile } from '@/lib/ai/aiProvider';
+import { NO_SPEECH_ERROR, isNoSpeechTranscript, segmentsSayNoSpeech } from '@/lib/ai/noSpeech';
 import { isAbsoluteHttpUrlString } from '@/lib/isAbsoluteHttpUrl';
 
 export interface TranscriptSegment {
   startSec: number;
   endSec: number;
   text: string;
+  /** Whisper's own "there was nothing here" score, when the provider returns it. */
+  noSpeechProb?: number;
 }
 
 export interface TranscriptResult {
@@ -21,6 +24,7 @@ interface GroqSegment {
   start?: number;
   end?: number;
   text?: string;
+  no_speech_prob?: number;
 }
 
 interface GroqTranscriptionResponse {
@@ -39,6 +43,9 @@ function normalizeSegments(segments: GroqSegment[] | undefined): TranscriptSegme
       startSec: Number(segment.start ?? 0),
       endSec: Number(segment.end ?? 0),
       text: (segment.text ?? '').trim(),
+      ...(typeof segment.no_speech_prob === 'number'
+        ? { noSpeechProb: segment.no_speech_prob }
+        : {}),
     }))
     .filter((segment) => segment.text.length > 0);
 }
@@ -64,26 +71,7 @@ function guessInputExt(contentType: string, mediaUrl: string): string {
   return 'mp4';
 }
 
-function buildGroqFormData(language?: string): FormData {
-  const formData = new FormData();
-  formData.append('model', 'whisper-large-v3-turbo');
-  formData.append('response_format', 'verbose_json');
-  formData.append('temperature', '0');
-  if (language) {
-    formData.append('language', language);
-  }
-  return formData;
-}
-
-async function groqTranscribe(apiKey: string, formData: FormData): Promise<Response> {
-  return fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: formData,
-  });
-}
+const transcribe = transcribeFile;
 
 async function parseTranscriptionResponse(sttRes: Response): Promise<TranscriptResult> {
   const parsed = (await sttRes.json()) as GroqTranscriptionResponse;
@@ -93,6 +81,11 @@ async function parseTranscriptionResponse(sttRes: Response): Promise<TranscriptR
   }
 
   const segments = normalizeSegments(parsed.segments);
+  // Whisper answers even when nobody spoke, so "success" is not the same as
+  // "there was speech" — see lib/ai/noSpeech.
+  if (segmentsSayNoSpeech(segments) || isNoSpeechTranscript(transcript)) {
+    throw new Error(NO_SPEECH_ERROR);
+  }
   return {
     language: parsed.language ?? null,
     transcript,
@@ -104,16 +97,14 @@ const GROQ_AUDIO_MAX_BYTES = GROQ_MAX_UPLOAD_BYTES;
 
 /**
  * Transcribes raw audio bytes uploaded directly from the browser (MediaRecorder
- * capture), reusing the exact same Groq Whisper path as reel transcription —
- * same key, same direct-bytes FormData upload, same `whisper-large-v3-turbo`
- * model. No ffmpeg, no remote fetch. Used by the braindump voice capture.
+ * capture), reusing the exact same Whisper path as reel transcription — same
+ * key, same direct-bytes FormData upload, same `whisper-large-v3-turbo` model.
+ * No ffmpeg, no remote fetch. Used by the braindump voice capture.
  */
 export async function transcribeAudioFile(
   audio: File | Blob,
   options: { language?: string; filename?: string } = {}
 ): Promise<TranscriptResult> {
-  const apiKey = requireServerEnv('GROQ_API_KEY');
-
   const size = audio.size ?? 0;
   if (size === 0) {
     throw new Error('Порожній аудіозапис. Спробуй записати ще раз.');
@@ -126,10 +117,7 @@ export async function transcribeAudioFile(
   const name = options.filename || (audio as File).name || 'braindump.webm';
   const upload = audio instanceof File ? audio : new File([audio], name, { type });
 
-  const formData = buildGroqFormData(options.language);
-  formData.append('file', upload);
-
-  const sttRes = await groqTranscribe(apiKey, formData);
+  const sttRes = await transcribe(upload, options.language);
   if (!sttRes.ok) {
     const body = await sttRes.text();
     throw new Error(`Помилка транскрипції (${sttRes.status}): ${body.slice(0, 500)}`);
@@ -144,13 +132,12 @@ export async function transcribeAudioFile(
 }
 
 /**
- * Transcribes audio from a remote media file. Intentionally does **not** pass `url` to Groq:
- * Groq’s hosted fetch often fails on Instagram/TikTok CDNs and may return errors like
- * "Failed to parse URL from /pipeline" even when the URL is valid for server-side fetch.
+ * Transcribes audio from a remote media file. Intentionally does **not** hand the
+ * `url` to the STT service: its hosted fetch often fails on Instagram/TikTok CDNs
+ * and may return errors like "Failed to parse URL from /pipeline" even when the
+ * URL is valid for server-side fetch.
  */
 export async function transcribeMediaFromUrl(mediaUrl: string): Promise<TranscriptResult> {
-  const apiKey = requireServerEnv('GROQ_API_KEY');
-
   if (!isAbsoluteHttpUrlString(mediaUrl)) {
     throw new Error(
       'Отримано некоректне посилання на відео (потрібен повний https://…). Спробуй інше посилання або пізніше.'
@@ -192,10 +179,8 @@ export async function transcribeMediaFromUrl(mediaUrl: string): Promise<Transcri
   const inputExt = guessInputExt(contentType, mediaUrl);
   const filename = `reel.${inputExt}`;
   const upload = new File([new Uint8Array(rawBuf)], filename, { type: contentType });
-  const formFile = buildGroqFormData();
-  formFile.append('file', upload);
 
-  const sttRes = await groqTranscribe(apiKey, formFile);
+  const sttRes = await transcribe(upload);
 
   if (!sttRes.ok) {
     const body = await sttRes.text();

@@ -65,6 +65,8 @@ export interface Project {
   scheduled_date?: string | null;
   /** Content status for the status ring/picker (Status system). */
   status?: ContentStatus;
+  /** The text under the post — read silently, and NOT the spoken script. */
+  caption?: string | null;
 }
 
 export interface Location {

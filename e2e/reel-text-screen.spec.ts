@@ -14,6 +14,9 @@ test.use({ viewport: PHONE });
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/dev/reel-preview');
+  // The dev overlay portal sits over the bottom-left corner and swallows taps
+  // meant for the toolbar. It does not exist in a production build.
+  await page.addStyleTag({ content: 'nextjs-portal { display: none !important; }' });
   await expect(page.getByTestId('paragraph-row').first()).toBeVisible();
 });
 
@@ -30,6 +33,18 @@ test('nothing on screen asks for framing, pose or camera motion', async ({ page 
   for (const gone of ['Кадрування', 'Положення рук', 'Рух камери', 'Дія для переходу', 'Локація']) {
     expect(body).not.toContain(gone);
   }
+});
+
+test('it reads as a note: no scene numbers, no per-row controls, one toolbar', async ({ page }) => {
+  // The paragraphs carry no numbered badge and no up/down/delete row.
+  await expect(page.getByLabel('Вище')).toHaveCount(0);
+  await expect(page.getByLabel('Нижче')).toHaveCount(0);
+
+  const bar = page.getByTestId('reel-toolbar');
+  await expect(bar).toBeVisible();
+  // Three controls at rest — mic, «Зробити рілс», ⋯ — not a row of tabs.
+  await expect(bar.locator('button')).toHaveCount(3);
+  await expect(page.getByTestId('mic')).toBeVisible();
 });
 
 test('typing lands in the text and the duration follows it', async ({ page }) => {
@@ -84,8 +99,9 @@ test('selecting a phrase raises the attach bar, and picking a type attaches it',
   await first.evaluate((el: HTMLTextAreaElement) => el.setSelectionRange(0, 0));
   for (let i = 0; i < 8; i++) await first.press('Shift+ArrowRight');
 
-  const bar = page.getByTestId('attach-bar');
-  await expect(bar).toBeVisible();
+  // The one toolbar changes rather than a second bar appearing.
+  const bar = page.getByTestId('reel-toolbar');
+  await expect(bar.locator('[data-kind="video"]')).toBeVisible();
 
   // It sits in the bottom third — a thumb does not reach the top of a phone.
   const box = await bar.boundingBox();
@@ -99,6 +115,7 @@ test('selecting a phrase raises the attach bar, and picking a type attaches it',
 test('«Чистий текст» copies the script exactly, with its paragraph break', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
 
+  await page.getByTestId('more').click();
   await page.getByRole('button', { name: 'Чистий текст' }).click();
   await expect(page.getByTestId('clean-script')).toBeVisible();
   await page.getByTestId('copy-script').click();
@@ -113,6 +130,7 @@ test('«Чистий текст» copies the script exactly, with its paragraph 
 });
 
 test('«Що поверх» writes itself, with a timecode nobody typed', async ({ page }) => {
+  await page.getByTestId('more').click();
   await page.getByRole('button', { name: 'Що поверх' }).click();
   const rows = page.getByTestId('overlay-row');
   await expect(rows).toHaveCount(1);
@@ -121,6 +139,7 @@ test('«Що поверх» writes itself, with a timecode nobody typed', async 
 });
 
 test('a wordless card asks what is on screen, not what is said', async ({ page }) => {
+  await page.getByTestId('more').click();
   await page.getByRole('button', { name: 'Кадр', exact: true }).click();
   const card = page.getByTestId('clip-card');
   await expect(card).toBeVisible();

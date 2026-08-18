@@ -20,6 +20,11 @@ import { requireAuth } from '@/lib/auth';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import { REEL_BLOCK_COLUMNS, toReelBlock, type BlockKind, type ReelBlock } from '@/lib/reels/blocks';
 import { toBlockRow, type BlockPatch } from '@/lib/reels/blockRow';
+import { aiLimit, transcribeLimit } from '@/lib/ratelimit';
+import { generateCaption, rewriteReelText, type RewriteMode } from '@/lib/ai/reelText';
+import { resolveReferenceMediaUrl } from '@/lib/ai/referenceMedia';
+import { transcribeMediaFromUrl } from '@/lib/ai/sttProvider';
+import { sanitizePipelineErrorForUser } from '@/lib/sanitizePipelineError';
 
 type Result<T = undefined> =
   | (T extends undefined ? { ok: true } : { ok: true; data: T })
@@ -141,4 +146,111 @@ export async function reorderReelBlocks(projectId: string, ids: string[]): Promi
   const failed = results.find((r) => r.error);
   if (failed?.error) return { ok: false, error: failed.error.message };
   return { ok: true };
+}
+
+// ── what the note's buttons do ────────────────────────────────────────────
+
+/**
+ * Rewrite the whole note, or the phrase she selected.
+ *
+ * Returns text, never applies it. The screen decides what to do with the
+ * result, and — crucially — keeps the old text until the new one arrives, so a
+ * failed call leaves her writing exactly where it was rather than blank.
+ */
+export async function rewriteReel(
+  text: string,
+  mode: RewriteMode,
+): Promise<Result<{ text: string; title: string | null }>> {
+  const user = await requireAuth();
+  if (!user) return { ok: false, error: NO_AUTH };
+
+  const source = text.trim();
+  if (!source) return { ok: false, error: 'Спочатку напиши або наговори щось.' };
+
+  const { success } = await aiLimit.limit(user.id);
+  if (!success) return { ok: false, error: 'Ліміт запитів вичерпано. Спробуй пізніше.' };
+
+  try {
+    return { ok: true, data: await rewriteReelText(source, mode) };
+  } catch (error) {
+    const raw = error instanceof Error ? error.message : '';
+    return { ok: false, error: sanitizePipelineErrorForUser(raw || 'Не вдалося переписати текст.') };
+  }
+}
+
+/** The caption under the post, written from the script. */
+export async function writeCaption(script: string): Promise<Result<{ caption: string }>> {
+  const user = await requireAuth();
+  if (!user) return { ok: false, error: NO_AUTH };
+
+  const source = script.trim();
+  if (!source) return { ok: false, error: 'Спочатку напиши текст рілсу.' };
+
+  const { success } = await aiLimit.limit(user.id);
+  if (!success) return { ok: false, error: 'Ліміт запитів вичерпано. Спробуй пізніше.' };
+
+  try {
+    return { ok: true, data: { caption: await generateCaption(source) } };
+  } catch (error) {
+    const raw = error instanceof Error ? error.message : '';
+    return { ok: false, error: sanitizePipelineErrorForUser(raw || 'Не вдалося написати підпис.') };
+  }
+}
+
+/** Caption and reference live on the reel itself, not on any one block. */
+export async function saveReelMeta(
+  projectId: string,
+  patch: { caption?: string | null; referenceUrl?: string | null },
+): Promise<Result> {
+  const user = await requireAuth();
+  if (!user) return { ok: false, error: NO_AUTH };
+
+  const row: Record<string, unknown> = {};
+  if ('caption' in patch) row.caption = patch.caption;
+  if ('referenceUrl' in patch) row.reference_url = patch.referenceUrl;
+  if (Object.keys(row).length === 0) return { ok: true };
+
+  const supabase = await createServerSupabaseClient();
+  const { error } = await supabase
+    .from('projects')
+    .update(row)
+    .eq('id', projectId)
+    .eq('user_id', user.id);
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+/**
+ * Pull the words out of a reel someone else made.
+ *
+ * Returns them rather than writing them: whether they REPLACE what she has
+ * written or merely sit beside it as a reference is her decision, and the
+ * screen cannot ask once the text is already overwritten.
+ */
+export async function readReference(url: string): Promise<Result<{ text: string }>> {
+  const user = await requireAuth();
+  if (!user) return { ok: false, error: NO_AUTH };
+
+  const link = url.trim();
+  if (!link) return { ok: false, error: 'Встав посилання.' };
+
+  const tr = await transcribeLimit.limit(user.id);
+  if (!tr.success) return { ok: false, error: 'Ліміт запитів вичерпано. Спробуй пізніше.' };
+
+  try {
+    const { mediaUrl } = await resolveReferenceMediaUrl(link);
+    const transcript = await transcribeMediaFromUrl(mediaUrl);
+    const text = transcript.transcript.trim();
+    if (!text) return { ok: false, error: 'У цьому відео не знайшлося слів.' };
+    return { ok: true, data: { text } };
+  } catch (error) {
+    const raw = error instanceof Error ? error.message : '';
+    return {
+      ok: false,
+      error: sanitizePipelineErrorForUser(
+        raw || 'Не вдалося обробити посилання. Перевір, що Reel публічний.',
+      ),
+    };
+  }
 }

@@ -197,7 +197,12 @@ export default function ParagraphRow({
             onKeyUp={reportSelection}
             onMouseUp={reportSelection}
             onFocus={onFocus}
-            className={`${TEXT_METRICS} relative resize-none overflow-hidden bg-transparent px-0 py-1.5 text-[color:var(--foreground)] placeholder-[color:var(--text-muted)] outline-none`}
+            // The global focus ring is right for buttons and form fields and
+            // wrong here: browsers apply :focus-visible to a text field on TAP
+            // too, so every paragraph she touched drew a box around itself and
+            // the page read as a stack of inputs. The caret is the focus
+            // indicator in a document editor — same as Notes, same as Notion.
+            className={`${TEXT_METRICS} relative resize-none overflow-hidden bg-transparent px-0 py-1.5 text-[color:var(--foreground)] placeholder-[color:var(--text-muted)] outline-none focus:outline-none focus-visible:outline-none`}
           />
         </div>
       </div>
