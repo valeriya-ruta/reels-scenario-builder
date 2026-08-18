@@ -1,8 +1,8 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import {
   DndContext,
   DragOverlay,
@@ -26,8 +26,9 @@ import { contentHref } from '@/lib/content/contentPiece';
 import PlanCreateMenu from '@/components/plan/PlanCreateMenu';
 import CalendarShareButton from '@/components/plan/CalendarShareButton';
 import StagingPressureCard from '@/components/staging/StagingPressureCard';
+import PieceDetail from '@/components/share/PieceDetail';
 import type { ContentPiece } from '@/lib/content/contentPiece';
-import type { CalendarShareLink } from '@/lib/calendar/sharedCalendar';
+import type { CalendarShareLink, SharedPieceDetail } from '@/lib/calendar/sharedCalendar';
 import {
   monthGrid,
   monthLabel,
@@ -72,10 +73,13 @@ function DroppableDay({ dayKey, children }: { dayKey: string; children: React.Re
  */
 function DraggableContentCard({
   piece,
+  selected,
   onOpen,
   onAdvance,
 }: {
   piece: ContentPiece;
+  /** Currently shown in the panel beside the calendar. */
+  selected: boolean;
   onOpen: () => void;
   onAdvance: () => void;
 }) {
@@ -87,13 +91,19 @@ function DraggableContentCard({
       {...listeners}
       data-testid="cal-day-card"
       data-dragging={isDragging ? 'true' : 'false'}
+      data-selected={selected ? 'true' : 'false'}
       onClick={onOpen}
-      className="mb-2.5 cursor-grab rounded-[16px] border border-[color:var(--border)] bg-[color:var(--background)] p-3.5 active:cursor-grabbing"
+      className="mb-2.5 cursor-grab rounded-[16px] border bg-[color:var(--background)] p-3.5 active:cursor-grabbing"
       style={{
+        borderColor: selected ? 'var(--accent)' : 'var(--border)',
         // Lift: shrink under the thumb + a deeper shadow so it reads as held
         // and OFF the page, rather than merely highlighted.
         transform: isDragging ? 'scale(0.96)' : undefined,
-        boxShadow: isDragging ? '0 18px 36px rgba(16,17,33,0.24)' : 'var(--elev-1)',
+        boxShadow: isDragging
+          ? '0 18px 36px rgba(16,17,33,0.24)'
+          : selected
+            ? '0 0 0 1px var(--accent)'
+            : 'var(--elev-1)',
         opacity: isDragging ? 0.92 : 1,
         transition: 'transform 160ms cubic-bezier(0.22,1,0.36,1), box-shadow 160ms ease',
         touchAction: 'pan-y',
@@ -130,6 +140,15 @@ export default function PlanCalendar({
 
   const [view, setView] = useState(() => ({ year: now.getFullYear(), month0: now.getMonth() }));
   const [selected, setSelected] = useState<string | null>(null);
+
+  // The piece open beside the calendar. Tapping a card used to leave the page
+  // for the editor, which meant answering «що це взагалі за рілс» cost a
+  // navigation and a way back. Same split the client's shared link has.
+  const [openPiece, setOpenPiece] = useState<ContentPiece | null>(null);
+  const [detail, setDetail] = useState<SharedPieceDetail | null>(null);
+  const [failedId, setFailedId] = useState<string | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   // Local overrides so a drop moves the piece instantly (optimistic), with the
   // DB write in the background and a rollback if it fails.
@@ -203,9 +222,68 @@ export default function PlanCalendar({
 
   const dayPieces = selected ? byDay.get(selected) ?? [] : [];
 
+  // Derived, not stored: a piece is "loading" precisely while the detail on
+  // hand is not yet its own.
+  const detailFailed = !!openPiece && failedId === openPiece.id;
+  const detailLoading = !!openPiece && !detailFailed && detail?.id !== openPiece.id;
+
+  /** Show a piece in the panel; on a phone that means raising the sheet. */
+  const openPreview = useCallback((piece: ContentPiece) => {
+    setOpenPiece(piece);
+    setSheetOpen(true);
+  }, []);
+
+  const closePreview = useCallback(() => {
+    setSheetOpen(false);
+    setExpanded(false);
+  }, []);
+
+  // One fetch per opened piece, through the same document the shared calendar
+  // reads — no token here, `auth.uid()` is the credential.
+  useEffect(() => {
+    if (!openPiece) return;
+    let cancelled = false;
+    const { id, refTable } = openPiece;
+    fetch('/api/plan/detail', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refTable, id }),
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error('failed');
+        const json = (await res.json()) as { detail: SharedPieceDetail };
+        if (!cancelled) setDetail(json.detail);
+      })
+      .catch(() => {
+        if (!cancelled) setFailedId(id);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [openPiece]);
+
+  // Escape backs out one layer at a time.
+  useEffect(() => {
+    if (!sheetOpen && !expanded) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (expanded) setExpanded(false);
+      else setSheetOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [sheetOpen, expanded]);
+
   return (
     <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
-    <div className="app-page">
+    {/* `app-page` is 640px — right for a single column, too narrow for a split.
+        The page widens only once a piece is open, so a plain calendar still
+        sits centred instead of hugging the left edge of a wide screen. */}
+    <div
+      className={`mx-auto w-full px-4 pb-6 pt-5 ${
+        openPiece ? 'max-w-[640px] lg:max-w-[1200px]' : 'max-w-[640px]'
+      }`}
+    >
       {/* Header: Month YYYY + arrows */}
       <div className="mb-4 flex items-center justify-between">
         <div className="min-w-0">
@@ -244,6 +322,12 @@ export default function PlanCalendar({
           </button>
         </div>
       </div>
+
+      {/* Calendar + day list on the left, the opened piece on the right — the
+          same split the client's shared link uses, so «що це за рілс» is
+          answered without leaving the month. */}
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+      <div className="min-w-0 lg:w-[400px] lg:shrink-0">
 
       {/* The calendar shows ONLY committed, dated pieces. The undecided live in
           Розбір — surfaced here as a count so they stay visible without
@@ -342,7 +426,8 @@ export default function PlanCalendar({
                   <DraggableContentCard
                     key={p.id}
                     piece={p}
-                    onOpen={() => router.push(contentHref(p))}
+                    selected={openPiece?.id === p.id}
+                    onOpen={() => openPreview(p)}
                     onAdvance={() => advance(p)}
                   />
                 ))}
@@ -360,7 +445,81 @@ export default function PlanCalendar({
           </div>
         )}
       </div>
+      </div>
+
+      {/* The opened piece, beside the calendar on a wide screen. */}
+      {openPiece && (
+        <div className="hidden min-w-0 flex-1 lg:block">
+          <div className="app-card sticky top-4 max-h-[calc(100dvh-32px)] overflow-y-auto p-5">
+            <PieceDetail
+              detail={detail}
+              loading={detailLoading}
+              failed={detailFailed}
+              onToggleExpand={() => setExpanded(true)}
+              onOpenEditor={() => router.push(contentHref(openPiece))}
+            />
+          </div>
+        </div>
+      )}
+      </div>
     </div>
+
+    {/* Full screen: the piece with nothing else on the page. */}
+    {openPiece && expanded && (
+      <div
+        className="fixed inset-0 z-[60] overflow-y-auto"
+        style={{ background: 'var(--canvas)' }}
+        role="dialog"
+        aria-modal="true"
+        data-testid="plan-detail-full"
+      >
+        <div className="mx-auto w-full max-w-[1100px] px-4 pb-16 pt-5 md:px-8">
+          <PieceDetail
+            detail={detail}
+            loading={detailLoading}
+            failed={detailFailed}
+            expanded
+            onToggleExpand={() => setExpanded(false)}
+            onOpenEditor={() => router.push(contentHref(openPiece))}
+          />
+        </div>
+      </div>
+    )}
+
+    {/* Phone: the same panel as a sheet, since 50/50 of a phone is two useless
+        halves. */}
+    {openPiece && sheetOpen && !expanded && (
+      <div
+        className="fixed inset-0 z-50 flex flex-col bg-black/40 lg:hidden"
+        role="dialog"
+        aria-modal="true"
+        data-testid="plan-detail-sheet"
+      >
+        <button
+          type="button"
+          className="flex-1 cursor-default"
+          aria-label="Закрити"
+          onClick={closePreview}
+        />
+        <div
+          className="max-h-[88dvh] overflow-y-auto rounded-t-[22px] bg-[color:var(--background)] px-4 pb-10 pt-4"
+          style={{ boxShadow: '0 -8px 40px rgba(16,17,33,0.24)' }}
+        >
+          <div className="mb-3 flex justify-end">
+            <button type="button" onClick={closePreview} aria-label="Закрити" className="app-icon-btn">
+              <X className="h-5 w-5" strokeWidth={2} />
+            </button>
+          </div>
+          <PieceDetail
+            detail={detail}
+            loading={detailLoading}
+            failed={detailFailed}
+            onToggleExpand={() => setExpanded(true)}
+            onOpenEditor={() => router.push(contentHref(openPiece))}
+          />
+        </div>
+      </div>
+    )}
 
     {/* The floating proxy that follows the thumb. `dropAnimation` stays null —
         the card settles by the day cell re-rendering, not by flying back. */}
