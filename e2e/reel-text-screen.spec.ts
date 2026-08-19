@@ -40,9 +40,26 @@ test('an empty note is just a note — no cards floating over the text', async (
   await expect(page.getByTestId('mic')).toBeVisible();
 });
 
-test('the reference has its own chip, not a hunt through ⋯', async ({ page }) => {
-  await expect(page.getByTestId('reference-chip')).toBeVisible();
-  await page.getByTestId('reference-chip').click();
+test('the header carries no buttons at all — only what is read', async ({ page }) => {
+  // Status, date and the reference were chips up here: five targets under 44pt
+  // crowding the top of a one-column writing screen. They are all under ⋯ now.
+  const meta = page.getByTestId('editor-meta');
+  await expect(meta.locator('button')).toHaveCount(0);
+  await expect(meta).toContainText(/~\d+:\d\d/);
+});
+
+test('the reference is the FIRST thing under ⋯, and looks tappable', async ({ page }) => {
+  await page.getByTestId('more').click();
+  const chip = page.getByTestId('reference-chip');
+  await expect(chip).toBeVisible();
+  await expect(chip).toContainText('Додати референс');
+
+  // It read as disabled when it was a grey outline in muted text. It is filled
+  // and in the accent colour now, and a full 44pt tall.
+  const box = await chip.boundingBox();
+  expect(box!.height).toBeGreaterThanOrEqual(44);
+
+  await chip.click();
   await expect(page.getByPlaceholder(/instagram\.com\/reel/)).toBeVisible();
 });
 

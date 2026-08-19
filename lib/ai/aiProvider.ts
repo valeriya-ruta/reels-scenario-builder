@@ -43,17 +43,32 @@ const TEXT_MODEL: Record<AiVendor, () => string> = {
 };
 
 /**
- * Whisper large v3, NOT the turbo distil.
+ * Two speech models, because two different things are being asked for.
  *
- * Turbo is roughly twice as fast and noticeably worse on conversational
- * Ukrainian — she got a transcript full of mistakes from a clean recording.
- * Speed stopped being the reason to keep it once dictation went segmented: the
- * take is transcribed in ~9-second pieces while she is still speaking, so what
- * matters now is that each piece is right.
+ * ACCURATE is what a dictated take is transcribed with. Whisper large v3 was
+ * getting her wrong on exactly the speech she actually produces — hesitant,
+ * self-interrupting, half in borrowed Instagram vocabulary — and a transcript
+ * that is nearly right is worse than useless when the next step rewrites it
+ * into something she reads aloud. The GPT transcriber is a language model
+ * listening rather than an encoder-decoder guessing, which is the difference
+ * that shows on messy speech, and it takes the priming prompt seriously.
+ *
+ * TIMED is Whisper, kept deliberately. It is the only one of the two that
+ * returns `verbose_json` with per-line timings, and the competitor-reel splitter
+ * reads those to cut a transcript into scenes. Trading working timings for a
+ * better transcript there would fix nothing and break something.
+ *
+ * Both are overridable without a redeploy.
  */
 const STT_MODEL: Record<AiVendor, () => string> = {
   groq: () => optionalServerEnv('GROQ_STT_MODEL') ?? 'whisper-large-v3',
-  openrouter: () => optionalServerEnv('OPENROUTER_STT_MODEL') ?? 'openai/whisper-large-v3',
+  openrouter: () => optionalServerEnv('OPENROUTER_STT_MODEL') ?? 'openai/gpt-4o-transcribe',
+};
+
+/** Timings-capable, and the fallback when the accurate model refuses a request. */
+const STT_TIMED_MODEL: Record<AiVendor, () => string> = {
+  groq: () => optionalServerEnv('GROQ_STT_TIMED_MODEL') ?? 'whisper-large-v3',
+  openrouter: () => optionalServerEnv('OPENROUTER_STT_TIMED_MODEL') ?? 'openai/whisper-large-v3',
 };
 
 function keyFor(vendor: AiVendor): string | null {
@@ -100,53 +115,90 @@ export function chatEndpoint(): AiEndpoint {
   };
 }
 
+/**
+ * What a caller wants out of a transcription.
+ *
+ * `timed` needs per-line timings and accepts Whisper's accuracy to get them —
+ * the competitor-reel splitter cuts scenes on them. `accurate` is her own
+ * dictation, where nothing downstream reads a timestamp and every word matters.
+ */
+export type SttQuality = 'accurate' | 'timed';
+
 /** Where audio transcriptions go. No Content-Type — FormData sets its own. */
-export function sttEndpoint(): AiEndpoint {
+export function sttEndpoint(quality: SttQuality = 'timed'): AiEndpoint {
   const { vendor, apiKey } = requireVendor();
+  const model = quality === 'accurate' ? STT_MODEL[vendor]() : STT_TIMED_MODEL[vendor]();
   return {
     vendor,
     url: `${BASE_URL[vendor]}/audio/transcriptions`,
-    model: STT_MODEL[vendor](),
+    model,
     headers: { Authorization: `Bearer ${apiKey}` },
   };
 }
 
+export type TranscribeOptions = {
+  language?: string;
+  /** Primes the decoder's vocabulary and register — see lib/ai/dictationPrompt. */
+  prompt?: string;
+  quality?: SttQuality;
+};
+
 /**
  * Upload audio for transcription, whichever vendor is configured.
  *
- * Both take OpenAI's multipart shape (`file` + `model`), so the request is
- * identical — except for `verbose_json`, which is what carries the per-line
- * timings the scene splitter reads. OpenRouter only offers it on
- * OpenAI-compatible providers and returns 400 elsewhere, so a rejection is
- * retried plainly: a transcript without timings is worth far more than a failed
- * transcript, and the splitter already falls back to one scene when they are
- * missing.
+ * Every vendor and model here takes OpenAI's multipart shape (`file` + `model`),
+ * so the request is identical — except for `verbose_json`, which is what carries
+ * the per-line timings the scene splitter reads. Only Whisper offers it, and
+ * only on OpenAI-compatible providers, so a rejection is retried plainly: a
+ * transcript without timings is worth far more than a failed transcript, and the
+ * splitter already falls back to one scene when they are missing.
+ *
+ * A request the ACCURATE model refuses outright is retried on the timed one
+ * before giving up. Her voice is the way the app is used; it does not get to
+ * stop working because a model id was retired or a provider had a bad minute.
  *
  * Caller keeps the response, including failures — the existing error text
  * («Помилка транскрипції (400): …») is what surfaces to the user.
  */
-export async function transcribeFile(file: File, language?: string): Promise<Response> {
-  const stt = sttEndpoint();
+export async function transcribeFile(
+  file: File,
+  options: TranscribeOptions | string = {},
+): Promise<Response> {
+  // Callers used to pass a bare language string; both shapes still work.
+  const opts: TranscribeOptions = typeof options === 'string' ? { language: options } : options;
+  const quality = opts.quality ?? 'timed';
+  const stt = sttEndpoint(quality);
 
-  const send = (verbose: boolean) => {
+  const send = (model: string, verbose: boolean) => {
     const form = new FormData();
-    form.append('model', stt.model);
-    // Temperature 0 on BOTH paths: Whisper's fallback decoding is where the
-    // invented «Субтитры сделал …» credits come from.
+    form.append('model', model);
+    // Temperature 0 everywhere: fallback decoding is where the invented
+    // «Субтитры сделал …» credits come from.
     form.append('temperature', '0');
     if (verbose) form.append('response_format', 'verbose_json');
-    if (language) form.append('language', language);
+    if (opts.language) form.append('language', opts.language);
+    if (opts.prompt) form.append('prompt', opts.prompt);
     form.append('file', file);
     return fetch(stt.url, { method: 'POST', headers: stt.headers, body: form });
   };
 
-  const res = await send(true);
-  if (res.status !== 400 || stt.vendor !== 'openrouter') return res;
+  // Timings are asked for only when something downstream reads them. Asking the
+  // accurate model for verbose_json just earns a 400 and a wasted upload.
+  const wantsTimings = quality === 'timed';
+  let res = await send(stt.model, wantsTimings);
 
-  const body = await res
-    .clone()
-    .text()
-    .catch(() => '');
-  if (!/response_format|verbose_json|timestamp/i.test(body)) return res;
-  return send(false);
+  if (wantsTimings && res.status === 400 && stt.vendor === 'openrouter') {
+    const body = await res
+      .clone()
+      .text()
+      .catch(() => '');
+    if (/response_format|verbose_json|timestamp/i.test(body)) res = await send(stt.model, false);
+  }
+
+  if (res.ok || quality !== 'accurate') return res;
+
+  const fallback = STT_TIMED_MODEL[stt.vendor]();
+  if (fallback === stt.model) return res;
+  const retry = await send(fallback, false);
+  return retry.ok ? retry : res;
 }

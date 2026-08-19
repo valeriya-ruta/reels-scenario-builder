@@ -197,7 +197,7 @@ export function insertAt(
   at: number,
   insert: string,
   overlays: readonly Overlay[] = [],
-): { text: string; caret: number; overlays: Overlay[] } {
+): { text: string; caret: number; span: { start: number; length: number }; overlays: Overlay[] } {
   const cut = Math.max(0, Math.min(at, text.length));
   const before = text.slice(0, cut);
   const after = text.slice(cut);
@@ -211,8 +211,45 @@ export function insertAt(
   return {
     text: `${before}${piece}${after}`,
     caret: cut + lead.length + insert.length,
+    // Where the dictated words themselves ended up, without the spacing added
+    // around them. Dictation comes back a second time with a more accurate
+    // reading of the same take, and this is the span it swaps.
+    span: { start: cut + lead.length, length: insert.length },
     overlays: overlays.map((o) =>
       o.anchorStart >= cut ? { ...o, anchorStart: o.anchorStart + piece.length } : o,
     ),
+  };
+}
+
+/**
+ * Swap one known stretch of the note for different words.
+ *
+ * Used when the accurate transcription of a take arrives after the provisional
+ * one is already on screen. The caller checks first that the span still holds
+ * what it put there — if she has typed into those words, they are hers now and
+ * no better transcript gets to overwrite them.
+ */
+export function replaceRange(
+  text: string,
+  start: number,
+  length: number,
+  replacement: string,
+  overlays: readonly Overlay[] = [],
+): { text: string; caret: number; overlays: Overlay[] } {
+  const from = Math.max(0, Math.min(start, text.length));
+  const to = Math.max(from, Math.min(from + length, text.length));
+  const shift = replacement.length - (to - from);
+
+  return {
+    text: `${text.slice(0, from)}${replacement}${text.slice(to)}`,
+    caret: from + replacement.length,
+    overlays: overlays.map((o) => {
+      // An anchor INSIDE the replaced words has lost what it pointed at. It
+      // collapses to the start of the new text rather than drifting somewhere
+      // arbitrary further down the note.
+      if (o.anchorStart >= to) return { ...o, anchorStart: o.anchorStart + shift };
+      if (o.anchorStart > from) return { ...o, anchorStart: from };
+      return o;
+    }),
   };
 }

@@ -1,6 +1,7 @@
 import 'server-only';
 
-import { transcribeFile } from '@/lib/ai/aiProvider';
+import { transcribeFile, type SttQuality } from '@/lib/ai/aiProvider';
+import { dictationPrompt, stripPrimerEcho } from '@/lib/ai/dictationPrompt';
 import { NO_SPEECH_ERROR, isNoSpeechTranscript, segmentsSayNoSpeech } from '@/lib/ai/noSpeech';
 import { isAbsoluteHttpUrlString } from '@/lib/isAbsoluteHttpUrl';
 
@@ -97,13 +98,16 @@ const GROQ_AUDIO_MAX_BYTES = GROQ_MAX_UPLOAD_BYTES;
 
 /**
  * Transcribes raw audio bytes uploaded directly from the browser (MediaRecorder
- * capture), reusing the exact same Whisper path as reel transcription — same
- * key, same direct-bytes FormData upload, same `whisper-large-v3-turbo` model.
- * No ffmpeg, no remote fetch. Used by the braindump voice capture.
+ * capture). No ffmpeg, no remote fetch. Used by dictation and the braindump.
+ *
+ * Defaults to the ACCURATE model and the Ukrainian primer: this path is someone
+ * talking into a phone, which is the case Whisper handled worst and the one
+ * where a wrong word survives into a script that gets read aloud. Nothing
+ * downstream of it reads a timestamp, so there is nothing to trade away.
  */
 export async function transcribeAudioFile(
   audio: File | Blob,
-  options: { language?: string; filename?: string } = {}
+  options: { language?: string; filename?: string; quality?: SttQuality } = {}
 ): Promise<TranscriptResult> {
   const size = audio.size ?? 0;
   if (size === 0) {
@@ -117,7 +121,11 @@ export async function transcribeAudioFile(
   const name = options.filename || (audio as File).name || 'braindump.webm';
   const upload = audio instanceof File ? audio : new File([audio], name, { type });
 
-  const sttRes = await transcribe(upload, options.language);
+  const sttRes = await transcribe(upload, {
+    language: options.language,
+    prompt: dictationPrompt(options.language),
+    quality: options.quality ?? 'accurate',
+  });
   if (!sttRes.ok) {
     const body = await sttRes.text();
     throw new Error(`Помилка транскрипції (${sttRes.status}): ${body.slice(0, 500)}`);
@@ -126,7 +134,8 @@ export async function transcribeAudioFile(
   const parsed = (await sttRes.json()) as GroqTranscriptionResponse;
   return {
     language: parsed.language ?? null,
-    transcript: (parsed.text ?? '').trim(),
+    // The primer that made this accurate must not end up in her note.
+    transcript: stripPrimerEcho((parsed.text ?? '').trim()),
     segments: normalizeSegments(parsed.segments),
   };
 }

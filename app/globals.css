@@ -545,9 +545,11 @@ button:disabled,
    `background-clip: text` cannot apply to a textarea, so while this runs the
    note renders its text as a div instead — see NoteEditor. It is read-only
    during the rewrite anyway. */
+/* One tile wide, so the loop is seamless: after travelling exactly one tile the
+   pattern is identical to where it started and there is no jump. */
 @keyframes reel-text-sweep {
-  from { background-position: 220% 0; }
-  to   { background-position: -120% 0; }
+  from { background-position: 0 0; }
+  to   { background-position: 640px 0; }
 }
 
 .reel-text-sweep {
@@ -556,20 +558,27 @@ button:disabled,
   background-image: linear-gradient(
     100deg,
     var(--foreground) 0%,
-    var(--foreground) 34%,
-    #004ba8 42%,
+    var(--foreground) 36%,
+    #004ba8 44%,
     #7a3ce0 50%,
-    #e0644a 58%,
-    var(--foreground) 66%,
+    #e0644a 56%,
+    var(--foreground) 64%,
     var(--foreground) 100%
   );
-  background-size: 300% 100%;
-  background-repeat: no-repeat;
+  /* REPEATING, and sized in px rather than percent.
+     It used to be a single 300%-wide gradient slid from 220% to -120%. Past the
+     edges of that one copy there was no background at all, and with the glyphs
+     painted `transparent` so the gradient can show through them, "no background"
+     means INVISIBLE TEXT — a blank band that swept across the paragraph and
+     wiped the words as it went. Tiling removes the outside: every glyph has ink
+     under it at every moment of the animation. */
+  background-size: 640px 100%;
+  background-repeat: repeat-x;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
   -webkit-text-fill-color: transparent;
-  animation: reel-text-sweep 1.9s linear infinite;
+  animation: reel-text-sweep 2.2s linear infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {

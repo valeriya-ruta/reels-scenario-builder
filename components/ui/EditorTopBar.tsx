@@ -113,7 +113,11 @@ export default function EditorTopBar({
         {trailing ? <div className="shrink-0">{trailing}</div> : null}
       </div>
 
-      {meta ? <div className="mt-2 flex flex-wrap items-center gap-2 pl-1">{meta}</div> : null}
+      {meta ? (
+        <div data-testid="editor-meta" className="mt-2 flex flex-wrap items-center gap-2 pl-1">
+          {meta}
+        </div>
+      ) : null}
     </div>
   );
 }

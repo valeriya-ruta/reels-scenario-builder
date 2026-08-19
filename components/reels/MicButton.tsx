@@ -13,8 +13,11 @@ import {
  *
  * Tap, talk, tap. Words appear in the note WHILE she talks — the take is cut
  * into segments and each is transcribed while the next is spoken (see
- * streamingDictation), so stopping only leaves the last few seconds to finish
- * rather than the whole recording.
+ * streamingDictation) — and then the whole take, transcribed in one piece with
+ * all of its own context, quietly replaces them a few seconds later.
+ *
+ * She never waits for the accurate version. The provisional text lands the
+ * moment she stops and is hers to edit; the better one arrives behind it.
  *
  * The level meter beside it moves with her actual voice. It is the only signal
  * that proves the microphone is open, and it moves before a single word has
@@ -28,14 +31,17 @@ const MicButton = forwardRef<
   {
     /** Everything heard so far this take. Provisional until `onDone`. */
     onInterim: (text: string) => void;
-    /** The take is over; this is the final text. */
-    onDone: (text: string) => void;
+    /** The take is over. Provisional text; `refining` if a better one follows. */
+    onDone: (text: string, refining: boolean) => void;
+    /** The whole take in one piece, or null when that pass could not be made. */
+    onRefined: (text: string | null) => void;
     onRecordingChange: (recording: boolean) => void;
     onError: (message: string | null) => void;
   }
->(function MicButton({ onInterim, onDone, onRecordingChange, onError }, ref) {
+>(function MicButton({ onInterim, onDone, onRefined, onRecordingChange, onError }, ref) {
   const [recording, setRecording] = useState(false);
   const [pending, setPending] = useState(false);
+  const [refining, setRefining] = useState(false);
   const [level, setLevel] = useState(0);
 
   const streamRef = useRef<MediaStream | null>(null);
@@ -43,10 +49,10 @@ const MicButton = forwardRef<
   const stopMeterRef = useRef<(() => void) | null>(null);
 
   // Held in a ref: these fire long after the render that set them.
-  const cb = useRef({ onInterim, onDone, onRecordingChange, onError });
+  const cb = useRef({ onInterim, onDone, onRefined, onRecordingChange, onError });
   useEffect(() => {
-    cb.current = { onInterim, onDone, onRecordingChange, onError };
-  }, [onInterim, onDone, onRecordingChange, onError]);
+    cb.current = { onInterim, onDone, onRefined, onRecordingChange, onError };
+  }, [onInterim, onDone, onRefined, onRecordingChange, onError]);
 
   const releaseMic = useCallback(() => {
     stopMeterRef.current?.();
@@ -69,10 +75,15 @@ const MicButton = forwardRef<
         onText: (text) => cb.current.onInterim(text),
         onPending: setPending,
         onError: (message) => cb.current.onError(message),
-        onDone: (text) => {
+        onDone: (text, willRefine) => {
           releaseMic();
           setPending(false);
-          cb.current.onDone(text);
+          setRefining(willRefine);
+          cb.current.onDone(text, willRefine);
+        },
+        onRefined: (text) => {
+          setRefining(false);
+          cb.current.onRefined(text);
         },
       });
 
@@ -121,6 +132,18 @@ const MicButton = forwardRef<
       </button>
 
       {recording ? <Meter level={level} /> : null}
+
+      {/* The accurate pass, running behind text she can already edit. Named
+          rather than shown as a spinner, because a spinner over words that are
+          already there reads as «something is broken». */}
+      {refining && !recording ? (
+        <span
+          data-testid="mic-refining"
+          className="whitespace-nowrap text-[11px] font-medium text-[color:var(--text-muted)]"
+        >
+          уточнюю…
+        </span>
+      ) : null}
     </div>
   );
 });

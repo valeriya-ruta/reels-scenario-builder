@@ -51,12 +51,32 @@ usable script and a wall of text. They live in `lib/ai/reelText.ts`.
   She starts a thought, jumps to an example, comes back. The example belongs
   where it fits and the interrupted thought gets said once, to the end. A
   script that still shows her losing the thread has not been rewritten.
+- **Recording order is not script order.** She covers a topic, moves to another,
+  and comes back to the first at the end. That tail belongs merged into the
+  first part — not left where she happened to say it. «Everything I say doesn't
+  mean that it should stay there.» A script you can read the recording order off
+  has been tidied, not rewritten.
 - **Never invent.** No fact, example, number, place or opinion she did not say.
 - **Her words over better words.** The carousel prompt (`lib/ai/carouselPrompt.ts`)
   is the reference for tone — written in Ukrainian, voice-first, specific.
   English bullet-point prompts produce polite Ukrainian filler.
 - **Коротше rewrites, it does not truncate.** Cutting the second half is not
   «shorter», it is unfinished.
+
+## Transcription
+
+**Accuracy first, speed second.** Her words, said the way she actually says them
+— hesitating, correcting herself, half in borrowed words («рілс», «сторіз»,
+«хук»). A transcript that reads fluently but changed a word is worse than one
+with «ееее» in it, because the rewrite then argues from something she never
+said and she reads it aloud on camera.
+
+So a take is transcribed TWICE: in short segments while she talks, so words
+appear, and then whole — with all its own context — as the version that gets
+kept. The segments are a preview and are allowed to be wrong; nothing waits on
+the accurate pass, it swaps itself in. Never make the preview the answer,
+however tempting the latency is: short slices with no context is exactly what
+was getting her wrong.
 
 ## Rules that came from real breakage
 

@@ -2,10 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { nanoid } from 'nanoid';
-import { Check, Copy, Link2, Loader2, MoreHorizontal, Sparkles, Undo2 } from 'lucide-react';
+import { Check, Copy, Loader2, MoreHorizontal, Sparkles, Undo2 } from 'lucide-react';
 import EditorTopBar from '@/components/ui/EditorTopBar';
-import StatusPill from '@/components/content/StatusPill';
-import ScheduleChip from '@/components/content/ScheduleChip';
 import NoteEditor from '@/components/reels/NoteEditor';
 import ClipCard from '@/components/reels/ClipCard';
 import AttachSheet from '@/components/reels/AttachSheet';
@@ -33,7 +31,7 @@ import {
   type OverlayKind,
   type ReelBlock,
 } from '@/lib/reels/blocks';
-import { insertAt, mergeBlockText, overlayForSelection } from '@/lib/reels/edit';
+import { insertAt, mergeBlockText, overlayForSelection, replaceRange } from '@/lib/reels/edit';
 import {
   canUndo,
   pushSnapshot,
@@ -147,6 +145,8 @@ export default function ReelTextScreen({
   const micRef = useRef<MicHandle>(null);
   /** Where dictation started, so the preview grows from there. */
   const dictationBase = useRef<{ text: string; at: number } | null>(null);
+  /** The words the last take put in, and where — so the accurate one can swap them. */
+  const lastTake = useRef<{ said: string; span: { start: number; length: number } } | null>(null);
 
   const [queue] = useState(
     () =>
@@ -271,24 +271,77 @@ export default function ReelTextScreen({
     setPreview(insertAt(base.text, base.at, heard).text);
   }, []);
 
-  /** The take is over. What is on screen becomes what is saved. */
+  /**
+   * The take is over. The provisional text goes in NOW.
+   *
+   * She does not wait for the accurate reading — the segment transcript is
+   * already good enough to keep writing against, and a spinner over words she
+   * just watched appear would be a worse trade than a few wrong endings that
+   * fix themselves a moment later.
+   */
   const onFinal = useCallback(
-    (piece: string) => {
+    (piece: string, refining: boolean) => {
       const base = dictationBase.current;
       dictationBase.current = null;
       setPreview(null);
-      if (!base || !piece.trim()) return;
+      if (!base || !piece.trim()) {
+        lastTake.current = null;
+        return;
+      }
 
-      // The transcript is filed and linked to this reel before it is edited at
-      // all — it is the source every other format should be derived from, and
-      // the copy no button on this screen can overwrite.
-      void keepTranscript(project.id, piece.trim());
-
-      const result = insertAt(base.text, base.at, piece.trim(), note.overlays);
+      const said = piece.trim();
+      const result = insertAt(base.text, base.at, said, note.overlays);
       setCaretAt(result.caret);
       applyNote({ spoken: result.text, overlays: result.overlays });
+
+      if (refining) {
+        // Filed once the accurate version lands — the transcript is the source
+        // every other format gets derived from, so it should be the good one.
+        lastTake.current = { said, span: result.span };
+        return;
+      }
+
+      lastTake.current = null;
+      void keepTranscript(project.id, said);
     },
     [applyNote, note.overlays, project.id],
+  );
+
+  /**
+   * The same take, heard properly.
+   *
+   * Transcribed whole rather than in four-second slices, so it has the context
+   * the preview never had — which is what was putting the wrong word in her
+   * mouth. It replaces the provisional words in place, and only if they are
+   * still exactly as dictation left them: the moment she edits them they are
+   * hers, and no better transcript gets to overwrite her typing.
+   */
+  const onRefined = useCallback(
+    (accurate: string | null) => {
+      const take = lastTake.current;
+      lastTake.current = null;
+      if (!take) return;
+
+      const better = accurate?.trim();
+      if (!better || better === take.said) {
+        void keepTranscript(project.id, take.said);
+        return;
+      }
+
+      void keepTranscript(project.id, better);
+
+      const current = note.spoken ?? '';
+      const { start, length } = take.span;
+      // She has been typing in there. Her words win — a better transcript does
+      // not get to overwrite what she chose to change.
+      if (current.slice(start, start + length) !== take.said) return;
+
+      const swapped = replaceRange(current, start, length, better, note.overlays);
+      // `applyNote` puts the provisional wording on the undo stack on its way
+      // past, so «Скасувати» takes the swap back like any other edit.
+      applyNote({ spoken: swapped.text, overlays: swapped.overlays });
+    },
+    [applyNote, note.overlays, note.spoken, project.id],
   );
 
   // ── the AI buttons ────────────────────────────────────────────────────────
@@ -496,40 +549,16 @@ export default function ReelTextScreen({
           title={project.name}
           kind="reel"
           onRename={rename}
+          // Read, never tapped. Status, date and the reference were chips up
+          // here too — five small targets crowding the top of a screen that is
+          // supposed to be one column of text. They are all under ⋯ now, at
+          // full width, where a thumb actually goes.
           meta={
             <>
-              <StatusPill
-                refTable="projects"
-                id={project.id}
-                type="reel"
-                initialStatus={project.status ?? 'idea'}
-              />
-              <ScheduleChip
-                refTable="projects"
-                id={project.id}
-                initialDate={project.scheduled_date ?? null}
-              />
               <span className="text-[12px] tabular-nums text-[color:var(--text-muted)]">
                 ~{formatDuration(seconds)}
                 {note.overlays.length > 0 ? ` · ${note.overlays.length} поверх` : ''}
               </span>
-              {/* The reference is an INPUT — the thing you have before you
-                  write — so it sits with the reel's other properties. It was
-                  under ⋯ next to the caption, which is an OUTPUT, and she went
-                  looking for it there and gave up. */}
-              <button
-                type="button"
-                data-testid="reference-chip"
-                onClick={() => setSheet('reference')}
-                className="inline-flex min-h-8 items-center gap-1.5 rounded-full border px-2.5 text-[12px] font-medium"
-                style={{
-                  color: referenceUrl ? 'var(--accent)' : 'var(--text-muted)',
-                  borderColor: referenceUrl ? 'var(--accent)' : 'var(--border)',
-                }}
-              >
-                <Link2 className="h-3.5 w-3.5" />
-                Референс
-              </button>
               <SaveChip label={label} />
             </>
           }
@@ -562,9 +591,13 @@ export default function ReelTextScreen({
           </button>
         ) : null}
 
-        {/* «Повернути» stays until she dismisses it by using it. A rewrite she
-            did not want is only a mistake if it cannot be taken back. */}
-        {rawDump ? (
+        {/* The rewrite's own undo, for after a reload.
+            «Скасувати» above already steps back through rewrites — `keepDump`
+            puts every one of them on the history stack. What history does NOT
+            survive is closing the page, and `raw_dump` does. So this appears
+            only when there is no history to step back through: two buttons that
+            do the same thing was part of what she was calling clutter. */}
+        {rawDump && !canUndo(history, text) ? (
           <button
             type="button"
             data-testid="undo-rewrite"
@@ -658,6 +691,7 @@ export default function ReelTextScreen({
                 ref={micRef}
                 onInterim={onInterim}
                 onDone={onFinal}
+                onRefined={onRefined}
                 onRecordingChange={onRecordingChange}
                 onError={setError}
               />
@@ -701,7 +735,9 @@ export default function ReelTextScreen({
         open={sheet === 'more'}
         project={project}
         script={text}
+        referenceUrl={referenceUrl}
         onClose={() => setSheet(null)}
+        onOpenReference={() => setSheet('reference')}
         onOpenScript={() => setSheet('script')}
         onOpenOverlays={() => setSheet('overlays')}
         onAddClip={() => {
