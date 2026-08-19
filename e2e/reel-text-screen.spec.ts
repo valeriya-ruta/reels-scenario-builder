@@ -98,6 +98,22 @@ test('copying the script is on the page, not buried behind ⋯', async ({ page, 
   expect(copied).toContain('Виявилось, річ не в дисципліні');
 });
 
+test('deleting a paragraph by accident can be taken back', async ({ page }) => {
+  const area = page.locator('[data-testid="note-editor"] textarea');
+  const before = await area.inputValue();
+
+  // The accident: the selection handles took more than she meant, and it went.
+  await area.click();
+  await area.evaluate((el: HTMLTextAreaElement) => {
+    el.setSelectionRange(0, el.value.length);
+  });
+  await area.press('Backspace');
+  await expect(area).toHaveValue('');
+
+  await page.getByTestId('undo-edit').click();
+  await expect(area).toHaveValue(before);
+});
+
 test('the note has no focus ring — it is a page, not a form field', async ({ page }) => {
   const area = page.locator('[data-testid="note-editor"] textarea');
   await area.click();

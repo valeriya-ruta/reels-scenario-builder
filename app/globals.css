@@ -537,49 +537,48 @@ button:disabled,
 }
 
 /* ── The rewrite animation ────────────────────────────────────────────────
-   «Зробити рілс» takes a few seconds and rewrites everything on the page. A
-   spinner on the button says the app is busy; it does not say that THIS TEXT
-   is what is being worked on. So a gradient passes over the words themselves,
-   left to right, while they dim — the page reads as "being rewritten" rather
-   than as frozen, which is what a stalled app looks like. */
-@keyframes reel-rewrite-sweep {
-  from { transform: translateX(-120%); }
-  to   { transform: translateX(120%); }
+   The gradient runs through the WORDS, not over them. A translucent box
+   sliding across the paragraph reads as something covering the text; clipping
+   the gradient to the glyphs reads as the text itself being rewritten, which
+   is what is actually happening.
+
+   `background-clip: text` cannot apply to a textarea, so while this runs the
+   note renders its text as a div instead — see NoteEditor. It is read-only
+   during the rewrite anyway. */
+@keyframes reel-text-sweep {
+  from { background-position: 220% 0; }
+  to   { background-position: -120% 0; }
 }
 
-@keyframes reel-rewrite-breathe {
-  0%, 100% { opacity: 0.5; }
-  50%      { opacity: 0.82; }
-}
-
-.reel-rewriting {
-  position: relative;
-  animation: reel-rewrite-breathe 1.6s ease-in-out infinite;
-}
-
-.reel-rewriting::after {
-  content: '';
-  position: absolute;
-  inset: -6px -40% -6px -40%;
-  pointer-events: none;
-  border-radius: 12px;
-  background: linear-gradient(
+.reel-text-sweep {
+  /* Her own ink at both ends, so only the travelling band is coloured and the
+     rest of the paragraph never dims into unreadability. */
+  background-image: linear-gradient(
     100deg,
-    transparent 0%,
-    rgba(0, 75, 168, 0.16) 32%,
-    rgba(122, 60, 224, 0.22) 50%,
-    rgba(224, 100, 74, 0.16) 68%,
-    transparent 100%
+    var(--foreground) 0%,
+    var(--foreground) 34%,
+    #004ba8 42%,
+    #7a3ce0 50%,
+    #e0644a 58%,
+    var(--foreground) 66%,
+    var(--foreground) 100%
   );
-  animation: reel-rewrite-sweep 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  background-size: 300% 100%;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: reel-text-sweep 1.9s linear infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .reel-rewriting,
-  .reel-rewriting::after {
+  .reel-text-sweep {
     animation: none;
+    color: var(--foreground);
+    -webkit-text-fill-color: var(--foreground);
+    background-image: none;
   }
-  .reel-rewriting { opacity: 0.6; }
 }
 
 /* The live level meter while dictating. Height is set inline per bar. */

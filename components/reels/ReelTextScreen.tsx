@@ -43,6 +43,13 @@ import {
   type ReelBlock,
 } from '@/lib/reels/blocks';
 import { insertAt, mergeBlockText, overlayForSelection } from '@/lib/reels/edit';
+import {
+  canUndo,
+  pushSnapshot,
+  shouldCheckpoint,
+  undo as stepBack,
+  type Snapshot,
+} from '@/lib/reels/history';
 import { OFFERED_OVERLAY_KINDS, overlayStyle } from '@/lib/reels/overlayStyle';
 import { useKeyboardInset } from '@/lib/ui/keyboardInset';
 import type { Project } from '@/lib/domain';
@@ -133,6 +140,14 @@ export default function ReelTextScreen({
   const [saveState, setSaveState] = useState<SaveQueueState>({ pending: 0, inFlight: 0, failed: false });
   const [everSaved, setEverSaved] = useState(false);
   const [copied, setCopied] = useState(false);
+  /**
+   * Every state worth getting back to.
+   *
+   * She selected what she thought was one paragraph, the handles took two, and
+   * both went with no way to return. A React-controlled textarea has no native
+   * undo — every keystroke replaces the value — and a phone has no Ctrl+Z.
+   */
+  const [history, setHistory] = useState<Snapshot[]>([]);
 
   const keyboard = useKeyboardInset();
   const micRef = useRef<MicHandle>(null);
@@ -215,12 +230,28 @@ export default function ReelTextScreen({
     (patch: Partial<ReelBlock>) => {
       setNote((prev) => {
         const next = { ...prev, ...patch };
+        if (typeof patch.spoken === 'string' && patch.spoken !== (prev.spoken ?? '')) {
+          const now = Date.now();
+          setHistory((h) =>
+            shouldCheckpoint(h[h.length - 1], patch.spoken as string, now)
+              ? pushSnapshot(h, { text: prev.spoken ?? '', overlays: prev.overlays, at: now })
+              : h,
+          );
+        }
         saveNote(next);
         return next;
       });
     },
     [saveNote],
   );
+
+  /** One step back, whatever took the text away — a delete, a paste, a rewrite. */
+  const undoEdit = () => {
+    const stepped = stepBack(history, text);
+    if (!stepped) return;
+    setHistory(stepped.history);
+    applyNote({ spoken: stepped.restored.text, overlays: stepped.restored.overlays });
+  };
 
   const text = note.spoken ?? '';
 
@@ -279,6 +310,10 @@ export default function ReelTextScreen({
    */
   const keepDump = (before: string) => {
     setRawDump(before);
+    // Also on the undo stack: «Скасувати» must take back a rewrite as readily
+    // as a delete. `raw_dump` is the copy that survives a reload; this is the
+    // one that survives a tap.
+    setHistory((h) => pushSnapshot(h, { text: before, overlays: note.overlays, at: Date.now() }));
     queue.now(async () => (await saveReelMeta(project.id, { rawDump: before })).ok);
   };
 
@@ -504,6 +539,18 @@ export default function ReelTextScreen({
           </button>
         ) : null}
 
+        {canUndo(history, text) ? (
+          <button
+            type="button"
+            data-testid="undo-edit"
+            onClick={undoEdit}
+            className="mb-3 mr-2 inline-flex min-h-9 items-center gap-1.5 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-3 text-[12.5px] font-semibold text-[color:var(--foreground)]"
+          >
+            <Undo2 className="h-3.5 w-3.5" />
+            Скасувати
+          </button>
+        ) : null}
+
         {/* «Повернути» stays until she dismisses it by using it. A rewrite she
             did not want is only a mistake if it cannot be taken back. */}
         {rawDump ? (
@@ -518,12 +565,13 @@ export default function ReelTextScreen({
           </button>
         ) : null}
 
-        <div className={busy === 'reel' ? 'reel-rewriting' : undefined}>
+        <div>
           <NoteEditor
             text={text}
             overlays={note.overlays}
             previewText={preview}
             readOnly={busy !== null}
+            rewriting={busy !== null}
             caretAt={caretAt}
             placeholder="Пиши або тисни мікрофон…"
             onChange={(next) => applyNote({ spoken: next })}

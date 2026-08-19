@@ -40,6 +40,12 @@ export type NoteEditorProps = {
   previewText?: string | null;
   /** Locked while the note is being rewritten — see ReelTextScreen. */
   readOnly?: boolean;
+  /**
+   * The rewrite is running. The text renders as a div for the duration so the
+   * gradient can be clipped to the WORDS — `background-clip: text` does nothing
+   * on a textarea. It is read-only while this is true anyway.
+   */
+  rewriting?: boolean;
   /** Set the caret here once, after dictation or an undo. */
   caretAt?: number | null;
   onChange: (text: string) => void;
@@ -54,6 +60,7 @@ export default function NoteEditor({
   placeholder,
   previewText = null,
   readOnly = false,
+  rewriting = false,
   caretAt = null,
   onChange,
   onSelectionChange,
@@ -143,6 +150,14 @@ export default function NoteEditor({
           {shown.endsWith('\n') ? '​' : null}
         </div>
 
+        {rewriting ? (
+          <p
+            data-testid="note-rewriting"
+            className={`${TEXT_METRICS} reel-text-sweep relative px-0 py-1`}
+          >
+            {shown}
+          </p>
+        ) : (
         <textarea
           ref={areaRef}
           value={shown}
@@ -164,6 +179,7 @@ export default function NoteEditor({
           // itself. No notes app does that; the caret is the focus indicator.
           style={{ outline: 'none', ...(previewText !== null ? { opacity: 0.55 } : {}) }}
         />
+        )}
       </div>
 
       {/* What is attached, under the text. Each says which words it hangs off,
