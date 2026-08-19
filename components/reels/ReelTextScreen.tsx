@@ -2,7 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { nanoid } from 'nanoid';
-import { Keyboard, Link2, Loader2, Mic, MoreHorizontal, Sparkles, Undo2 } from 'lucide-react';
+import {
+  Check,
+  Copy,
+  Keyboard,
+  Link2,
+  Loader2,
+  Mic,
+  MoreHorizontal,
+  Sparkles,
+  Undo2,
+} from 'lucide-react';
 import EditorTopBar from '@/components/ui/EditorTopBar';
 import StatusPill from '@/components/content/StatusPill';
 import ScheduleChip from '@/components/content/ScheduleChip';
@@ -122,6 +132,7 @@ export default function ReelTextScreen({
   const [rawDump, setRawDump] = useState<string | null>(initialProject.raw_dump ?? null);
   const [saveState, setSaveState] = useState<SaveQueueState>({ pending: 0, inFlight: 0, failed: false });
   const [everSaved, setEverSaved] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const keyboard = useKeyboardInset();
   const micRef = useRef<MicHandle>(null);
@@ -228,14 +239,14 @@ export default function ReelTextScreen({
     [note.spoken, selection, caret],
   );
 
-  /** Provisional words, from the browser recogniser, while she is still talking. */
+  /** The running transcript, growing segment by segment while she talks. */
   const onInterim = useCallback((heard: string) => {
     const base = dictationBase.current;
     if (!base) return;
     setPreview(insertAt(base.text, base.at, heard).text);
   }, []);
 
-  /** The real transcript. Replaces the preview and is what gets saved. */
+  /** The take is over. What is on screen becomes what is saved. */
   const onFinal = useCallback(
     (piece: string) => {
       const base = dictationBase.current;
@@ -417,6 +428,32 @@ export default function ReelTextScreen({
     if (!res.ok) setProject((p) => ({ ...p, name: previous }));
   };
 
+  /**
+   * The script, on the clipboard, exactly as written.
+   *
+   * The same text «Чистий текст» copies — one function, so the two can never
+   * disagree about what «весь текст» means.
+   */
+  const copyScript = async () => {
+    const script = text.trim();
+    if (!script) return;
+    try {
+      await navigator.clipboard.writeText(script);
+    } catch {
+      // Older WebViews refuse the async clipboard; the textarea route works.
+      const area = document.createElement('textarea');
+      area.value = script;
+      area.style.position = 'fixed';
+      area.style.opacity = '0';
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand('copy');
+      document.body.removeChild(area);
+    }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
+  };
+
   const BAR_HEIGHT = 68;
 
   return (
@@ -451,6 +488,21 @@ export default function ReelTextScreen({
             </>
           }
         />
+
+        {/* Copy is the app's ENTIRE handoff to the camera, and it was buried
+            behind ⋯ where she went looking for it and gave up. It sits on the
+            page, next to the text it copies. */}
+        {hasContent ? (
+          <button
+            type="button"
+            data-testid="copy-inline"
+            onClick={() => void copyScript()}
+            className="mb-3 mr-2 inline-flex min-h-9 items-center gap-1.5 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-3 text-[12.5px] font-semibold text-[color:var(--foreground)]"
+          >
+            {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+            {copied ? 'Скопійовано' : 'Скопіювати текст'}
+          </button>
+        ) : null}
 
         {/* «Повернути» stays until she dismisses it by using it. A rewrite she
             did not want is only a mistake if it cannot be taken back. */}
@@ -545,6 +597,9 @@ export default function ReelTextScreen({
         <div className="mx-auto flex max-w-[680px] items-center gap-1.5">
           {selection && busy === null ? (
             <>
+              {/* The glyph alone was unreadable: she looked at 🔊 and could
+                  not tell whether it meant «звук» or something else entirely.
+                  Every button says its word now. */}
               {OFFERED_OVERLAY_KINDS.map((kind) => (
                 <button
                   key={kind}
@@ -554,10 +609,13 @@ export default function ReelTextScreen({
                   onMouseDown={(e) => e.preventDefault()}
                   onTouchStart={(e) => e.preventDefault()}
                   onClick={() => attach(kind)}
-                  className="flex h-11 flex-1 items-center justify-center rounded-[12px] text-[17px]"
-                  style={{ backgroundColor: overlayStyle(kind).wash }}
+                  className="flex h-12 flex-1 flex-col items-center justify-center gap-0.5 rounded-[12px] text-[10px] font-semibold leading-none"
+                  style={{ backgroundColor: overlayStyle(kind).wash, color: overlayStyle(kind).color }}
                 >
-                  <span aria-hidden>{overlayStyle(kind).glyph}</span>
+                  <span aria-hidden className="text-[15px] leading-none">
+                    {overlayStyle(kind).glyph}
+                  </span>
+                  {overlayStyle(kind).label}
                 </button>
               ))}
               <ToolButton label="Коротше" busy={busy === 'shorter'} onClick={() => void resize('shorter')} />
@@ -567,8 +625,8 @@ export default function ReelTextScreen({
             <>
               <MicButton
                 ref={micRef}
-                onText={onFinal}
                 onInterim={onInterim}
+                onDone={onFinal}
                 onRecordingChange={onRecordingChange}
                 onError={setError}
               />

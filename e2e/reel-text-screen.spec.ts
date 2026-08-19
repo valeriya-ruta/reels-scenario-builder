@@ -81,8 +81,28 @@ test('selecting a phrase raises the attach bar, and picking a type attaches it',
   expect(box).not.toBeNull();
   expect(box!.y).toBeGreaterThan(PHONE.height * 0.55);
 
+  // Every attach button says its word: the glyph alone was unreadable.
+  await expect(bar.locator('[data-kind="video"]')).toContainText('Відео');
+  await expect(bar.locator('[data-kind="sound"]')).toContainText('Звук');
+
   await bar.locator('[data-kind="video"]').click();
   await expect(page.getByTestId('overlay-chip')).toHaveCount(2);
+});
+
+test('copying the script is on the page, not buried behind ⋯', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.getByTestId('copy-inline').click();
+
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copied).toContain('Я мріяла про життя');
+  expect(copied).toContain('Виявилось, річ не в дисципліні');
+});
+
+test('the note has no focus ring — it is a page, not a form field', async ({ page }) => {
+  const area = page.locator('[data-testid="note-editor"] textarea');
+  await area.click();
+  const outline = await area.evaluate((el) => getComputedStyle(el).outlineStyle);
+  expect(outline).toBe('none');
 });
 
 test('«Чистий текст» copies the script exactly, with its paragraph break', async ({ page, context }) => {

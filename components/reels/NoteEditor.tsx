@@ -158,7 +158,11 @@ export default function NoteEditor({
           // apply :focus-visible to a text field on TAP too, so the whole note
           // drew a box around itself and read as a form.
           className={`${TEXT_METRICS} relative resize-none overflow-hidden bg-transparent px-0 py-1 text-[color:var(--foreground)] placeholder-[color:var(--text-muted)] outline-none focus:outline-none focus-visible:outline-none`}
-          style={previewText !== null ? { opacity: 0.55 } : undefined}
+          // `outline` inline, because the global `textarea:focus-visible` rule
+          // wins over any utility class: browsers fire :focus-visible on a text
+          // field when you TAP it, so the whole note drew a blue box around
+          // itself. No notes app does that; the caret is the focus indicator.
+          style={{ outline: 'none', ...(previewText !== null ? { opacity: 0.55 } : {}) }}
         />
       </div>
 

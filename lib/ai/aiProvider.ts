@@ -42,10 +42,18 @@ const TEXT_MODEL: Record<AiVendor, () => string> = {
   openrouter: () => optionalServerEnv('OPENROUTER_MODEL') ?? 'google/gemini-3.7-flash',
 };
 
-/** Whisper large v3 turbo on both — the model the transcripts were tuned on. */
+/**
+ * Whisper large v3, NOT the turbo distil.
+ *
+ * Turbo is roughly twice as fast and noticeably worse on conversational
+ * Ukrainian — she got a transcript full of mistakes from a clean recording.
+ * Speed stopped being the reason to keep it once dictation went segmented: the
+ * take is transcribed in ~9-second pieces while she is still speaking, so what
+ * matters now is that each piece is right.
+ */
 const STT_MODEL: Record<AiVendor, () => string> = {
-  groq: () => optionalServerEnv('GROQ_STT_MODEL') ?? 'whisper-large-v3-turbo',
-  openrouter: () => optionalServerEnv('OPENROUTER_STT_MODEL') ?? 'openai/whisper-large-v3-turbo',
+  groq: () => optionalServerEnv('GROQ_STT_MODEL') ?? 'whisper-large-v3',
+  openrouter: () => optionalServerEnv('OPENROUTER_STT_MODEL') ?? 'openai/whisper-large-v3',
 };
 
 function keyFor(vendor: AiVendor): string | null {

@@ -20,65 +20,100 @@ import { detectOutputLanguage } from '@/lib/ai/rantToScript';
 export type RewriteMode = 'reel' | 'shorter' | 'longer';
 
 const LANGUAGE_RULE: Record<'uk' | 'en', string> = {
-  uk: 'Answer in Ukrainian. Never Russian, never English.',
-  en: 'Answer in English.',
+  uk: 'МОВА ВІДПОВІДІ: українська. НІКОЛИ не російська, не англійська.',
+  en: 'LANGUAGE: English.',
 };
 
 /**
- * Shared house style. Repeated in every prompt because the failure it prevents
- * — the model "improving" her into a LinkedIn post — is the one that makes the
- * output unusable rather than merely imperfect.
+ * The house voice, in Ukrainian and in detail — modelled on the carousel
+ * prompt, which is the one in this codebase she says holds her tone.
+ *
+ * English bullet-points produced polite Ukrainian filler; this does not. The
+ * rules here are each a thing that actually went wrong in a real take.
  */
 const VOICE_RULES = [
-  'You are editing a script the author will say OUT LOUD to a phone camera.',
-  'Keep HER voice, her words and her rhythm. Do not make it more formal.',
-  'Prefer her actual phrasing over a better one you could write.',
-  'No emoji, no hashtags, no markdown, no stage directions, no labels.',
-  'Never address the author. Never explain what you did.',
-  'Plain spoken sentences only — this text is read aloud verbatim.',
+  'Ти — ГОЛОС САМОЇ АВТОРКИ. Не копірайтер, не коуч, не агенція.',
+  '',
+  'Це voice-to-text: вона наговорила думку вголос, і твоя робота — зробити з цього',
+  'текст, який вона СКАЖЕ В КАМЕРУ. Не пост, не статтю, не переказ.',
+  '',
+  '- Тягни її ЖИВІ слова й вирази прямо з тексту. Її формулювання завжди краще',
+  '  за гарніше, яке ти міг би написати.',
+  '- НЕ причісуй у гладкий рекламний копірайт. Ніякого пафосу, ніяких фальшивих',
+  '  осяянь («і тут я зрозуміла», «і ось у чому секрет»), ніякого «ти мусиш».',
+  '- НЕ ВИГАДУЙ. Жодного факту, прикладу, цифри, міста чи думки, яких вона не',
+  '  казала. Вигадане = брехня в тексті, який вона прочитає вголос.',
+  '- Без емодзі, хештегів, розмітки, заголовків, ремарок і підписів на кшталт',
+  '  «Хук:» чи «Сцена 1». Тільки живі розмовні речення.',
+  '- Ніколи не звертайся до авторки й не пояснюй, що ти зробив.',
 ].join('\n');
 
 const INSTRUCTION: Record<RewriteMode, string> = {
   reel: [
-    'Turn this spoken dump into a script she can read to camera.',
+    'ЗАВДАННЯ: зробити з цього наговореного дампу сценарій рілсу.',
     '',
-    'DO NOT SUMMARISE. This is the failure that matters: a several-minute dump',
-    'came back as three generic lines and everything she actually argued was',
-    'gone. Every point, every example, every aside, every number and every name',
-    'she mentioned must survive into the script. If she made six points, the',
-    'script makes six points. The output should be close to the same LENGTH as',
-    'the input — never a fraction of it.',
+    '═══ ДОВЖИНА — ЦЕ ГОЛОВНЕ ═══',
+    'Ціль: 60–90 секунд. Це приблизно 150–230 слів. Максимум — 2 хвилини, і то',
+    'лише якщо без цього втрачається суть.',
     '',
-    'What you may change:',
-    '- Add ONE opening line that makes someone stop scrolling, built only from',
-    '  what she actually said. If her own first sentence already does that, keep it.',
-    '- Remove false starts, «ееее», «ну», restarted sentences and words repeated',
-    '  by accident. Nothing else.',
-    '- Fix word order where speech made it tangled, and split run-on sentences.',
-    '- Break it into paragraphs, one thought each, separated by a blank line.',
+    'Вона наговорює довго і з відступами — це нормально, так думають вголос. Твоя',
+    'робота НЕ переказати все, а витягти сценарій. Ріж:',
+    '- довгі пояснення «як це працює» до одного речення,',
+    '- перелічування, де три приклади роблять ту саму роботу, що й один,',
+    '- усе, що вона повторила вдруге іншими словами,',
+    '- усе, що не працює на головну думку рілсу.',
+    'Якщо після різання лишилось більше 230 слів — ріж ще.',
     '',
-    'You are tidying a transcript, not writing a new post about the same topic.',
+    '═══ ВОНА ПЕРЕБИВАЄ САМА СЕБЕ — ПЕРЕПИСУЙ, А НЕ ВИРІЗАЙ ═══',
+    'У живій мові вона починає думку, стрибає вбік, а потім повертається:',
+    '«…і потім треба тестувати. А, до речі, ось мої додатки — Ran$om зʼявився',
+    'тому що… — так от, тестувати треба на кожному етапі».',
+    '',
+    'Це НЕ означає видалити відступ. Це означає ПЕРЕСКЛАСТИ: приклад іде туди,',
+    'де він доречний, а перервана думка договорюється один раз і до кінця. Не',
+    'лишай у тексті обірваних хвостів і повернень «так от, про що я». Читач',
+    'сценарію не має бачити, що вона збилась.',
+    '',
+    '═══ ЩО МАЄ ЛИШИТИСЬ ═══',
+    '- ПЕРШИЙ рядок — гачок: одне коротке речення, від якого не гортають далі.',
+    '  Будуй його ТІЛЬКИ з того, що вона реально сказала. Якщо її власна перша',
+    '  фраза вже гачок — лиши її.',
+    '- Головна думка і аргументи, чому вона так вважає.',
+    '- Її конкретика: назви, імена, цифри, справжні приклади з життя. Це те, що',
+    '  робить рілс її, а не чиїмось. Приклади можна СКОРОТИТИ, але не знеособити',
+    '  («мій додаток Foral, бо в чоловіка алергії» — лишається; три абзаци про те,',
+    '  як саме він працює — ні).',
+    '- Одна фраза наприкінці, що закриває думку. Заклик до дії — тільки якщо вона',
+    '  сама його сказала.',
+    '',
+    'Один абзац — одна думка, між абзацами порожній рядок.',
   ].join('\n'),
+
   shorter: [
-    'Make this tighter WITHOUT losing an idea.',
-    'Cut filler, hedging and repeated words — never a point, an example or a name.',
-    'If a point can only go by being deleted, keep it and cut elsewhere.',
-    'Keep the paragraph breaks where the ideas still divide that way.',
+    'ЗАВДАННЯ: переписати цей текст КОРОТШЕ.',
+    '',
+    'Переписати — не обрізати. Не можна просто видалити другу половину або',
+    'відрізати кінець: так уже ставалось, і це не «коротше», це «недописане».',
+    '',
+    'Ціль — приблизно на третину менше слів, але ВСІ думки лишаються на місці.',
+    'Скорочуй так: довге речення → коротке; три приклади → один найсильніший;',
+    'пояснення на абзац → одна фраза; «те, що я хочу сказати, це…» → одразу суть.',
+    '',
+    'Кінець має лишитись кінцем. Текст має читатись як цілий, а не як уривок.',
   ].join('\n'),
+
   longer: [
-    'Open this out using ONLY what is already in it.',
+    'ЗАВДАННЯ: розгорнути цей текст, використовуючи ТІЛЬКИ те, що в ньому вже є.',
     '',
-    'You may not add a fact, an example, a claim, a statistic, a place or an',
-    'opinion that is not already in her text. This is the failure that matters:',
-    'asked to expand three lines about building apps from problems she knows,',
-    'a model produced advice about spotting a problem in your city and building',
-    'something the market wants — none of which she said. That is not expansion,',
-    'it is a different person talking.',
+    'Не можна додати жодного факту, прикладу, цифри, місця чи думки, яких у',
+    'тексті нема. Так уже ставалось: на прохання розгорнути три рядки про',
+    'додатки з власних болей модель видала пораду «побач проблему у своєму місті',
+    'й зроби те, що потрібно ринку» — вона такого не казала. Це не розгортання,',
+    'це інша людина.',
     '',
-    'What expanding actually means here: finish thoughts she left half-said,',
-    'spell out a step she compressed, and give a point that got one clause a',
-    'sentence of its own. If there is nothing left to unpack, return the text',
-    'almost unchanged. Too short is fine; invented is not.',
+    'Розгорнути тут означає: договорити думку, яку вона обірвала; розписати крок,',
+    'який вона стиснула в пів слова; дати окреме речення тому, що отримало',
+    'підрядне. Якщо розгортати нічого — поверни текст майже без змін.',
   ].join('\n'),
 };
 
@@ -129,7 +164,7 @@ export async function rewriteReelText(
   // added a failure mode of its own: one reply the model did not quote properly
   // and the whole button answered «повернула щось незрозуміле» over text that
   // was actually fine. The reply IS the script now.
-  const user = ['Return ONLY the text. No preamble, no quotes, no JSON.', '', 'TEXT:', text].join('\n');
+  const user = ['Поверни ТІЛЬКИ текст. Без вступу, без лапок, без пояснень.', '', 'ТЕКСТ:', text].join('\n');
 
   const script = normalizeScript(await complete(system, user));
   if (!script) throw new Error('Модель повернула порожній текст. Спробуй ще раз.');

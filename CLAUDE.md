@@ -38,6 +38,26 @@ break `pro`.
 - One shared Postgres. **Schema changes are additive only. Nothing on main may
   break pro.**
 
+## What «Зробити рілс» must do to a spoken dump
+
+These are hers, said while testing, and they are the difference between a
+usable script and a wall of text. They live in `lib/ai/reelText.ts`.
+
+- **60–90 seconds.** ~150–230 words. Two minutes is rare and deliberate; three
+  is a failure. Instagram allowing three does not make three good.
+- **Cut the long explanations.** She explains how things work at length when
+  talking. One sentence each in the script; three examples become the best one.
+- **She interrupts herself, and the rewrite must RESTRUCTURE, not just trim.**
+  She starts a thought, jumps to an example, comes back. The example belongs
+  where it fits and the interrupted thought gets said once, to the end. A
+  script that still shows her losing the thread has not been rewritten.
+- **Never invent.** No fact, example, number, place or opinion she did not say.
+- **Her words over better words.** The carousel prompt (`lib/ai/carouselPrompt.ts`)
+  is the reference for tone — written in Ukrainian, voice-first, specific.
+  English bullet-point prompts produce polite Ukrainian filler.
+- **Коротше rewrites, it does not truncate.** Cutting the second half is not
+  «shorter», it is unfinished.
+
 ## Rules that came from real breakage
 
 - One source of truth per concept. A hand-copied list of reel columns drifted in
