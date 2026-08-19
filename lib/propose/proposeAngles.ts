@@ -1,5 +1,4 @@
-import { requireServerEnv } from '@/lib/env';
-import { GROQ_TEXT_MODEL } from '@/lib/ai/groqModel';
+import { chatEndpoint } from '@/lib/ai/aiProvider';
 import type { ContentType } from '@/lib/contentTypes';
 import { CONTENT_TYPE_ORDER } from '@/lib/contentTypes';
 import type { Proposal, ProposalSignal } from '@/lib/propose/types';
@@ -113,13 +112,13 @@ export async function proposeAngles(
   signals: ProposalSignal[],
   exclude: ReadonlyArray<string> = [],
 ): Promise<Proposal[]> {
-  const apiKey = requireServerEnv('GROQ_API_KEY');
+  const endpoint = chatEndpoint();
 
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+  const res = await fetch(endpoint.url, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+    headers: endpoint.headers,
     body: JSON.stringify({
-      model: GROQ_TEXT_MODEL,
+      model: endpoint.model,
       temperature: 0.85,
       response_format: { type: 'json_object' },
       messages: [

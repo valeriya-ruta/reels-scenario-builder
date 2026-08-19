@@ -43,8 +43,21 @@ const REAL_CLOCK: SaveClock = {
 
 export class SaveQueue {
   private readonly waiting = new Map<string, { timer: Timer; run: SaveRun }>();
+  private oneOff = 0;
   private flying = 0;
-  private broke = false;
+  /**
+   * The fields whose LAST write was refused.
+   *
+   * A single boolean was wrong in a way that destroyed the chip's whole point:
+   * one transient failure latched it, and «НЕ збережено» then stayed on screen
+   * for the rest of the session while every subsequent write succeeded. A
+   * warning that cannot go away is one she learns to ignore, which is worse
+   * than not having it — and the text really was saved.
+   *
+   * Keyed, because "did this field reach the database" is per field: a refused
+   * overlay write must keep warning even while the text saves fine.
+   */
+  private readonly refused = new Set<string>();
 
   constructor(
     private readonly delayMs: number,
@@ -53,7 +66,7 @@ export class SaveQueue {
   ) {}
 
   get state(): SaveQueueState {
-    return { pending: this.waiting.size, inFlight: this.flying, failed: this.broke };
+    return { pending: this.waiting.size, inFlight: this.flying, failed: this.refused.size > 0 };
   }
 
   /** Is there anything that would be lost by closing the page right now? */
@@ -75,8 +88,9 @@ export class SaveQueue {
   }
 
   /** A click, not typing — nothing to coalesce, but still worth counting. */
-  now(run: SaveRun): void {
-    this.start(run);
+  now(run: SaveRun, key?: string): void {
+    this.oneOff += 1;
+    this.start(run, key ?? `once:${this.oneOff}`);
   }
 
   /** Send everything that is waiting, immediately. */
@@ -89,10 +103,10 @@ export class SaveQueue {
     }
   }
 
-  /** The failure has been seen. */
+  /** The failure has been seen — dismissed by hand. */
   clearFailed(): void {
-    if (!this.broke) return;
-    this.broke = false;
+    if (this.refused.size === 0) return;
+    this.refused.clear();
     this.emit();
   }
 
@@ -107,19 +121,26 @@ export class SaveQueue {
     const entry = this.waiting.get(key);
     if (!entry) return;
     this.waiting.delete(key);
-    this.start(entry.run);
+    this.start(entry.run, key);
   }
 
-  private start(run: SaveRun): void {
+  /**
+   * `key` is the field this write belongs to. A success CLEARS its earlier
+   * failure: the server now holds what the screen holds, whatever happened on
+   * the attempt before. Writes with no key (a click, not typing) get a unique
+   * one, so they can fail without pinning a field that is saving fine.
+   */
+  private start(run: SaveRun, key: string): void {
     this.flying += 1;
     this.emit();
     void (async () => {
       try {
         const ok = await run();
-        if (!ok) this.broke = true;
+        if (ok) this.refused.delete(key);
+        else this.refused.add(key);
       } catch {
-        // A dropped connection is exactly the case the banner exists for.
-        this.broke = true;
+        // A dropped connection is exactly the case the chip exists for.
+        this.refused.add(key);
       } finally {
         this.flying -= 1;
         this.emit();

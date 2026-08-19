@@ -1,7 +1,6 @@
+import { chatEndpoint } from '@/lib/ai/aiProvider';
 import 'server-only';
 
-import { requireServerEnv } from '@/lib/env';
-import { GROQ_TEXT_MODEL } from '@/lib/ai/groqModel';
 import { detectOutputLanguage, type OutputLanguage } from '@/lib/ai/carouselPrompt';
 import {
   deriveThreadTitle,
@@ -91,17 +90,14 @@ export function buildThreadUserContent(brief: string, outputLanguage: OutputLang
 }
 
 export async function generateThreadFromBrief(brief: string): Promise<GeneratedThread> {
-  const apiKey = requireServerEnv('GROQ_API_KEY');
+  const endpoint = chatEndpoint();
   const outputLanguage = detectOutputLanguage(brief);
 
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+  const res = await fetch(endpoint.url, {
     method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${apiKey}`,
-    },
+    headers: endpoint.headers,
     body: JSON.stringify({
-      model: GROQ_TEXT_MODEL,
+      model: endpoint.model,
       temperature: 0.7,
       response_format: { type: 'json_object' },
       messages: [

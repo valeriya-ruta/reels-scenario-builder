@@ -1,5 +1,4 @@
-import { requireServerEnv } from '@/lib/env';
-import { GROQ_TEXT_MODEL } from '@/lib/ai/groqModel';
+import { chatEndpoint } from '@/lib/ai/aiProvider';
 
 export interface TemplateSceneDraft {
   text: string;
@@ -74,7 +73,7 @@ export async function templatizeTranscriptToScenes(
   transcript: string,
   context?: TemplatizeReferenceContext
 ): Promise<{ title: string; scenes: TemplateSceneDraft[] }> {
-  const apiKey = requireServerEnv('GROQ_API_KEY');
+  const endpoint = chatEndpoint();
   const trimmed = transcript.trim();
   const refUrl = context?.referenceUrl?.trim() ?? '';
   const refNote = context?.referenceNote?.trim() ?? '';
@@ -95,14 +94,11 @@ export async function templatizeTranscriptToScenes(
         ? '\n\nIMPORTANT REPAIR: Return JSON with key "scenes" only as an array of objects like {"text":"..."}. Minimum 3 non-empty scenes.'
         : '';
 
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    const res = await fetch(endpoint.url, {
       method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${apiKey}`,
-      },
+      headers: endpoint.headers,
       body: JSON.stringify({
-        model: GROQ_TEXT_MODEL,
+        model: endpoint.model,
         temperature: 0.45,
         response_format: { type: 'json_object' },
         messages: [
