@@ -2,17 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { nanoid } from 'nanoid';
-import {
-  Check,
-  Copy,
-  Keyboard,
-  Link2,
-  Loader2,
-  Mic,
-  MoreHorizontal,
-  Sparkles,
-  Undo2,
-} from 'lucide-react';
+import { Check, Copy, Link2, Loader2, MoreHorizontal, Sparkles, Undo2 } from 'lucide-react';
 import EditorTopBar from '@/components/ui/EditorTopBar';
 import StatusPill from '@/components/content/StatusPill';
 import ScheduleChip from '@/components/content/ScheduleChip';
@@ -22,6 +12,7 @@ import AttachSheet from '@/components/reels/AttachSheet';
 import CleanScriptSheet from '@/components/reels/CleanScriptSheet';
 import OverlayListSheet from '@/components/reels/OverlayListSheet';
 import ReelMoreSheet from '@/components/reels/ReelMoreSheet';
+import ReferenceSheet from '@/components/reels/ReferenceSheet';
 import MicButton, { type MicHandle } from '@/components/reels/MicButton';
 import { updateProjectName } from '@/app/actions';
 import {
@@ -132,7 +123,10 @@ export default function ReelTextScreen({
   const [caret, setCaret] = useState(0);
   const [selection, setSelection] = useState<{ start: number; end: number } | null>(null);
   const [openOverlayId, setOpenOverlayId] = useState<string | null>(null);
-  const [sheet, setSheet] = useState<null | 'more' | 'script' | 'overlays'>(null);
+  const [sheet, setSheet] = useState<null | 'more' | 'script' | 'overlays' | 'reference'>(null);
+  const [referenceUrl, setReferenceUrl] = useState<string | null>(
+    initialProject.reference_url ?? null,
+  );
   const [busy, setBusy] = useState<Busy>(null);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -519,6 +513,23 @@ export default function ReelTextScreen({
                 ~{formatDuration(seconds)}
                 {note.overlays.length > 0 ? ` · ${note.overlays.length} поверх` : ''}
               </span>
+              {/* The reference is an INPUT — the thing you have before you
+                  write — so it sits with the reel's other properties. It was
+                  under ⋯ next to the caption, which is an OUTPUT, and she went
+                  looking for it there and gave up. */}
+              <button
+                type="button"
+                data-testid="reference-chip"
+                onClick={() => setSheet('reference')}
+                className="inline-flex min-h-8 items-center gap-1.5 rounded-full border px-2.5 text-[12px] font-medium"
+                style={{
+                  color: referenceUrl ? 'var(--accent)' : 'var(--text-muted)',
+                  borderColor: referenceUrl ? 'var(--accent)' : 'var(--border)',
+                }}
+              >
+                <Link2 className="h-3.5 w-3.5" />
+                Референс
+              </button>
               <SaveChip label={label} />
             </>
           }
@@ -573,7 +584,10 @@ export default function ReelTextScreen({
             readOnly={busy !== null}
             rewriting={busy !== null}
             caretAt={caretAt}
-            placeholder="Пиши або тисни мікрофон…"
+            // The placeholder IS the onboarding. Three cards saying «tap the
+            // mic», floating above a toolbar that contains the mic, taught
+            // nothing and covered the text she was trying to type into.
+            placeholder="Тисни мікрофон і розкажи. Або просто пиши тут."
             onChange={(next) => applyNote({ spoken: next })}
             onSelectionChange={setSelection}
             onCaretChange={setCaret}
@@ -605,37 +619,6 @@ export default function ReelTextScreen({
           </p>
         ) : null}
       </div>
-
-      {/* The three ways in, shown only while the note is empty. */}
-      {!hasContent && preview === null ? (
-        <div
-          data-testid="reel-doors"
-          className="pointer-events-none fixed inset-x-0 z-40 px-4"
-          style={{ bottom: keyboard + BAR_HEIGHT + 12 }}
-        >
-          <div className="pointer-events-auto mx-auto flex max-w-[680px] flex-col gap-2">
-            <Door
-              primary
-              icon={<Mic className="h-5 w-5" />}
-              title="Наговорити"
-              hint="Розкажи, як другові. Слова зʼявлятимуться тут одразу."
-              onClick={() => micRef.current?.start()}
-            />
-            <Door
-              icon={<Keyboard className="h-5 w-5" />}
-              title="Написати"
-              hint="Просто почни друкувати."
-              onClick={() => setCaretAt(0)}
-            />
-            <Door
-              icon={<Link2 className="h-5 w-5" />}
-              title="З референсу"
-              hint="Встав посилання на Reels — витягну з нього текст."
-              onClick={() => setSheet('more')}
-            />
-          </div>
-        </div>
-      ) : null}
 
       <div
         data-testid="reel-toolbar"
@@ -718,7 +701,6 @@ export default function ReelTextScreen({
         open={sheet === 'more'}
         project={project}
         script={text}
-        hasWriting={text.trim().length > 0}
         onClose={() => setSheet(null)}
         onOpenScript={() => setSheet('script')}
         onOpenOverlays={() => setSheet('overlays')}
@@ -726,56 +708,19 @@ export default function ReelTextScreen({
           setSheet(null);
           addClipCard();
         }}
-        onProjectUpdate={setProject}
-        onReferenceText={applyReferenceText}
+      />
+      <ReferenceSheet
+        open={sheet === 'reference'}
+        projectId={project.id}
+        initialUrl={referenceUrl}
+        hasWriting={text.trim().length > 0}
+        onClose={() => setSheet(null)}
+        onText={applyReferenceText}
+        onUrlChange={setReferenceUrl}
       />
       <CleanScriptSheet open={sheet === 'script'} blocks={allBlocks} onClose={() => setSheet(null)} />
       <OverlayListSheet open={sheet === 'overlays'} blocks={allBlocks} onClose={() => setSheet(null)} />
     </div>
-  );
-}
-
-function Door({
-  icon,
-  title,
-  hint,
-  primary = false,
-  onClick,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  hint: string;
-  primary?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      data-testid="door"
-      data-door={title}
-      onClick={onClick}
-      className="flex w-full items-start gap-3 rounded-[16px] border p-3.5 text-left"
-      style={{
-        borderColor: primary ? 'var(--accent)' : 'var(--border)',
-        backgroundColor: primary ? 'var(--accent-soft)' : 'var(--surface)',
-      }}
-    >
-      <span
-        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px]"
-        style={{
-          backgroundColor: primary ? 'var(--accent)' : 'var(--surface1)',
-          color: primary ? '#fff' : 'var(--text-secondary)',
-        }}
-      >
-        {icon}
-      </span>
-      <span className="min-w-0">
-        <span className="block text-[15px] font-semibold text-[color:var(--foreground)]">{title}</span>
-        <span className="mt-0.5 block text-[12.5px] leading-snug text-[color:var(--text-muted)]">
-          {hint}
-        </span>
-      </span>
-    </button>
   );
 }
 

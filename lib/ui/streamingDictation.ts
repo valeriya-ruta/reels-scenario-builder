@@ -24,8 +24,12 @@
  * preview it was supposed to provide never appeared on her phone.
  */
 
-/** Long enough that a segment is a sentence; short enough to feel live. */
-const SEGMENT_MS = 9000;
+/**
+ * Long enough that a segment is a phrase, short enough that the wait is not
+ * felt. Nine seconds still read as a delay; this plus Whisper's own second or
+ * two puts words on screen about every five.
+ */
+const SEGMENT_MS = 4000;
 
 export type DictationHandle = {
   /** Finish: closes the current segment and transcribes what is left. */
@@ -165,6 +169,10 @@ export function meterStream(stream: MediaStream, onLevel: (level: number) => voi
     if (!Ctx) return () => {};
 
     audio = new Ctx();
+    // Chrome hands back a SUSPENDED context and only runs it after an explicit
+    // resume, so the analyser read silence forever and the bars sat still even
+    // though the microphone was open.
+    void audio.resume().catch(() => {});
     const source = audio.createMediaStreamSource(stream);
     const analyser = audio.createAnalyser();
     analyser.fftSize = 256;

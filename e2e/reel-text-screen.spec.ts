@@ -33,6 +33,19 @@ test('nothing on screen asks for framing, pose or camera motion', async ({ page 
   }
 });
 
+test('an empty note is just a note — no cards floating over the text', async ({ page }) => {
+  // Three cards saying «tap the mic», above a toolbar containing the mic,
+  // taught nothing and covered the text she was typing into.
+  await expect(page.getByTestId('reel-doors')).toHaveCount(0);
+  await expect(page.getByTestId('mic')).toBeVisible();
+});
+
+test('the reference has its own chip, not a hunt through ⋯', async ({ page }) => {
+  await expect(page.getByTestId('reference-chip')).toBeVisible();
+  await page.getByTestId('reference-chip').click();
+  await expect(page.getByPlaceholder(/instagram\.com\/reel/)).toBeVisible();
+});
+
 test('it reads as a note: no scene numbers, no per-row controls, one toolbar', async ({ page }) => {
   await expect(page.getByLabel('Вище')).toHaveCount(0);
   await expect(page.getByLabel('Нижче')).toHaveCount(0);
