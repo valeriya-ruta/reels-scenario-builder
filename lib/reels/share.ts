@@ -23,8 +23,20 @@ export type ReelShareLink = {
 
 type LinkRow = { token: string; note: string | null; revoked: boolean };
 
-/** This reel's active link, or null. One per reel — pressing share twice
- *  returns the same URL rather than minting a second one to keep track of. */
+/**
+ * This reel's OWN link, or null. One per reel — pressing share twice returns
+ * the same URL rather than minting a second one to keep track of.
+ *
+ * Deliberately not «any link that carries this reel». It used to be, and so
+ * «Поділитися рілсом» on one reel handed back the six-reel batch link shared
+ * earlier that week: the person opening it got a list to pick from instead of
+ * the reel they were sent. A batch is its own thing with its own button.
+ *
+ * `reel_id` is what separates them: `createReelShareSet` sets it when the link
+ * carries exactly one reel and leaves it null for a batch, and every link
+ * predating sets (035) has it set. Membership in `reel_share_items` still
+ * defines what a link OPENS — this only asks which links are single.
+ */
 export async function getReelShareLink(reelId: string): Promise<ReelShareLink | null> {
   const supabase = await createServerSupabaseClient();
   const {
@@ -32,14 +44,12 @@ export async function getReelShareLink(reelId: string): Promise<ReelShareLink | 
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  // Membership lives in reel_share_items, so this finds the reel's link whether
-  // it was shared on its own or as one of fifteen.
   const { data } = await supabase
     .from('reel_share_links')
-    .select('token,note,revoked,reel_share_items!inner(reel_id)')
+    .select('token,note,revoked')
     .eq('owner_user_id', user.id)
     .eq('revoked', false)
-    .eq('reel_share_items.reel_id', reelId)
+    .eq('reel_id', reelId)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle<LinkRow>();
@@ -120,19 +130,13 @@ export async function revokeReelShareLink(reelId: string): Promise<boolean> {
   } = await supabase.auth.getUser();
   if (!user) return false;
 
-  // Membership is in the join table now, so find the links that carry this reel
-  // rather than matching the legacy `reel_id` column, which is null on a set.
-  const { data: links } = await supabase
-    .from('reel_share_items')
-    .select('link_id')
-    .eq('reel_id', reelId);
-  const ids = (links ?? []).map((r: { link_id: string }) => r.link_id);
-  if (ids.length === 0) return true;
-
+  // Only this reel's OWN link. Revoking every link that merely contains the
+  // reel would kill the batch link for the other fourteen reels in it — from a
+  // button that says «вимкнути» on one reel. A batch is revoked from the batch.
   const { error } = await supabase
     .from('reel_share_links')
     .update({ revoked: true, updated_at: new Date().toISOString() })
-    .in('id', ids)
+    .eq('reel_id', reelId)
     .eq('owner_user_id', user.id)
     .eq('revoked', false);
 
