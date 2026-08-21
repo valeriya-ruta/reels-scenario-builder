@@ -426,11 +426,11 @@ export default function ReelBuilder({
                 <span
                   data-testid="save-state"
                   data-state={label}
-                  className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold"
-                  style={{
-                    color: SAVE_CHIP[label].color,
-                    backgroundColor: `${SAVE_CHIP[label].color}14`,
-                  }}
+                  /* Deliberately NOT a pill: a pill on this row means «натисни»
+                     — status and date beside it both open a picker. This only
+                     reports, so it is plain text with an icon. */
+                  className="flex items-center gap-1.5 px-0.5 text-[12px] font-semibold"
+                  style={{ color: SAVE_CHIP[label].color }}
                 >
                   {(() => {
                     const { Icon } = SAVE_CHIP[label];
