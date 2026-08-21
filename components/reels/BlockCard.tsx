@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, Copy, ImagePlus, Link2, Plus, Trash2, X } from 'lucide-react';
 import ReferenceMedia from '@/components/reels/ReferenceMedia';
 import { imagesFromClipboard, uploadPastedImage } from '@/lib/reels/pasteImage';
@@ -48,9 +48,41 @@ const FIELD =
  * points, so every property that affects line breaking is set on both — font,
  * size, line-height, tracking, padding AND border width (the border shifts the
  * text box, so a mirror without one sits a pixel out).
+ *
+ * The one that is NOT a property: a scrollbar. Past four rows the textarea grew
+ * one, which took ~15px off its content width, so it wrapped earlier than the
+ * mirror and every highlight after that point slid off its words. The textarea
+ * therefore grows to fit its text and never scrolls — see `useAutoGrow`.
  */
 const TEXT_METRICS =
   'whitespace-pre-wrap break-words font-sans text-[15px] leading-[1.6] tracking-normal px-3 py-2 border';
+
+/** Four rows of `TEXT_METRICS`, plus its padding — where an empty block starts. */
+const TEXT_MIN_HEIGHT = 4 * Math.round(15 * 1.6) + 16 + 2;
+
+/**
+ * Grow a textarea to its content, so it never scrolls inside itself.
+ *
+ * Measured on every change to `text` because that is the only thing that can
+ * change the height, and on width changes because rewrapping changes the line
+ * count. `height:auto` first: `scrollHeight` of an element already tall enough
+ * reports the height it HAS, not the height it needs, so a shrinking edit would
+ * otherwise never shrink the box.
+ */
+function useAutoGrow(ref: React.RefObject<HTMLTextAreaElement | null>, text: string) {
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const fit = () => {
+      el.style.height = 'auto';
+      el.style.height = `${Math.max(el.scrollHeight, TEXT_MIN_HEIGHT)}px`;
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref, text]);
+}
 
 /** Outside the component: an id is minted in an event, never during a render. */
 function newClipId(): string {
@@ -112,12 +144,12 @@ export default function BlockCard({
   const [pasting, setPasting] = useState(false);
   const [pasteError, setPasteError] = useState<string | null>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
-  const mirrorRef = useRef<HTMLDivElement>(null);
   const [selection, setSelection] = useState<{ start: number; end: number } | null>(null);
   const [openOverlay, setOpenOverlay] = useState<string | null>(null);
 
   const isSpoken = block.kind === 'talk' || block.kind === 'dialogue';
   const body = (isSpoken ? block.spoken : block.screenText) ?? '';
+  useAutoGrow(textRef, body);
   const runs = textRuns(body, block.overlays);
   const resolved = resolveOverlays(body, block.overlays);
   const color = BLOCK_COLORS[block.kind];
@@ -314,12 +346,11 @@ export default function BlockCard({
             The highlight layer draws ONLY the highlight: its glyphs are
             transparent and carry the marks, while the real text is the
             textarea's own on top. Drawing the text in both is what doubled it
-            on screen. The layer scrolls with the box, since a textarea taller
-            than its rows scrolls internally. */}
+            on screen. Neither box ever scrolls inside itself — the textarea
+            grows to its text — so the two stay wrapped identically. */}
         {(isSpoken || block.kind === 'text') && (
           <div className="relative">
             <div
-              ref={mirrorRef}
               aria-hidden
               className={`pointer-events-none absolute inset-0 overflow-hidden rounded-[10px] border-transparent ${TEXT_METRICS}`}
               style={{ color: 'transparent' }}
@@ -350,17 +381,21 @@ export default function BlockCard({
                 onPatch(isSpoken ? { spoken: e.target.value } : { screenText: e.target.value })
               }
               onSelect={readSelection}
-              onScroll={(e) => {
-                if (mirrorRef.current) mirrorRef.current.scrollTop = e.currentTarget.scrollTop;
-              }}
               onBlur={() => window.setTimeout(() => setSelection(null), 150)}
-              rows={4}
+              rows={1}
               data-testid="block-text"
               placeholder={
                 hint ?? (block.kind === 'text' ? 'Що написано на екрані' : 'Що я кажу, слово в слово')
               }
-              className={`relative w-full resize-y rounded-[10px] border-[color:var(--border)] bg-transparent outline-none focus:border-[color:var(--border-strong)] ${TEXT_METRICS}`}
-              style={{ color: 'var(--foreground)', caretColor: 'var(--foreground)' }}
+              // `resize-none` + `overflow-hidden`: the box is sized by its text,
+              // and a scrollbar here would silently rewrap it away from the
+              // mirror behind it.
+              className={`relative w-full resize-none overflow-hidden rounded-[10px] border-[color:var(--border)] bg-transparent outline-none focus:border-[color:var(--border-strong)] ${TEXT_METRICS}`}
+              style={{
+                color: 'var(--foreground)',
+                caretColor: 'var(--foreground)',
+                minHeight: TEXT_MIN_HEIGHT,
+              }}
             />
 
             {selection && (
