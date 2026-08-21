@@ -26,6 +26,7 @@ export default function PieceDetail({
   expanded,
   onToggleExpand,
   onOpenEditor,
+  surface = 'var(--background)',
 }: {
   detail: SharedPieceDetail | null;
   loading: boolean;
@@ -35,6 +36,12 @@ export default function PieceDetail({
   onToggleExpand?: () => void;
   /** Owner only — open the real editor for this piece. */
   onOpenEditor?: () => void;
+  /**
+   * What the header paints itself with when it sticks. It has to match the
+   * surface it sits on — a card, or the bare page in full screen — because the
+   * content scrolls underneath it.
+   */
+  surface?: string;
 }) {
   if (failed) {
     return (
@@ -54,7 +61,20 @@ export default function PieceDetail({
 
   return (
     <div data-testid="shared-detail">
-      <div className="flex items-start gap-3">
+      {/* Which piece you are reading, and the two ways out of it, stay put
+          while the reel scrolls — a storyboard is long enough that the title
+          was gone by the second beat, and with it the edit and full-screen
+          buttons.
+
+          The background is painted by a pseudo-element bled 24px past the
+          content box, because every surface this renders on has padding
+          (a card's 20px, a sheet's 16px) that the header itself does not span —
+          without it the text scrolls up through those strips. */}
+      <div
+        data-testid="detail-head"
+        className="sticky top-0 z-10 flex items-start gap-3 pb-2.5 before:absolute before:-inset-x-6 before:-top-6 before:bottom-0 before:-z-10 before:bg-[color:var(--head-bg)] before:content-['']"
+        style={{ ['--head-bg' as string]: surface }}
+      >
         <div className="min-w-0 flex-1">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--text-muted)]">
             {TYPE_LABELS[detail.type]}

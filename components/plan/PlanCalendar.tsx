@@ -479,6 +479,7 @@ export default function PlanCalendar({
             loading={detailLoading}
             failed={detailFailed}
             expanded
+            surface="var(--canvas)"
             onToggleExpand={() => setExpanded(false)}
             onOpenEditor={() => router.push(contentHref(openPiece))}
           />
