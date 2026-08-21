@@ -353,6 +353,7 @@ export default function SharedCalendarView({
               loading={loading}
               failed={failed}
               expanded
+              surface="var(--canvas)"
               onToggleExpand={() => setExpanded(false)}
             />
           </div>
