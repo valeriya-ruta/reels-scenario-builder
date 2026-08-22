@@ -87,17 +87,33 @@ export async function setContentScheduledDate(
 }
 
 /**
+ * What a freshly created piece is, to whoever asked for it.
+ *
+ * `href` is kept for the callers that simply navigate. The id and ref_table are
+ * there for the ones that do NOT: План opens the new piece in the panel beside
+ * the calendar, which means it has to be able to name the row it just made
+ * without re-reading the whole month.
+ */
+export type CreatedContent = {
+  ok: true;
+  href: string;
+  id: string;
+  refTable: ContentPiece['refTable'];
+  type: Exclude<ContentType, 'idea'>;
+  title: string;
+};
+
+/**
  * Create a piece already placed on a given day (Prompt 7's «＋» on Сьогодні).
  *
  * Scheduling is part of the creation, not a second step: the whole point of the
  * affordance is «add content to TODAY», and a piece that lands undated would
  * drop straight into Розбір instead of onto the day the user asked for.
- * Returns the editor href so the caller can navigate.
  */
 export async function createContentOnDate(
   type: Exclude<ContentType, 'idea'>,
   date: string,
-): Promise<{ ok: true; href: string } | { ok: false; error: string }> {
+): Promise<CreatedContent | { ok: false; error: string }> {
   const user = await requireAuth();
   if (!user) return { ok: false, error: 'UNAUTHORIZED' };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { ok: false, error: 'BAD_DATE' };
@@ -121,7 +137,14 @@ export async function createContentOnDate(
       .single<{ id: string }>();
     if (error || !data) return { ok: false, error: error?.message ?? 'INSERT_FAILED' };
     revalidateContentSurfaces();
-    return { ok: true, href: `/project/${data.id}` };
+    return {
+      ok: true,
+      href: `/project/${data.id}`,
+      id: data.id,
+      refTable: 'projects',
+      type,
+      title: NEW_LABELS.reel,
+    };
   }
 
   if (type === 'carousel') {
@@ -132,7 +155,14 @@ export async function createContentOnDate(
       .single<{ id: string }>();
     if (error || !data) return { ok: false, error: error?.message ?? 'INSERT_FAILED' };
     revalidateContentSurfaces();
-    return { ok: true, href: `/carousel/${data.id}` };
+    return {
+      ok: true,
+      href: `/carousel/${data.id}`,
+      id: data.id,
+      refTable: 'carousel_projects',
+      type,
+      title: NEW_LABELS.carousel,
+    };
   }
 
   const { data, error } = await supabase
@@ -157,7 +187,14 @@ export async function createContentOnDate(
   }
 
   revalidateContentSurfaces();
-  return { ok: true, href: `/storytelling/${data.id}` };
+  return {
+    ok: true,
+    href: `/storytelling/${data.id}`,
+    id: data.id,
+    refTable: 'storytelling_projects',
+    type,
+    title: NEW_LABELS.story,
+  };
 }
 
 /**

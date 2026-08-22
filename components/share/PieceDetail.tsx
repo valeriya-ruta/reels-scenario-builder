@@ -1,6 +1,6 @@
 'use client';
 
-import { Maximize2, Minimize2, SquarePen } from 'lucide-react';
+import { ExternalLink, Maximize2, Minimize2, SquarePen } from 'lucide-react';
 import ReelRecipe from '@/components/reels/ReelRecipe';
 import { TYPE_LABELS } from '@/lib/content/statusSystem';
 import { displayTitle } from '@/lib/content/displayTitle';
@@ -25,7 +25,9 @@ export default function PieceDetail({
   failed,
   expanded,
   onToggleExpand,
+  onEdit,
   onOpenEditor,
+  openEditorLabel = 'Відкрити повний редактор',
   surface = 'var(--background)',
 }: {
   detail: SharedPieceDetail | null;
@@ -34,8 +36,19 @@ export default function PieceDetail({
   /** Whether this is already the full-screen copy. */
   expanded?: boolean;
   onToggleExpand?: () => void;
+  /**
+   * Owner only — turn THIS panel editable, without going anywhere.
+   *
+   * The pencil used to mean "leave for the builder", which is the complaint:
+   * changing one line of a story cost a navigation, a hunt for the right
+   * column, and a way back. Where a format can be edited in place the pencil
+   * now does that, and leaving is the separate button below.
+   */
+  onEdit?: () => void;
   /** Owner only — open the real editor for this piece. */
   onOpenEditor?: () => void;
+  /** What that button says — a carousel's opens a new tab, and says so. */
+  openEditorLabel?: string;
   /**
    * What the header paints itself with when it sticks. It has to match the
    * surface it sits on — a card, or the bare page in full screen — because the
@@ -89,16 +102,32 @@ export default function PieceDetail({
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
+          {onEdit && (
+            <button
+              type="button"
+              onClick={onEdit}
+              data-testid="piece-edit-inline"
+              aria-label="Редагувати тут"
+              title="Редагувати тут"
+              className="app-icon-btn"
+            >
+              <SquarePen className="h-4.5 w-4.5" strokeWidth={2} />
+            </button>
+          )}
           {onOpenEditor && (
             <button
               type="button"
               onClick={onOpenEditor}
               data-testid="piece-open-editor"
-              aria-label="Редагувати"
-              title="Редагувати"
+              aria-label={openEditorLabel}
+              title={openEditorLabel}
               className="app-icon-btn"
             >
-              <SquarePen className="h-4.5 w-4.5" strokeWidth={2} />
+              {onEdit ? (
+                <ExternalLink className="h-4.5 w-4.5" strokeWidth={2} />
+              ) : (
+                <SquarePen className="h-4.5 w-4.5" strokeWidth={2} />
+              )}
             </button>
           )}
           {/* A reel is long — three columns of storyboard, a shot list and the

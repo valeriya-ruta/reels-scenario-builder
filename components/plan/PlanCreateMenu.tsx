@@ -14,13 +14,26 @@ import { OPEN_BRAINDUMP_FRESH_EVENT } from '@/lib/content/braindumpIdeaEvent';
  * bottom sheet with the same four create options as the FAB (Ідея → braindump,
  * Рілс / Карусель / Сторіс → their create flow), matching the app-wide sheet
  * language. Shown on any selected day, full or empty.
+ *
+ * The menu does not decide what "create" MEANS. On a calendar with a day
+ * selected it should make the thing on that day and open it right there, which
+ * only the calendar can do — so it hands the choice up through `onSelect` and
+ * keeps its own navigation as the fallback for callers with no day in hand.
  */
-export default function PlanCreateMenu() {
+export default function PlanCreateMenu({
+  onSelect,
+}: {
+  onSelect?: (id: RadialOptionId) => void;
+}) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
 
   const select = (id: RadialOptionId) => {
     setOpen(false);
+    if (onSelect) {
+      onSelect(id);
+      return;
+    }
     if (id === 'ideas') {
       window.dispatchEvent(new CustomEvent(OPEN_BRAINDUMP_FRESH_EVENT));
       return;

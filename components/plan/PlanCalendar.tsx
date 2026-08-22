@@ -16,7 +16,7 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core';
 import ContentCard from '@/components/content/ContentCard';
-import { setContentScheduledDate } from '@/app/content-actions';
+import { createContentOnDate, setContentScheduledDate } from '@/app/content-actions';
 import { STATUS_COLORS } from '@/lib/content/statusSystem';
 import {
   useAdvanceContentStatus,
@@ -27,6 +27,10 @@ import PlanCreateMenu from '@/components/plan/PlanCreateMenu';
 import CalendarShareButton from '@/components/plan/CalendarShareButton';
 import StagingPressureCard from '@/components/staging/StagingPressureCard';
 import PieceDetail from '@/components/share/PieceDetail';
+import PieceInlineEditor from '@/components/plan/PieceInlineEditor';
+import type { RadialOptionId } from '@/components/CreateRadialMenu';
+import { OPEN_BRAINDUMP_FRESH_EVENT } from '@/lib/content/braindumpIdeaEvent';
+import type { EditableDoc } from '@/lib/plan/editableDoc';
 import type { ContentPiece } from '@/lib/content/contentPiece';
 import type { CalendarShareLink, SharedPieceDetail } from '@/lib/calendar/sharedCalendar';
 import {
@@ -150,6 +154,23 @@ export default function PlanCalendar({
   const [sheetOpen, setSheetOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
+  // ── the same panel, editable ──
+  // Editing is a MODE of the open piece, not a second screen: the panel keeps
+  // its place, its scroll and its full-screen state, and only what is inside it
+  // changes. Coming back out is the same flip in reverse.
+  const [editing, setEditing] = useState(false);
+  const [editDoc, setEditDoc] = useState<EditableDoc | null>(null);
+  const [editFailedId, setEditFailedId] = useState<string | null>(null);
+  // Bumped after a save so the read-only document is fetched again — otherwise
+  // the panel would flip back to the version it opened with.
+  const [detailNonce, setDetailNonce] = useState(0);
+
+  // Pieces made from this screen, held locally until the server read catches
+  // up. Without them a freshly created reel would be invisible on the very day
+  // it was just put on.
+  const [created, setCreated] = useState<ContentPiece[]>([]);
+  const [creating, setCreating] = useState(false);
+
   // Local overrides so a drop moves the piece instantly (optimistic), with the
   // DB write in the background and a rollback if it fails.
   const [dateById, setDateById] = useState<Record<string, string>>({});
@@ -167,11 +188,13 @@ export default function PlanCalendar({
 
   // Dates stay local (drag is optimistic); status comes from the ONE store, so
   // a piece on the calendar can never disagree with the same piece on Home.
-  const dated = useMemo(
-    () =>
-      pieces.map((p) => (dateById[p.id] ? { ...p, scheduledDate: dateById[p.id] } : p)),
-    [pieces, dateById],
-  );
+  const dated = useMemo(() => {
+    // A locally created piece is dropped as soon as the server read carries it,
+    // so the two copies can never both be on the day.
+    const known = new Set(pieces.map((p) => p.id));
+    const all = [...pieces, ...created.filter((p) => !known.has(p.id))];
+    return all.map((p) => (dateById[p.id] ? { ...p, scheduledDate: dateById[p.id] } : p));
+  }, [pieces, created, dateById]);
   const effective = useLiveStatuses(dated);
   const byDay = useMemo(() => groupByScheduledDate(effective), [effective]);
 
@@ -231,12 +254,119 @@ export default function PlanCalendar({
   const openPreview = useCallback((piece: ContentPiece) => {
     setOpenPiece(piece);
     setSheetOpen(true);
+    setEditing(false);
+    setEditDoc(null);
   }, []);
 
   const closePreview = useCallback(() => {
     setSheetOpen(false);
     setExpanded(false);
+    setEditing(false);
   }, []);
+
+  /**
+   * Where a piece is edited.
+   *
+   * A reel and a storytelling are text in order — they fit in the panel, so
+   * they are edited in the panel. A carousel is a designed object (colours,
+   * placement, photos, export) and the panel could only ever offer a fraction
+   * of its editor, so it opens its own — in a NEW TAB, so the month you were
+   * planning is still there behind it.
+   */
+  const editsInPanel = useCallback(
+    (piece: ContentPiece) =>
+      piece.refTable === 'projects' || piece.refTable === 'storytelling_projects',
+    [],
+  );
+
+  const openFullEditor = useCallback(
+    (piece: ContentPiece) => {
+      if (piece.refTable === 'carousel_projects') {
+        window.open(contentHref(piece), '_blank', 'noopener,noreferrer');
+        return;
+      }
+      router.push(contentHref(piece));
+    },
+    [router],
+  );
+
+  /** Flip the open piece into edit mode, loading its rows to type into. */
+  const startEditing = useCallback((piece: ContentPiece) => {
+    setEditing(true);
+    setEditDoc(null);
+    setEditFailedId(null);
+
+    fetch('/api/plan/editable', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refTable: piece.refTable, id: piece.id }),
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error('failed');
+        const json = (await res.json()) as { doc: EditableDoc };
+        setEditDoc(json.doc);
+      })
+      .catch(() => setEditFailedId(piece.id));
+  }, []);
+
+  /** Saved: read the piece back, drop out of edit mode, refresh the month. */
+  const finishEditing = useCallback(() => {
+    setEditing(false);
+    setEditDoc(null);
+    setDetail(null);
+    setDetailNonce((n) => n + 1);
+    router.refresh();
+  }, [router]);
+
+  /**
+   * «＋ Створити» on a selected day.
+   *
+   * The piece is made ON that day and opened right here, already editable —
+   * creating something used to mean being sent to an empty builder and finding
+   * your way back to the calendar afterwards. A carousel still goes to its own
+   * editor, in a new tab; an idea is a braindump, which has its own overlay.
+   */
+  const createOnSelectedDay = useCallback(
+    (id: RadialOptionId) => {
+      if (!selected || creating) return;
+
+      if (id === 'ideas') {
+        window.dispatchEvent(new CustomEvent(OPEN_BRAINDUMP_FRESH_EVENT));
+        return;
+      }
+
+      const type = id === 'reels' ? 'reel' : id === 'carousel' ? 'carousel' : 'story';
+      setCreating(true);
+      void createContentOnDate(type, selected)
+        .then((res) => {
+          if (!res.ok) return;
+
+          const now = new Date().toISOString();
+          const piece: ContentPiece = {
+            id: res.id,
+            userId: '',
+            type: res.type,
+            status: 'idea',
+            title: res.title,
+            refTable: res.refTable,
+            scheduledDate: selected,
+            createdAt: now,
+            updatedAt: now,
+          };
+          setCreated((prev) => [...prev, piece]);
+
+          if (res.refTable === 'carousel_projects') {
+            window.open(res.href, '_blank', 'noopener,noreferrer');
+          } else {
+            openPreview(piece);
+            startEditing(piece);
+          }
+          router.refresh();
+        })
+        .finally(() => setCreating(false));
+    },
+    [selected, creating, openPreview, startEditing, router],
+  );
 
   // One fetch per opened piece, through the same document the shared calendar
   // reads — no token here, `auth.uid()` is the credential.
@@ -260,19 +390,69 @@ export default function PlanCalendar({
     return () => {
       cancelled = true;
     };
-  }, [openPiece]);
+  }, [openPiece, detailNonce]);
 
-  // Escape backs out one layer at a time.
+  // Escape backs out one layer at a time — but never out of an edit. Losing a
+  // half-written story to a stray keypress is exactly the kind of thing this
+  // panel exists to stop; leaving is Скасувати, which asks first.
   useEffect(() => {
     if (!sheetOpen && !expanded) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       if (expanded) setExpanded(false);
-      else setSheetOpen(false);
+      else if (!editing) setSheetOpen(false);
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [sheetOpen, expanded]);
+  }, [sheetOpen, expanded, editing]);
+
+  /**
+   * The panel, wherever it is showing — beside the calendar, as a phone sheet,
+   * or full screen. Defined once: written out three times, "editing" would have
+   * three chances to behave differently in each.
+   */
+  const panel = (surface: string, isExpanded: boolean) => {
+    if (!openPiece) return null;
+
+    if (editing) {
+      return (
+        <PieceInlineEditor
+          doc={editDoc}
+          loading={!editDoc && editFailedId !== openPiece.id}
+          failed={editFailedId === openPiece.id}
+          typeLabel={openPiece.type}
+          scheduledDate={openPiece.scheduledDate}
+          expanded={isExpanded}
+          surface={surface}
+          onToggleExpand={() => setExpanded(!isExpanded)}
+          onOpenFullEditor={() => openFullEditor(openPiece)}
+          onCancel={() => {
+            setEditing(false);
+            setEditDoc(null);
+          }}
+          onSaved={finishEditing}
+        />
+      );
+    }
+
+    return (
+      <PieceDetail
+        detail={detail}
+        loading={detailLoading}
+        failed={detailFailed}
+        expanded={isExpanded}
+        surface={surface}
+        onToggleExpand={() => setExpanded(!isExpanded)}
+        onEdit={editsInPanel(openPiece) ? () => startEditing(openPiece) : undefined}
+        onOpenEditor={() => openFullEditor(openPiece)}
+        openEditorLabel={
+          openPiece.refTable === 'carousel_projects'
+            ? 'Редагувати в новій вкладці'
+            : 'Відкрити повний редактор'
+        }
+      />
+    );
+  };
 
   return (
     <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
@@ -411,8 +591,10 @@ export default function PlanCalendar({
           <div>
             <div className="mb-2.5 flex items-center justify-between px-0.5">
               <h2 className="app-section-label">{dayHeaderLabel(selected)}</h2>
-              {/* Create is always available on a selected day — full state or empty. */}
-              <PlanCreateMenu />
+              {/* Create is always available on a selected day — full state or
+                  empty. It creates ON this day and opens the new piece in the
+                  panel, rather than sending you to an empty builder. */}
+              <PlanCreateMenu onSelect={createOnSelectedDay} />
             </div>
             {dayPieces.length > 0 ? (
               /* ONE card set (§6). There used to be a second, dimmer list below
@@ -450,14 +632,13 @@ export default function PlanCalendar({
       {/* The opened piece, beside the calendar on a wide screen. */}
       {openPiece && (
         <div className="hidden min-w-0 flex-1 lg:block">
-          <div className="app-card sticky top-4 max-h-[calc(100dvh-32px)] overflow-y-auto p-5">
-            <PieceDetail
-              detail={detail}
-              loading={detailLoading}
-              failed={detailFailed}
-              onToggleExpand={() => setExpanded(true)}
-              onOpenEditor={() => router.push(contentHref(openPiece))}
-            />
+          <div
+            data-testid="plan-detail-panel"
+            data-editing={editing ? 'true' : 'false'}
+            className="app-card sticky top-4 max-h-[calc(100dvh-32px)] overflow-y-auto p-5"
+            style={editing ? { boxShadow: '0 0 0 1.5px var(--accent)' } : undefined}
+          >
+            {panel('var(--background)', false)}
           </div>
         </div>
       )}
@@ -474,15 +655,7 @@ export default function PlanCalendar({
         data-testid="plan-detail-full"
       >
         <div className="mx-auto w-full max-w-[1100px] px-4 pb-16 pt-5 md:px-8">
-          <PieceDetail
-            detail={detail}
-            loading={detailLoading}
-            failed={detailFailed}
-            expanded
-            surface="var(--canvas)"
-            onToggleExpand={() => setExpanded(false)}
-            onOpenEditor={() => router.push(contentHref(openPiece))}
-          />
+          {panel('var(--canvas)', true)}
         </div>
       </div>
     )}
@@ -511,13 +684,7 @@ export default function PlanCalendar({
               <X className="h-5 w-5" strokeWidth={2} />
             </button>
           </div>
-          <PieceDetail
-            detail={detail}
-            loading={detailLoading}
-            failed={detailFailed}
-            onToggleExpand={() => setExpanded(true)}
-            onOpenEditor={() => router.push(contentHref(openPiece))}
-          />
+          {panel('var(--background)', false)}
         </div>
       </div>
     )}
