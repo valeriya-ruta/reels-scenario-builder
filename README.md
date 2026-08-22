@@ -75,6 +75,47 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 - Editor notes highlighted
 - Camera motion and shot size details (when crew mode is enabled)
 
+### Claude / MCP (`/api/mcp`)
+
+The app is its own MCP server, so content can be created by talking to Claude
+instead of typing into the app. It is hosted by this Next.js deployment — there
+is no second service and no second bill.
+
+**Transport.** Streamable HTTP, stateless: the client POSTs JSON-RPC 2.0 and
+gets JSON back. `GET` with `Accept: text/event-stream` answers `405` (no
+server→client stream); a plain `GET` returns a small "yes, this is the server"
+document.
+
+**Auth.** A per-user token, HMAC-signed with `MCP_TOKEN_SECRET` — no key table,
+no migration. Two ways to present it, because the two clients differ:
+
+| Client | How |
+| --- | --- |
+| claude.ai / Claude app | Paste the whole URL as a custom connector: `https://<app>/api/mcp/<token>` |
+| Claude Code | `claude mcp add --transport http ruta https://<app>/api/mcp --header "Authorization: Bearer <token>"` |
+
+Each user's URL is on **Профіль → Claude**, masked until revealed. It *is* the
+account credential, so it is treated like a password. Rotating
+`MCP_TOKEN_SECRET` invalidates every issued token at once (there is no
+per-token revocation — that is the trade for having no key storage).
+
+**Tools:** `list_content`, `get_content`, `create_reel`, `create_story`,
+`create_carousel`, `create_idea`, `schedule_content`, `set_content_status`.
+
+**Env required:**
+
+```env
+MCP_TOKEN_SECRET=<any long random string>   # unset ⇒ the endpoint is closed
+SUPABASE_SERVICE_ROLE_KEY=<service role>    # rows are read/written per user_id
+NEXT_PUBLIC_APP_URL=https://app.example.com # used to build the connector URL
+```
+
+With no `MCP_TOKEN_SECRET` the endpoint fails closed (`503`) and the Профіль card
+says the feature is off — a missing env var never reads as "no auth required".
+
+The wire protocol, the token rules and the argument validation are pure modules
+under `lib/mcp/` and are covered by `e2e/mcp.logic.spec.ts`.
+
 ## Project Structure
 
 ```

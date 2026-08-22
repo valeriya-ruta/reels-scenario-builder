@@ -15,6 +15,9 @@ function isPublicPath(pathname: string): boolean {
   // Shared calendar: the client opens one piece from a shared day (token-gated
   // at the DB by the SECURITY DEFINER functions in migration 029).
   if (pathname.startsWith('/api/share/')) return true;
+  // MCP: Claude speaks to the app with a signed token, never a browser cookie,
+  // so the session check here would reject every legitimate call.
+  if (pathname.startsWith('/api/mcp')) return true;
   if (pathname === '/api/payments/webhook') return true;
   if (pathname === '/api/payments/verify-return') return true;
   if (pathname.startsWith('/api/cron/')) return true;

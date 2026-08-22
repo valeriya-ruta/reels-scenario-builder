@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation';
 import { requireAuth } from '@/lib/auth';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import { subscriptionAllowsAppAccess } from '@/lib/subscriptionAccess';
+import { optionalServerEnv } from '@/lib/env';
+import { signMcpToken } from '@/lib/mcp/token';
 import ProfileClient, { type ProfileSubscription } from '@/components/profile/ProfileClient';
 
 type SubscriptionRow = {
@@ -43,6 +45,18 @@ function nextChargeLabel(sub: SubscriptionRow): string | null {
     year: 'numeric',
   }).format(date);
   return `Наступне списання: ${formatted}`;
+}
+
+/**
+ * The URL Claude connects to, token and all — or null when this deployment has
+ * no signing secret, in which case the feature is genuinely off and the card
+ * says so rather than handing out an address that cannot authenticate.
+ */
+function mcpConnectorUrl(userId: string): string | null {
+  const secret = optionalServerEnv('MCP_TOKEN_SECRET');
+  if (!secret) return null;
+  const origin = (optionalServerEnv('NEXT_PUBLIC_APP_URL') ?? '').replace(/\/+$/, '');
+  return `${origin}/api/mcp/${signMcpToken(userId, secret)}`;
 }
 
 export default async function ProfilePage() {
@@ -94,6 +108,7 @@ export default async function ProfilePage() {
       initialInstagramHandle={instagramHandle}
       initialAvatarUrl={avatarUrl}
       subscription={subscription}
+      mcpConnectorUrl={mcpConnectorUrl(user.id)}
     />
   );
 }

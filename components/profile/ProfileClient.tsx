@@ -15,6 +15,7 @@ import {
 import { createClient } from '@/lib/supabaseClient';
 import { useToast } from '@/components/ToastProvider';
 import SupportSheet from '@/components/SupportSheet';
+import McpConnectorCard from '@/components/profile/McpConnectorCard';
 
 const ACCENT = '#004BA8';
 
@@ -31,6 +32,8 @@ type ProfileClientProps = {
   initialInstagramHandle: string;
   initialAvatarUrl: string;
   subscription: ProfileSubscription | null;
+  /** The Claude connector address for this account, or null when MCP is off. */
+  mcpConnectorUrl: string | null;
 };
 
 /** Small inline Instagram glyph (lucide@1.8 has no Instagram export). */
@@ -63,6 +66,7 @@ export default function ProfileClient({
   initialInstagramHandle,
   initialAvatarUrl,
   subscription,
+  mcpConnectorUrl,
 }: ProfileClientProps) {
   const router = useRouter();
   const toast = useToast();
@@ -310,6 +314,13 @@ export default function ProfileClient({
             </button>
           </div>
         )}
+      </section>
+
+      {/* Claude — the app's own MCP connector. Lives here, next to the account
+          it belongs to, because the address IS the account's credential. */}
+      <section className="mt-7">
+        <h2 className="px-1 app-section-label">Claude</h2>
+        <McpConnectorCard connectorUrl={mcpConnectorUrl} />
       </section>
 
       {/* Settings */}
